@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useCreateVenue } from "@/hooks/api/use-venues";
-import { VENUE_TYPES, venueTypeLabel } from "./venue-types";
+import { VENUE_TYPES } from "./venue-types";
 
 const schema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -16,7 +16,7 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>;
 
 const fieldClass =
-  "h-11 w-full rounded-[20px] border-border bg-surface px-3 text-sm text-foreground dark:bg-surface";
+  "h-10 w-full rounded-[20px] border-border bg-surface px-3 text-sm text-foreground dark:bg-surface";
 
 export function NewVenueForm() {
   const createVenue = useCreateVenue();
@@ -59,7 +59,7 @@ export function NewVenueForm() {
               render={({ field }) => (
                 <Select value={field.value} onValueChange={field.onChange}>
                   <SelectTrigger id="venue-type" className={fieldClass}>
-                    <SelectValue>{(value: FormValues["venue_type"]) => venueTypeLabel(value)}</SelectValue>
+                    <SelectValue placeholder="Select type" />
                   </SelectTrigger>
                   <SelectContent>
                     {VENUE_TYPES.map((t) => (

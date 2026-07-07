@@ -35,9 +35,7 @@ export default function Page() {
         </div>
         <Select value={typeFilter} onValueChange={(value) => setTypeFilter(value ?? "all")}>
           <SelectTrigger className="h-8 w-auto gap-2 rounded-full border-border bg-background px-3 text-xs text-foreground">
-            <SelectValue>
-              {(value: string) => (value === "all" ? "All types" : (VENUE_TYPES.find((t) => t.value === value)?.label ?? value))}
-            </SelectValue>
+            <SelectValue />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All types</SelectItem>

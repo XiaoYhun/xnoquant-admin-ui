@@ -12,7 +12,6 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@base-ui/react": "^1.6.0",
     "@hookform/resolvers": "^5.4.0",
     "@solar-icons/react": "^1.1.1",
     "@tanstack/react-query": "^5.101.2",
@@ -24,6 +23,7 @@
     "framer-motion": "^12.42.2",
     "lucide-react": "^1.23.0",
     "next": "16.2.10",
+    "radix-ui": "^1.6.2",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "react-hook-form": "^7.81.0",

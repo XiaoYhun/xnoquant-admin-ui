@@ -537,18 +537,43 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 **Interfaces:**
 - Produces: generated `paths`/`components` types per spec; `types/domain.ts` re-exports app-facing aliases used by the mock layer and hooks.
 
-- [ ] **Step 1: Add the generation script to `package.json`**
+> **Spec versions (verified):** HFT is **OpenAPI 3.0.3** (generates directly). AUTH and XALPHA are **Swagger 2.0**, which `openapi-typescript` v7 does NOT accept — they must be converted 2.0→3.0 first via `swagger2openapi`. So generation runs through a small Node script.
 
-```json
-"scripts": {
-  "gen:types": "openapi-typescript https://api.dev.xnoquant.io/auth/swagger_docs/doc.json -o types/api/auth.ts && openapi-typescript https://hft-dev.xnoquant.io/openapi.json -o types/api/hft.ts && openapi-typescript https://api.dev.xnoquant.io/xalpha-api/swagger_docs/doc.json -o types/api/xalpha.ts"
+- [ ] **Step 1: Add the `swagger2openapi` dev dep and the generation script**
+
+Run: `npm install -D swagger2openapi`
+Add to `package.json` scripts: `"gen:types": "node scripts/gen-types.mjs"`.
+
+- [ ] **Step 2: Create `scripts/gen-types.mjs` and run it**
+
+`scripts/gen-types.mjs`:
+```js
+import { execSync } from "node:child_process";
+import { mkdirSync } from "node:fs";
+
+const specs = [
+  { name: "hft", url: "https://hft-dev.xnoquant.io/openapi.json", oas3: true },
+  { name: "auth", url: "https://api.dev.xnoquant.io/auth/swagger_docs/doc.json", oas3: false },
+  { name: "xalpha", url: "https://api.dev.xnoquant.io/xalpha-api/swagger_docs/doc.json", oas3: false },
+];
+
+mkdirSync("types/api", { recursive: true });
+mkdirSync("node_modules/.cache/oas", { recursive: true });
+
+for (const s of specs) {
+  let input = s.url;
+  if (!s.oas3) {
+    const converted = `node_modules/.cache/oas/${s.name}-oas3.json`;
+    console.log(`Converting Swagger 2.0 -> OpenAPI 3 for ${s.name}...`);
+    execSync(`npx swagger2openapi "${s.url}" -o "${converted}"`, { stdio: "inherit" });
+    input = converted;
+  }
+  console.log(`Generating types/api/${s.name}.ts ...`);
+  execSync(`npx openapi-typescript "${input}" -o types/api/${s.name}.ts`, { stdio: "inherit" });
 }
 ```
-
-- [ ] **Step 2: Create the output dir and run generation**
-
-Run (Bash tool): `cd "G:/Develop/xnoquant-admin-ui" && mkdir -p types/api && npm run gen:types`
-Expected: three files created, each starting with `export interface paths {`.
+Run: `cd "G:/Develop/xnoquant-admin-ui" && npm run gen:types`
+Expected: `types/api/{hft,auth,xalpha}.ts` created, each containing an `export interface paths` and `export interface components`. If a spec URL is unreachable at run time, report it — do not fabricate the file.
 
 - [ ] **Step 3: Create the domain re-export shim**
 

@@ -42,6 +42,7 @@ for (const s of specs) {
     const local = `node_modules/.cache/oas/${s.name}.json`;
     console.log(`Fetching ${s.name} spec...`);
     const res = await fetch(s.url);
+    if (!res.ok) throw new Error(`Failed to fetch ${s.name} spec (${s.url}): HTTP ${res.status}`);
     writeFileSync(local, await res.text());
     stripOperationIds(local);
     input = local;

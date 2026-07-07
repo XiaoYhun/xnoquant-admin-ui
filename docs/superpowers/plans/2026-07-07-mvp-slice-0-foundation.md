@@ -6,13 +6,13 @@
 
 **Architecture:** Next.js 16 App Router, single `(dashboard)` route group with a persistent sidebar+header layout. All data flows through TanStack Query hooks whose query/mutation fns call a typed mock layer (`lib/mock`), shaped to types generated from the live OpenAPI specs. Dark-theme-only design tokens from Figma mapped to shadcn/ui CSS variables.
 
-**Tech Stack:** Next.js 16 (App Router, Turbopack) · React 19.2 · TypeScript · Tailwind CSS v4 · shadcn/ui (new-york, neutral) · TanStack Query v5 · Zustand · ECharts (echarts-for-react) · openapi-typescript (dev) · Vitest + Testing Library (dev).
+**Tech Stack:** Next.js 16 (App Router, Turbopack) · React 19.2 · TypeScript · Tailwind CSS v4 · shadcn/ui v4 (Base UI primitives, style `base-nova`, neutral) · TanStack Query v5 · Zustand · ECharts (echarts-for-react) · openapi-typescript (dev) · Vitest + Testing Library (dev).
 
 ## Global Constraints
 
 - **Framework:** Next.js 16+ (App Router, Turbopack), React 19.2, TypeScript. Do not downgrade majors.
 - **Package manager:** npm (matches reference project `G:/Develop/xno-builder`).
-- **Styling:** Tailwind CSS v4 (CSS-first config in `app/globals.css`), shadcn/ui style `new-york`, base color `neutral`, icon library `lucide`.
+- **Styling:** Tailwind CSS v4 (CSS-first config in `app/globals.css`), shadcn/ui **latest (v4.x)** with **Base UI primitives** (`@base-ui/react`), style `base-nova`, base color `neutral`. **Icons: match the Figma design.** For each design icon: if a `@solar-icons/react` icon has a similar name, use it (design uses Solar **Outline** weight); if not (e.g. the design's vuesax icons), export that icon's SVG from Figma into a local component under `components/icons/` (built `forwardRef<SVGSVGElement, IconProps>` so it's interchangeable with Solar icons, `fill={color}`/currentColor). shadcn primitives keep their own bundled `lucide-react` internals — `components.json` `iconLibrary` stays `lucide`; do not purge `lucide-react`. (Decision 2026-07-07: kept the latest shadcn CLI's Base UI foundation rather than pinning to Radix `new-york`; aligns with the latest-stable-tooling preference. Primitives diverge from xno-builder's Radix set, which is fine since we rebuild them from shadcn.)
 - **Theme:** Dark-only for MVP. `dark` class hardcoded on `<body>`. Tokens defined so a light theme is a later flip.
 - **Language:** English only. No i18n framework. Translate any Vietnamese design strings to English.
 - **Data:** No real API calls. Every data surface goes through a TanStack Query hook backed by `lib/mock`. `NEXT_PUBLIC_USE_MOCK` defaults to `true`.
@@ -362,26 +362,33 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 
 `components/layout/nav-config.ts`:
 ```ts
-import { PlusCircle, List, FlaskConical, Building2, Radio, LineChart, type LucideIcon } from "lucide-react";
+// Icons match the Figma design (Solar Outline set). Two design icons are vuesax (not in Solar)
+// -> local SVG components in components/icons/ (rule: Solar if a name matches, else export the Figma SVG).
+import { AddCircle, ServerMinimalistic, Translation, DiagramUp } from "@solar-icons/react";
+import type { IconProps } from "@solar-icons/react";
+import { Receipt2 } from "@/components/icons/receipt-2";
+import { EmptyWalletTime } from "@/components/icons/empty-wallet-time";
 
-export type NavItem = { label: string; href: string; icon: LucideIcon };
+// Solar icons are ForwardRefExoticComponent; local SVG components are built to match (forwardRef<SVGSVGElement, IconProps>).
+type IconComponent = React.ForwardRefExoticComponent<Omit<IconProps, "ref"> & React.RefAttributes<SVGSVGElement>>;
+export type NavItem = { label: string; href: string; icon: IconComponent };
 export type NavGroup = { heading?: string; items: NavItem[] };
 
 export const NAV_GROUPS: NavGroup[] = [
-  { items: [{ label: "Create strategy", href: "/create-strategy", icon: PlusCircle }] },
+  { items: [{ label: "Create strategy", href: "/create-strategy", icon: AddCircle }] },
   {
     heading: "Quant Lab",
     items: [
-      { label: "Strategy List", href: "/strategies", icon: List },
-      { label: "Paper Trading", href: "/paper-trading", icon: FlaskConical },
+      { label: "Strategy List", href: "/strategies", icon: ServerMinimalistic },
+      { label: "Paper Trading", href: "/paper-trading", icon: Receipt2 },
     ],
   },
   {
     heading: "Live Operations",
     items: [
-      { label: "Venue", href: "/venues", icon: Building2 },
-      { label: "Live account", href: "/accounts", icon: Radio },
-      { label: "Live trading", href: "/live-trading", icon: LineChart },
+      { label: "Venue", href: "/venues", icon: EmptyWalletTime },
+      { label: "Live account", href: "/accounts", icon: Translation },
+      { label: "Live trading", href: "/live-trading", icon: DiagramUp },
     ],
   },
 ];
@@ -394,7 +401,7 @@ export const NAV_GROUPS: NavGroup[] = [
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LogOut } from "lucide-react";
+import { Logout } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { NAV_GROUPS } from "./nav-config";
 
@@ -420,7 +427,7 @@ export function Sidebar() {
                     active && "bg-primary/15 text-primary",
                   )}
                 >
-                  <item.icon className="size-4" />
+                  <item.icon size={18} weight="Outline" />
                   {item.label}
                 </Link>
               );
@@ -429,7 +436,7 @@ export function Sidebar() {
         ))}
       </nav>
       <button className="m-3 flex items-center gap-3 rounded-md px-2 py-2 text-sm text-muted-foreground hover:text-foreground">
-        <LogOut className="size-4" /> Logout
+        <Logout size={16} weight="Outline" /> Logout
       </button>
     </aside>
   );
@@ -530,18 +537,43 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 **Interfaces:**
 - Produces: generated `paths`/`components` types per spec; `types/domain.ts` re-exports app-facing aliases used by the mock layer and hooks.
 
-- [ ] **Step 1: Add the generation script to `package.json`**
+> **Spec versions (verified):** HFT is **OpenAPI 3.0.3** (generates directly). AUTH and XALPHA are **Swagger 2.0**, which `openapi-typescript` v7 does NOT accept — they must be converted 2.0→3.0 first via `swagger2openapi`. So generation runs through a small Node script.
 
-```json
-"scripts": {
-  "gen:types": "openapi-typescript https://api.dev.xnoquant.io/auth/swagger_docs/doc.json -o types/api/auth.ts && openapi-typescript https://hft-dev.xnoquant.io/openapi.json -o types/api/hft.ts && openapi-typescript https://api.dev.xnoquant.io/xalpha-api/swagger_docs/doc.json -o types/api/xalpha.ts"
+- [ ] **Step 1: Add the `swagger2openapi` dev dep and the generation script**
+
+Run: `npm install -D swagger2openapi`
+Add to `package.json` scripts: `"gen:types": "node scripts/gen-types.mjs"`.
+
+- [ ] **Step 2: Create `scripts/gen-types.mjs` and run it**
+
+`scripts/gen-types.mjs`:
+```js
+import { execSync } from "node:child_process";
+import { mkdirSync } from "node:fs";
+
+const specs = [
+  { name: "hft", url: "https://hft-dev.xnoquant.io/openapi.json", oas3: true },
+  { name: "auth", url: "https://api.dev.xnoquant.io/auth/swagger_docs/doc.json", oas3: false },
+  { name: "xalpha", url: "https://api.dev.xnoquant.io/xalpha-api/swagger_docs/doc.json", oas3: false },
+];
+
+mkdirSync("types/api", { recursive: true });
+mkdirSync("node_modules/.cache/oas", { recursive: true });
+
+for (const s of specs) {
+  let input = s.url;
+  if (!s.oas3) {
+    const converted = `node_modules/.cache/oas/${s.name}-oas3.json`;
+    console.log(`Converting Swagger 2.0 -> OpenAPI 3 for ${s.name}...`);
+    execSync(`npx swagger2openapi "${s.url}" -o "${converted}"`, { stdio: "inherit" });
+    input = converted;
+  }
+  console.log(`Generating types/api/${s.name}.ts ...`);
+  execSync(`npx openapi-typescript "${input}" -o types/api/${s.name}.ts`, { stdio: "inherit" });
 }
 ```
-
-- [ ] **Step 2: Create the output dir and run generation**
-
-Run (Bash tool): `cd "G:/Develop/xnoquant-admin-ui" && mkdir -p types/api && npm run gen:types`
-Expected: three files created, each starting with `export interface paths {`.
+Run: `cd "G:/Develop/xnoquant-admin-ui" && npm run gen:types`
+Expected: `types/api/{hft,auth,xalpha}.ts` created, each containing an `export interface paths` and `export interface components`. If a spec URL is unreachable at run time, report it — do not fabricate the file.
 
 - [ ] **Step 3: Create the domain re-export shim**
 

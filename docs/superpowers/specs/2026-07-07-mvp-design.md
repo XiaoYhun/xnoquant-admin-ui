@@ -27,7 +27,7 @@ Build the internal XNOQuant admin dashboard UI from the Figma design, using **mo
 
 ## 3. Tech stack
 
-Next.js 16 (App Router, Turbopack) · React 19.2 · TypeScript · Tailwind CSS v4 (CSS-first) · shadcn/ui (`new-york`, `neutral` base, lucide) · TanStack Query · Zustand · Zod · React Hook Form · Framer Motion · ECharts (`echarts-for-react`) · Monaco (`@monaco-editor/react`, Slice 6) · `openapi-typescript` (dev, type gen).
+Next.js 16 (App Router, Turbopack) · React 19.2 · TypeScript · Tailwind CSS v4 (CSS-first) · shadcn/ui v4 (Base UI primitives, `base-nova`, `neutral` base, lucide) · TanStack Query · Zustand · Zod · React Hook Form · Framer Motion · ECharts (`echarts-for-react`) · Monaco (`@monaco-editor/react`, Slice 6) · `openapi-typescript` (dev, type gen).
 
 **Divergence from xno-builder:** it uses SWR for reads + TanStack for writes. We standardize on **TanStack Query for both reads and writes** (matches SPEC + roadmap "react-query hooks").
 

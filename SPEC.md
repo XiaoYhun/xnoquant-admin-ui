@@ -29,6 +29,7 @@ For most of API require access_token, get it from https://api.dev.xnoquant.io/au
 Figma MCP:
 https://www.figma.com/design/B7Hh2GpERHUPyy3Zdv35sY/XNO-QUANT-AI?node-id=13962-19026
 Alway check if MCP connected before do UI tasks, notice me right away when it not.
+Use @solar-icons/react package for icons
 
 ## Design system
 

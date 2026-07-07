@@ -12,7 +12,7 @@
 
 - **Framework:** Next.js 16+ (App Router, Turbopack), React 19.2, TypeScript. Do not downgrade majors.
 - **Package manager:** npm (matches reference project `G:/Develop/xno-builder`).
-- **Styling:** Tailwind CSS v4 (CSS-first config in `app/globals.css`), shadcn/ui **latest (v4.x)** with **Base UI primitives** (`@base-ui/react`), style `base-nova`, base color `neutral`, icon library `lucide`. (Decision 2026-07-07: kept the latest shadcn CLI's Base UI foundation rather than pinning to Radix `new-york`; aligns with the latest-stable-tooling preference. Primitives diverge from xno-builder's Radix set, which is fine since we rebuild them from shadcn.)
+- **Styling:** Tailwind CSS v4 (CSS-first config in `app/globals.css`), shadcn/ui **latest (v4.x)** with **Base UI primitives** (`@base-ui/react`), style `base-nova`, base color `neutral`. **Icons: `@solar-icons/react`** for all app/nav icons (per SPEC.md). shadcn primitives keep their own bundled `lucide-react` internals (chevrons/checks/close) — `components.json` `iconLibrary` stays `lucide` so `shadcn add` keeps working; do not purge `lucide-react`. (Decision 2026-07-07: kept the latest shadcn CLI's Base UI foundation rather than pinning to Radix `new-york`; aligns with the latest-stable-tooling preference. Primitives diverge from xno-builder's Radix set, which is fine since we rebuild them from shadcn.)
 - **Theme:** Dark-only for MVP. `dark` class hardcoded on `<body>`. Tokens defined so a light theme is a later flip.
 - **Language:** English only. No i18n framework. Translate any Vietnamese design strings to English.
 - **Data:** No real API calls. Every data surface goes through a TanStack Query hook backed by `lib/mock`. `NEXT_PUBLIC_USE_MOCK` defaults to `true`.
@@ -362,26 +362,27 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 
 `components/layout/nav-config.ts`:
 ```ts
-import { PlusCircle, List, FlaskConical, Building2, Radio, LineChart, type LucideIcon } from "lucide-react";
+import { AddCircle, ClipboardList, TestTube, Buildings2, Radio, ChartSquare } from "@solar-icons/react";
+import type { Icon } from "@solar-icons/react"; // if not re-exported from root, use React.ComponentType<{ className?: string; size?: number; weight?: string }>
 
-export type NavItem = { label: string; href: string; icon: LucideIcon };
+export type NavItem = { label: string; href: string; icon: Icon };
 export type NavGroup = { heading?: string; items: NavItem[] };
 
 export const NAV_GROUPS: NavGroup[] = [
-  { items: [{ label: "Create strategy", href: "/create-strategy", icon: PlusCircle }] },
+  { items: [{ label: "Create strategy", href: "/create-strategy", icon: AddCircle }] },
   {
     heading: "Quant Lab",
     items: [
-      { label: "Strategy List", href: "/strategies", icon: List },
-      { label: "Paper Trading", href: "/paper-trading", icon: FlaskConical },
+      { label: "Strategy List", href: "/strategies", icon: ClipboardList },
+      { label: "Paper Trading", href: "/paper-trading", icon: TestTube },
     ],
   },
   {
     heading: "Live Operations",
     items: [
-      { label: "Venue", href: "/venues", icon: Building2 },
+      { label: "Venue", href: "/venues", icon: Buildings2 },
       { label: "Live account", href: "/accounts", icon: Radio },
-      { label: "Live trading", href: "/live-trading", icon: LineChart },
+      { label: "Live trading", href: "/live-trading", icon: ChartSquare },
     ],
   },
 ];
@@ -394,7 +395,7 @@ export const NAV_GROUPS: NavGroup[] = [
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LogOut } from "lucide-react";
+import { Logout2 } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { NAV_GROUPS } from "./nav-config";
 
@@ -420,7 +421,7 @@ export function Sidebar() {
                     active && "bg-primary/15 text-primary",
                   )}
                 >
-                  <item.icon className="size-4" />
+                  <item.icon size={18} weight={active ? "Bold" : "Linear"} />
                   {item.label}
                 </Link>
               );
@@ -429,7 +430,7 @@ export function Sidebar() {
         ))}
       </nav>
       <button className="m-3 flex items-center gap-3 rounded-md px-2 py-2 text-sm text-muted-foreground hover:text-foreground">
-        <LogOut className="size-4" /> Logout
+        <Logout2 size={16} weight="Linear" /> Logout
       </button>
     </aside>
   );

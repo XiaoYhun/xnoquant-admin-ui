@@ -12,7 +12,7 @@
 
 - **Framework:** Next.js 16+ (App Router, Turbopack), React 19.2, TypeScript. Do not downgrade majors.
 - **Package manager:** npm (matches reference project `G:/Develop/xno-builder`).
-- **Styling:** Tailwind CSS v4 (CSS-first config in `app/globals.css`), shadcn/ui **latest (v4.x)** with **Base UI primitives** (`@base-ui/react`), style `base-nova`, base color `neutral`. **Icons: `@solar-icons/react`** for all app/nav icons (per SPEC.md). shadcn primitives keep their own bundled `lucide-react` internals (chevrons/checks/close) — `components.json` `iconLibrary` stays `lucide` so `shadcn add` keeps working; do not purge `lucide-react`. (Decision 2026-07-07: kept the latest shadcn CLI's Base UI foundation rather than pinning to Radix `new-york`; aligns with the latest-stable-tooling preference. Primitives diverge from xno-builder's Radix set, which is fine since we rebuild them from shadcn.)
+- **Styling:** Tailwind CSS v4 (CSS-first config in `app/globals.css`), shadcn/ui **latest (v4.x)** with **Base UI primitives** (`@base-ui/react`), style `base-nova`, base color `neutral`. **Icons: match the Figma design.** For each design icon: if a `@solar-icons/react` icon has a similar name, use it (design uses Solar **Outline** weight); if not (e.g. the design's vuesax icons), export that icon's SVG from Figma into a local component under `components/icons/` (built `forwardRef<SVGSVGElement, IconProps>` so it's interchangeable with Solar icons, `fill={color}`/currentColor). shadcn primitives keep their own bundled `lucide-react` internals — `components.json` `iconLibrary` stays `lucide`; do not purge `lucide-react`. (Decision 2026-07-07: kept the latest shadcn CLI's Base UI foundation rather than pinning to Radix `new-york`; aligns with the latest-stable-tooling preference. Primitives diverge from xno-builder's Radix set, which is fine since we rebuild them from shadcn.)
 - **Theme:** Dark-only for MVP. `dark` class hardcoded on `<body>`. Tokens defined so a light theme is a later flip.
 - **Language:** English only. No i18n framework. Translate any Vietnamese design strings to English.
 - **Data:** No real API calls. Every data surface goes through a TanStack Query hook backed by `lib/mock`. `NEXT_PUBLIC_USE_MOCK` defaults to `true`.
@@ -362,10 +362,16 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 
 `components/layout/nav-config.ts`:
 ```ts
-import { AddCircle, ClipboardList, TestTube, Buildings2, Radio, ChartSquare } from "@solar-icons/react";
-import type { Icon } from "@solar-icons/react"; // if not re-exported from root, use React.ComponentType<{ className?: string; size?: number; weight?: string }>
+// Icons match the Figma design (Solar Outline set). Two design icons are vuesax (not in Solar)
+// -> local SVG components in components/icons/ (rule: Solar if a name matches, else export the Figma SVG).
+import { AddCircle, ServerMinimalistic, Translation, DiagramUp } from "@solar-icons/react";
+import type { IconProps } from "@solar-icons/react";
+import { Receipt2 } from "@/components/icons/receipt-2";
+import { EmptyWalletTime } from "@/components/icons/empty-wallet-time";
 
-export type NavItem = { label: string; href: string; icon: Icon };
+// Solar icons are ForwardRefExoticComponent; local SVG components are built to match (forwardRef<SVGSVGElement, IconProps>).
+type IconComponent = React.ForwardRefExoticComponent<Omit<IconProps, "ref"> & React.RefAttributes<SVGSVGElement>>;
+export type NavItem = { label: string; href: string; icon: IconComponent };
 export type NavGroup = { heading?: string; items: NavItem[] };
 
 export const NAV_GROUPS: NavGroup[] = [
@@ -373,16 +379,16 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     heading: "Quant Lab",
     items: [
-      { label: "Strategy List", href: "/strategies", icon: ClipboardList },
-      { label: "Paper Trading", href: "/paper-trading", icon: TestTube },
+      { label: "Strategy List", href: "/strategies", icon: ServerMinimalistic },
+      { label: "Paper Trading", href: "/paper-trading", icon: Receipt2 },
     ],
   },
   {
     heading: "Live Operations",
     items: [
-      { label: "Venue", href: "/venues", icon: Buildings2 },
-      { label: "Live account", href: "/accounts", icon: Radio },
-      { label: "Live trading", href: "/live-trading", icon: ChartSquare },
+      { label: "Venue", href: "/venues", icon: EmptyWalletTime },
+      { label: "Live account", href: "/accounts", icon: Translation },
+      { label: "Live trading", href: "/live-trading", icon: DiagramUp },
     ],
   },
 ];
@@ -395,7 +401,7 @@ export const NAV_GROUPS: NavGroup[] = [
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Logout2 } from "@solar-icons/react";
+import { Logout } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { NAV_GROUPS } from "./nav-config";
 
@@ -421,7 +427,7 @@ export function Sidebar() {
                     active && "bg-primary/15 text-primary",
                   )}
                 >
-                  <item.icon size={18} weight={active ? "Bold" : "Linear"} />
+                  <item.icon size={18} weight="Outline" />
                   {item.label}
                 </Link>
               );
@@ -430,7 +436,7 @@ export function Sidebar() {
         ))}
       </nav>
       <button className="m-3 flex items-center gap-3 rounded-md px-2 py-2 text-sm text-muted-foreground hover:text-foreground">
-        <Logout2 size={16} weight="Linear" /> Logout
+        <Logout size={16} weight="Outline" /> Logout
       </button>
     </aside>
   );

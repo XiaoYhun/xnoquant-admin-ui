@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Logout2 } from "@solar-icons/react";
+import { Logout } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { NAV_GROUPS } from "./nav-config";
 
@@ -27,7 +27,7 @@ export function Sidebar() {
                     active && "bg-primary/15 text-primary",
                   )}
                 >
-                  <item.icon size={18} weight={active ? "Bold" : "Linear"} />
+                  <item.icon size={18} weight="Outline" />
                   {item.label}
                 </Link>
               );
@@ -36,7 +36,7 @@ export function Sidebar() {
         ))}
       </nav>
       <button className="m-3 flex items-center gap-3 rounded-md px-2 py-2 text-sm text-muted-foreground hover:text-foreground">
-        <Logout2 size={16} weight="Linear" /> Logout
+        <Logout size={16} weight="Outline" /> Logout
       </button>
     </aside>
   );

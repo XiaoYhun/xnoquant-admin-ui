@@ -1,5 +1,7 @@
-import { AddCircle, ClipboardList, TestTube, Buildings2, Radio, ChartSquare } from "@solar-icons/react";
+import { AddCircle, ServerMinimalistic, Translation, DiagramUp } from "@solar-icons/react";
 import type { IconProps } from "@solar-icons/react";
+import { Receipt2 } from "@/components/icons/receipt-2";
+import { EmptyWalletTime } from "@/components/icons/empty-wallet-time";
 
 type IconComponent = React.ForwardRefExoticComponent<Omit<IconProps, "ref"> & React.RefAttributes<SVGSVGElement>>;
 
@@ -11,16 +13,16 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     heading: "Quant Lab",
     items: [
-      { label: "Strategy List", href: "/strategies", icon: ClipboardList },
-      { label: "Paper Trading", href: "/paper-trading", icon: TestTube },
+      { label: "Strategy List", href: "/strategies", icon: ServerMinimalistic },
+      { label: "Paper Trading", href: "/paper-trading", icon: Receipt2 },
     ],
   },
   {
     heading: "Live Operations",
     items: [
-      { label: "Venue", href: "/venues", icon: Buildings2 },
-      { label: "Live account", href: "/accounts", icon: Radio },
-      { label: "Live trading", href: "/live-trading", icon: ChartSquare },
+      { label: "Venue", href: "/venues", icon: EmptyWalletTime },
+      { label: "Live account", href: "/accounts", icon: Translation },
+      { label: "Live trading", href: "/live-trading", icon: DiagramUp },
     ],
   },
 ];

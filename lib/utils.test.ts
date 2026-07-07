@@ -3,7 +3,7 @@ import { formatCurrency, formatPercent, formatCompact } from "./utils";
 
 describe("formatters", () => {
   it("formats VND currency without decimals", () => {
-    expect(formatCurrency(3_000_000_000)).toBe("3,000,000,000 ₫");
+    expect(formatCurrency(3_000_000_000)).toBe("3,000,000,000 đ");
   });
   it("formats percent with sign and 2 decimals", () => {
     expect(formatPercent(12.5)).toBe("+12.50%");

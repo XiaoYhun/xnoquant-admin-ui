@@ -1,5 +1,7 @@
 import { MOCK_VENUES } from "./venues";
-import type { Venue } from "@/types/domain";
+import { MOCK_ACCOUNTS } from "./accounts";
+import { MOCK_PORTFOLIOS } from "./portfolios";
+import type { Venue, Account, Portfolio } from "@/types/domain";
 
 const delay = (ms = 300) => new Promise((r) => setTimeout(r, ms));
 
@@ -22,5 +24,37 @@ export const mockApi = {
     await delay();
     const idx = MOCK_VENUES.findIndex((v) => v.id === id);
     if (idx !== -1) MOCK_VENUES.splice(idx, 1);
+  },
+  async listAccounts(): Promise<Account[]> {
+    await delay();
+    // Fresh copy — see listVenues comment above.
+    return [...MOCK_ACCOUNTS];
+  },
+  async listPortfolios(): Promise<Portfolio[]> {
+    await delay();
+    // Fresh copy — see listVenues comment above.
+    return [...MOCK_PORTFOLIOS];
+  },
+  async createPortfolio(input: { name: string; sources: { account_id: string; amount: number }[] }): Promise<Portfolio> {
+    await delay();
+    const sources = input.sources.map((s) => ({
+      account_id: s.account_id,
+      account_name: MOCK_ACCOUNTS.find((a) => a.id === s.account_id)?.name ?? s.account_id,
+      amount: s.amount,
+    }));
+    const portfolio: Portfolio = {
+      id: crypto.randomUUID(),
+      name: input.name,
+      status: "running",
+      total_allocation: sources.reduce((sum, s) => sum + s.amount, 0),
+      sources,
+    };
+    MOCK_PORTFOLIOS.push(portfolio);
+    return portfolio;
+  },
+  async deletePortfolio(id: string): Promise<void> {
+    await delay();
+    const idx = MOCK_PORTFOLIOS.findIndex((p) => p.id === id);
+    if (idx !== -1) MOCK_PORTFOLIOS.splice(idx, 1);
   },
 };

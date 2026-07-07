@@ -6,7 +6,7 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function formatCurrency(n: number): string {
-  return `${new Intl.NumberFormat("en-US").format(Math.round(n))} ₫`;
+  return `${new Intl.NumberFormat("en-US").format(Math.round(n))} đ`;
 }
 export function formatPercent(n: number): string {
   const sign = n > 0 ? "+" : "";

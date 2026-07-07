@@ -16,3 +16,12 @@ export type Account = HftComponents["schemas"]["Account"];
 // RunSummary are the closest concepts). Not re-exporting a Portfolio alias
 // here — add one once phase-3 wiring clarifies which schema maps to the
 // UI's "portfolio" concept.
+// TODO(phase3): reconcile with real API — this is a UI-only shape until the
+// backend exposes a proper portfolio resource.
+export type Portfolio = {
+  id: string;
+  name: string;
+  status: "running" | "stopped";
+  total_allocation: number;
+  sources: { account_id: string; account_name: string; amount: number }[];
+};

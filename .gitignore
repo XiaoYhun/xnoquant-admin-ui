@@ -30,3 +30,9 @@ yarn-error.log*
 
 # superpowers SDD scratch (ledger, briefs, reports)
 .superpowers/
+
+# ts build info
+*.tsbuildinfo
+
+# claude harness session runtime
+.claude/sessions/

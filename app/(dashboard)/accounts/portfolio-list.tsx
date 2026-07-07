@@ -32,12 +32,12 @@ export function PortfolioList({
   const [pendingDelete, setPendingDelete] = useState<Portfolio | null>(null);
 
   return (
-    <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border shadow-[0_4px_12px_0_rgba(0,0,0,0.05)]">
+    <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border shadow-[0_4px_12px_0_rgba(0,0,0,0.05)] bg-background">
       <header className="flex items-center gap-2 border-b border-border bg-secondary px-4 py-3">
         <h2 className="text-sm font-semibold text-foreground">All portfolios</h2>
         <span className="text-sm font-medium text-foreground">&bull; {total}</span>
       </header>
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-3">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-3 bg-background">
         {isLoading && <p className="text-sm text-muted-foreground">Loading&hellip;</p>}
         {!isLoading && portfolios.length === 0 && (
           <div className="flex flex-1 flex-col items-center rounded-xl border border-dashed border-border py-10">

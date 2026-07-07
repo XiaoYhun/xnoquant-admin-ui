@@ -53,7 +53,7 @@ export default function Page() {
   const pageRows = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   return (
-    <main className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4">
+    <main className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4 bg-surface">
       <div className="flex items-center gap-3">
         <div className="flex h-8 w-64 items-center gap-2 rounded-[20px] border border-border px-3">
           <input
@@ -87,7 +87,7 @@ export default function Page() {
         </Select>
       </div>
 
-      <section className="flex flex-col overflow-hidden">
+      <section className="flex flex-col overflow-hidden rounded-xl border border-border bg-background">
         <div>
           {isLoading ? (
             <p className="p-4 text-sm text-muted-foreground">Loading&hellip;</p>

@@ -41,7 +41,7 @@ export default function Page() {
   const pageRows = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   return (
-    <main className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4">
+    <main className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4 bg-surface">
       <StrategyAnalyticsHeader />
 
       <div className="flex items-center justify-between gap-3">
@@ -74,7 +74,7 @@ export default function Page() {
         </Tabs>
       </div>
 
-      <section className="flex flex-col overflow-hidden">
+      <section className="flex flex-col overflow-hidden rounded-xl border border-border bg-background">
         <div>
           {isLoading ? (
             <p className="p-4 text-sm text-muted-foreground">Loading&hellip;</p>

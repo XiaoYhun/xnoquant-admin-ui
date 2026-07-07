@@ -55,7 +55,7 @@ export default function Page() {
   const selectedRun = runs.find((r) => r.id === selectedId) ?? null;
 
   return (
-    <main className="relative flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4">
+    <main className="relative flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4 bg-surface">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="flex h-8 w-64 items-center gap-2 rounded-[20px] border border-border px-3">
@@ -126,7 +126,7 @@ export default function Page() {
         </Tabs>
       </div>
 
-      <section className="flex flex-col overflow-hidden">
+      <section className="flex flex-col overflow-hidden rounded-xl border border-border bg-background">
         <div>
           {isLoading ? (
             <p className="p-4 text-sm text-muted-foreground">Loading&hellip;</p>

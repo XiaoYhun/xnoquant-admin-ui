@@ -7,8 +7,8 @@ import { useStrategyAnalytics } from "@/hooks/api/use-strategies";
 
 function ChartCard({ title, className, children }: { title: string; className?: string; children: ReactNode }) {
   return (
-    <div className={`flex min-w-0 flex-1 flex-col gap-2 rounded-xl border border-border bg-surface p-4 ${className ?? ""}`}>
-      <h3 className="text-sm font-medium text-foreground">{title}</h3>
+    <div className={`flex min-w-0 flex-1 flex-col gap-2 rounded-xl border border-border bg-background p-4 ${className ?? ""}`}>
+      <h3 className="text-xs font-medium text-muted-foreground">{title}</h3>
       {children}
     </div>
   );
@@ -79,7 +79,7 @@ export function StrategyAnalyticsHeader() {
         center: ["50%", "50%"],
         avoidLabelOverlap: true,
         // Rounded segment ends + a card-coloured border create the gapped, segmented ring.
-        itemStyle: { borderRadius: 8, borderColor: "#151a24", borderWidth: 4 },
+        itemStyle: { borderRadius: 8, borderColor: "#0a0e14", borderWidth: 4 },
         label: {
           show: true,
           formatter: "{per|{d}%}\n{name|{b}}",

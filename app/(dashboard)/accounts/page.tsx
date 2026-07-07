@@ -15,7 +15,7 @@ export default function Page() {
   }, [portfolios, search]);
 
   return (
-    <main className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden p-4">
+    <main className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden p-4 bg-surface">
       <div className="flex items-center gap-3">
         <div className="flex h-8 w-60 items-center gap-2 rounded-[20px] border border-border px-3">
           <input

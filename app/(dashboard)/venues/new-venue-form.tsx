@@ -36,7 +36,7 @@ export function NewVenueForm() {
   });
 
   return (
-    <section className="flex h-full min-h-0 w-[480px] shrink-0 flex-col overflow-hidden rounded-xl border border-border shadow-[0_4px_12px_0_rgba(0,0,0,0.05)]">
+    <section className="flex h-full min-h-0 w-[480px] shrink-0 flex-col overflow-hidden rounded-xl border border-border shadow-[0_4px_12px_0_rgba(0,0,0,0.05)] bg-background">
       <header className="flex items-center border-b border-border bg-secondary px-4 py-3">
         <h2 className="text-sm font-semibold text-foreground">New venue</h2>
       </header>

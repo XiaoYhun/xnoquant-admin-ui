@@ -1,8 +1,6 @@
 "use client";
 import { useState } from "react";
 import { TrashBinTrash } from "@solar-icons/react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -30,38 +28,38 @@ export function VenueList({
   const [pendingDelete, setPendingDelete] = useState<Venue | null>(null);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>All venues • {total}</CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-2">
-        {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
+    <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border shadow-[0_4px_12px_0_rgba(0,0,0,0.05)]">
+      <header className="flex items-center gap-2 border-b border-border bg-secondary px-4 py-3">
+        <h2 className="text-sm font-semibold text-foreground">All venues</h2>
+        <span className="text-sm font-medium text-foreground">&bull; {total}</span>
+      </header>
+      <div className="flex flex-col gap-4 overflow-y-auto px-4 py-3">
+        {isLoading && <p className="text-sm text-muted-foreground">Loading&hellip;</p>}
         {!isLoading && venues.length === 0 && (
           <p className="text-sm text-muted-foreground">No venues yet.</p>
         )}
         {venues.map((v) => (
           <div
             key={v.id}
-            className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2.5"
+            className="flex items-center gap-4 rounded-xl border border-border px-4 py-3 shadow-[0_2px_8px_0_rgba(152,162,179,0.15)] transition-colors hover:border-primary/30 hover:bg-primary/10"
           >
-            <div className="flex flex-col gap-1">
-              <span className="text-sm font-medium">{v.name}</span>
-              <Badge variant="secondary" className="w-fit">
-                {venueTypeLabel(v.venue_type)}
-              </Badge>
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
+              <span className="truncate text-sm font-semibold text-foreground">{v.name}</span>
+              <span className="truncate text-xs text-muted-foreground">{venueTypeLabel(v.venue_type)}</span>
             </div>
             <Button
               type="button"
               variant="ghost"
               size="icon-sm"
               aria-label={`Delete ${v.name}`}
+              className="text-muted-foreground hover:text-destructive"
               onClick={() => setPendingDelete(v)}
             >
-              <TrashBinTrash size={16} weight="Outline" className="text-destructive" />
+              <TrashBinTrash weight="Outline" className="size-5" />
             </Button>
           </div>
         ))}
-      </CardContent>
+      </div>
 
       <Dialog open={!!pendingDelete} onOpenChange={(open) => !open && setPendingDelete(null)}>
         <DialogContent>
@@ -88,6 +86,6 @@ export function VenueList({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </Card>
+    </section>
   );
 }

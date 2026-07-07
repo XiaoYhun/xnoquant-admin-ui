@@ -2,12 +2,10 @@
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { AddCircle } from "@solar-icons/react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Plus } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
 import { useCreateVenue } from "@/hooks/api/use-venues";
 import { VENUE_TYPES, venueTypeLabel } from "./venue-types";
 
@@ -16,6 +14,9 @@ const schema = z.object({
   venue_type: z.enum(["binance_spot", "binance_futures", "tcbs", "dnse"]),
 });
 type FormValues = z.infer<typeof schema>;
+
+const fieldClass =
+  "h-11 w-full rounded-[20px] border-border bg-surface px-3 text-sm text-foreground dark:bg-surface";
 
 export function NewVenueForm() {
   const createVenue = useCreateVenue();
@@ -35,25 +36,29 @@ export function NewVenueForm() {
   });
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>New venue</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={onSubmit} className="flex flex-col gap-4">
+    <section className="flex h-full min-h-0 w-[480px] shrink-0 flex-col overflow-hidden rounded-xl border border-border shadow-[0_4px_12px_0_rgba(0,0,0,0.05)]">
+      <header className="flex items-center border-b border-border bg-secondary px-4 py-3">
+        <h2 className="text-sm font-semibold text-foreground">New venue</h2>
+      </header>
+      <form onSubmit={onSubmit} className="flex flex-col gap-4 overflow-y-auto px-4 py-3">
+        <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="venue-name">Name</Label>
-            <Input id="venue-name" placeholder="e.g. Binance Spot" {...register("name")} />
+            <Label htmlFor="venue-name" className="font-normal text-muted-foreground">
+              Name
+            </Label>
+            <Input id="venue-name" placeholder="Venue name" className={fieldClass} {...register("name")} />
             {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="venue-type">Type</Label>
+            <Label htmlFor="venue-type" className="font-normal text-muted-foreground">
+              Type
+            </Label>
             <Controller
               control={control}
               name="venue_type"
               render={({ field }) => (
                 <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger id="venue-type" className="w-full">
+                  <SelectTrigger id="venue-type" className={fieldClass}>
                     <SelectValue>{(value: FormValues["venue_type"]) => venueTypeLabel(value)}</SelectValue>
                   </SelectTrigger>
                   <SelectContent>
@@ -67,12 +72,16 @@ export function NewVenueForm() {
               )}
             />
           </div>
-          <Button type="submit" disabled={createVenue.isPending} className="gap-1.5">
-            <AddCircle size={16} weight="Outline" />
-            Create venue
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+        </div>
+        <button
+          type="submit"
+          disabled={createVenue.isPending}
+          className="flex h-[34px] w-fit items-center justify-center gap-1 rounded-full bg-[linear-gradient(164deg,#cff8ea_0%,var(--primary)_100%)] px-3 text-xs font-medium text-black transition-opacity hover:opacity-90 disabled:opacity-50"
+        >
+          <Plus className="size-3.5" strokeWidth={2.5} />
+          Create venue
+        </button>
+      </form>
+    </section>
   );
 }

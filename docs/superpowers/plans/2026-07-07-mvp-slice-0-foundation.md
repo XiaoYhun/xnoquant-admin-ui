@@ -6,13 +6,13 @@
 
 **Architecture:** Next.js 16 App Router, single `(dashboard)` route group with a persistent sidebar+header layout. All data flows through TanStack Query hooks whose query/mutation fns call a typed mock layer (`lib/mock`), shaped to types generated from the live OpenAPI specs. Dark-theme-only design tokens from Figma mapped to shadcn/ui CSS variables.
 
-**Tech Stack:** Next.js 16 (App Router, Turbopack) · React 19.2 · TypeScript · Tailwind CSS v4 · shadcn/ui (new-york, neutral) · TanStack Query v5 · Zustand · ECharts (echarts-for-react) · openapi-typescript (dev) · Vitest + Testing Library (dev).
+**Tech Stack:** Next.js 16 (App Router, Turbopack) · React 19.2 · TypeScript · Tailwind CSS v4 · shadcn/ui v4 (Base UI primitives, style `base-nova`, neutral) · TanStack Query v5 · Zustand · ECharts (echarts-for-react) · openapi-typescript (dev) · Vitest + Testing Library (dev).
 
 ## Global Constraints
 
 - **Framework:** Next.js 16+ (App Router, Turbopack), React 19.2, TypeScript. Do not downgrade majors.
 - **Package manager:** npm (matches reference project `G:/Develop/xno-builder`).
-- **Styling:** Tailwind CSS v4 (CSS-first config in `app/globals.css`), shadcn/ui style `new-york`, base color `neutral`, icon library `lucide`.
+- **Styling:** Tailwind CSS v4 (CSS-first config in `app/globals.css`), shadcn/ui **latest (v4.x)** with **Base UI primitives** (`@base-ui/react`), style `base-nova`, base color `neutral`, icon library `lucide`. (Decision 2026-07-07: kept the latest shadcn CLI's Base UI foundation rather than pinning to Radix `new-york`; aligns with the latest-stable-tooling preference. Primitives diverge from xno-builder's Radix set, which is fine since we rebuild them from shadcn.)
 - **Theme:** Dark-only for MVP. `dark` class hardcoded on `<body>`. Tokens defined so a light theme is a later flip.
 - **Language:** English only. No i18n framework. Translate any Vietnamese design strings to English.
 - **Data:** No real API calls. Every data surface goes through a TanStack Query hook backed by `lib/mock`. `NEXT_PUBLIC_USE_MOCK` defaults to `true`.

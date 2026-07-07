@@ -2,7 +2,7 @@
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Plus } from "lucide-react";
+import { PlusIcon } from "@/components/icons/plus";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -78,7 +78,7 @@ export function NewVenueForm() {
           disabled={createVenue.isPending}
           className="flex h-[34px] w-fit items-center justify-center gap-1 rounded-full bg-[linear-gradient(164deg,#cff8ea_0%,var(--primary)_100%)] px-3 text-xs font-medium text-black transition-opacity hover:opacity-90 disabled:opacity-50"
         >
-          <Plus className="size-3.5" strokeWidth={2.5} />
+          <PlusIcon className="size-3.5" />
           Create venue
         </button>
       </form>

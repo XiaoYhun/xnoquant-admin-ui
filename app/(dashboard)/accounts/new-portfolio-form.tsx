@@ -2,7 +2,9 @@
 import { useForm, Controller, useFieldArray, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Plus, X, ChevronsUpDown } from "lucide-react";
+import { SortVertical } from "@solar-icons/react";
+import { CloseIcon } from "@/components/icons/close";
+import { PlusIcon } from "@/components/icons/plus";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -100,7 +102,7 @@ export function NewPortfolioForm() {
                       className={`${rowFieldClass} pr-7 text-right [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
                       {...register(`sources.${index}.amount`)}
                     />
-                    <ChevronsUpDown className="pointer-events-none absolute top-1/2 right-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                    <SortVertical weight="Outline" className="pointer-events-none absolute top-1/2 right-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
                   </div>
                   <button
                     type="button"
@@ -108,7 +110,7 @@ export function NewPortfolioForm() {
                     onClick={() => remove(index)}
                     className="shrink-0 text-muted-foreground transition-colors hover:text-destructive"
                   >
-                    <X className="size-5" />
+                    <CloseIcon className="size-5" />
                   </button>
                 </div>
                 {(errors.sources?.[index]?.account_id || errors.sources?.[index]?.amount) && (
@@ -124,7 +126,7 @@ export function NewPortfolioForm() {
               onClick={() => append({ account_id: "", amount: 0 })}
               className="flex w-fit items-center gap-1 py-1 text-xs font-medium text-primary"
             >
-              <Plus className="size-3.5" strokeWidth={2.5} />
+              <PlusIcon className="size-3.5" />
               Add account
             </button>
           </div>
@@ -139,7 +141,7 @@ export function NewPortfolioForm() {
           disabled={createPortfolio.isPending}
           className="flex h-[34px] w-fit items-center justify-center gap-1 rounded-full bg-[linear-gradient(164deg,#cff8ea_0%,var(--primary)_100%)] px-3 text-xs font-medium text-black transition-opacity hover:opacity-90 disabled:opacity-50"
         >
-          <Plus className="size-3.5" strokeWidth={2.5} />
+          <PlusIcon className="size-3.5" />
           Create portfolio
         </button>
       </form>

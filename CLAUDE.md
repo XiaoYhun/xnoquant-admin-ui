@@ -63,7 +63,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 Whenever you implement a UI-testable task, you MUST retest it in the real browser using the **Claude in Chrome** connection before considering it done.
 
-- After finishing any change that affects rendered UI (components, pages, layouts, styles, interactive behavior), drive the affected flow in Chrome via the `mcp__claude-in-chrome__*` tools.
+- After finished any UI update task, using the **Claude in Chrome** to test the last time if it match the Figma design. Only use one time for each task, do not use too many time for every components inside a big task.
 - Verify the change actually works end-to-end: navigate to the affected page, exercise the interaction, and confirm the expected result visually (screenshot / `read_page`) and in the console/network where relevant.
 - Do not claim a UI task is complete based only on typecheck, build, or unit tests — observe it in the browser first.
 - If the browser/extension is unavailable or the flow can't be driven, say so explicitly instead of silently skipping verification.

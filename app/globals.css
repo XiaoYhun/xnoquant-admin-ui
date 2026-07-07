@@ -55,4 +55,23 @@
   --radius-sm: calc(var(--radius) - 4px);
 }
 
+@layer base {
+  /* Tailwind v4 defaults border-color to currentColor; pin it to the dark
+     --border token so unqualified `border` utilities (Select dropdown, Dialog,
+     …) don't render as near-white on the dark theme. */
+  * {
+    @apply border-border;
+  }
+}
+
 body { background: var(--background); color: var(--foreground); }
+
+/* Cell value-change flash (trading-terminal style): a green/red tint that fades out. */
+@keyframes value-flash-up {
+  from { background-color: rgba(103, 225, 193, 0.4); }
+  to { background-color: transparent; }
+}
+@keyframes value-flash-down {
+  from { background-color: rgba(255, 19, 91, 0.4); }
+  to { background-color: transparent; }
+}

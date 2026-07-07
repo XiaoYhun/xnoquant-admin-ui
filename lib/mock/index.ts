@@ -1,6 +1,9 @@
 import { MOCK_VENUES } from "./venues";
 import { MOCK_ACCOUNTS } from "./accounts";
 import { MOCK_PORTFOLIOS } from "./portfolios";
+import { liveRunMocks } from "./live-runs";
+import { strategyMocks } from "./strategies";
+import { paperRunMocks } from "./paper-runs";
 import type { Venue, Account, Portfolio } from "@/types/domain";
 
 const delay = (ms = 300) => new Promise((r) => setTimeout(r, ms));
@@ -57,4 +60,9 @@ export const mockApi = {
     const idx = MOCK_PORTFOLIOS.findIndex((p) => p.id === id);
     if (idx !== -1) MOCK_PORTFOLIOS.splice(idx, 1);
   },
+  // Per-screen mock methods live in their own module (owned by each page agent)
+  // and are spread in here so `mockApi.*` stays the single call surface for hooks.
+  ...liveRunMocks,
+  ...strategyMocks,
+  ...paperRunMocks,
 };

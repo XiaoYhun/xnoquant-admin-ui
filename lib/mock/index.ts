@@ -6,7 +6,10 @@ const delay = (ms = 300) => new Promise((r) => setTimeout(r, ms));
 export const mockApi = {
   async listVenues(): Promise<Venue[]> {
     await delay();
-    return MOCK_VENUES;
+    // Return a fresh copy, NOT the module array by reference: mutations (create/delete)
+    // edit MOCK_VENUES in place, and if list returned the same reference React Query's
+    // structural sharing would see no change and never re-render the list.
+    return [...MOCK_VENUES];
   },
   async createVenue(input: { name: string; venue_type: Venue["venue_type"] }): Promise<Venue> {
     await delay();

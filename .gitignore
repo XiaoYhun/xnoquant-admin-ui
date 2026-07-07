@@ -27,3 +27,6 @@ yarn-error.log*
 
 # claude harness runtime state
 .claude/state/
+
+# superpowers SDD scratch (ledger, briefs, reports)
+.superpowers/

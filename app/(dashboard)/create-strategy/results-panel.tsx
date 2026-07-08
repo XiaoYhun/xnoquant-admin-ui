@@ -12,11 +12,11 @@ import { OperatorsTab } from "./operators-tab";
 const TABS = ["Samples", "Results", "Data", "Features", "Operators"] as const;
 type Tab = (typeof TABS)[number];
 
-export function ResultsPanel() {
+export function ResultsPanel({ onUseTemplate }: { onUseTemplate?: (code: string) => void }) {
   const [tab, setTab] = useState<Tab>("Results");
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
-      <div className="flex h-11 shrink-0 items-stretch border-b border-border">
+      <div className="flex h-11 shrink-0 items-stretch overflow-x-auto border-b border-border">
         {TABS.map((t) => {
           const on = tab === t;
           return (
@@ -25,7 +25,7 @@ export function ResultsPanel() {
               type="button"
               onClick={() => setTab(t)}
               className={cn(
-                "relative flex flex-1 cursor-pointer items-center justify-center px-1 text-sm whitespace-nowrap transition-colors",
+                "relative flex flex-[1_0_auto] cursor-pointer items-center justify-center px-3 text-sm whitespace-nowrap transition-colors",
                 on ? "font-semibold" : "text-muted-foreground hover:text-foreground",
               )}
             >
@@ -39,8 +39,8 @@ export function ResultsPanel() {
           );
         })}
       </div>
-      <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
-        {tab === "Samples" && <SamplesTab />}
+      <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto [scrollbar-gutter:stable]">
+        {tab === "Samples" && <SamplesTab onUseTemplate={onUseTemplate} />}
         {tab === "Results" && <ResultsTab />}
         {tab === "Data" && <DataTab />}
         {tab === "Features" && <FeaturesTab />}

@@ -124,7 +124,7 @@ export function NewPortfolioForm() {
             <button
               type="button"
               onClick={() => append({ account_id: "", amount: 0 })}
-              className="flex w-fit items-center gap-1 py-1 text-xs font-medium text-primary"
+              className="flex w-fit items-center gap-1 py-1 text-xs font-medium text-primary cursor-pointer hover:brightness-150"
             >
               <PlusIcon className="size-3.5" />
               Add account

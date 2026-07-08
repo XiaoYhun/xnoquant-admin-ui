@@ -1,18 +1,30 @@
 "use client";
 import { useState } from "react";
-import { Settings, SidebarCode, Copy, MenuDots, Play } from "@solar-icons/react";
+import { Settings, SidebarCode, Copy, MenuDots, SkipNext } from "@solar-icons/react";
 import type { ComponentType } from "react";
 import type { IconProps } from "@solar-icons/react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SimulateModal } from "./simulate-modal";
 
 // Toolbar row above the code editor — Figma node 13964:52172 (inside 13964:50200).
 // Self-contained: strategy name is local state, all buttons are no-ops (page-level
 // wiring lands with the shell owner).
 
-function IconButton({ icon: Icon, label }: { icon: ComponentType<IconProps>; label: string }) {
+function IconButton({
+  icon: Icon,
+  label,
+  onClick,
+}: {
+  icon: ComponentType<IconProps>;
+  label: string;
+  onClick?: () => void;
+}) {
   return (
     <button
       type="button"
       aria-label={label}
+      onClick={onClick}
       className="inline-flex shrink-0 cursor-pointer items-center justify-center rounded-full border border-border bg-surface p-1.5 text-muted-foreground transition-colors hover:text-white"
     >
       <Icon className="size-5" />
@@ -20,8 +32,76 @@ function IconButton({ icon: Icon, label }: { icon: ComponentType<IconProps>; lab
   );
 }
 
-export function Toolbar() {
+// Figma node 14256:148355 — the cog opens this Settings popover (Market + Type dropdowns).
+function SettingField({
+  label,
+  defaultValue,
+  options,
+}: {
+  label: string;
+  defaultValue: string;
+  options: [string, string][];
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-[10px] font-medium text-white">{label}</span>
+      <Select defaultValue={defaultValue}>
+        <SelectTrigger className="h-8 w-full rounded-full border-border bg-background! px-3 text-xs text-white">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent className="bg-background!">
+          {options.map(([value, text]) => (
+            <SelectItem key={value} value={value} className="text-xs">
+              {text}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+function SettingsMenu() {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label="Settings"
+          className="inline-flex shrink-0 cursor-pointer items-center justify-center rounded-full border border-border bg-surface p-1.5 text-muted-foreground transition-colors hover:text-white data-[state=open]:text-white"
+        >
+          <Settings className="size-5" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" sideOffset={8} className="w-[240px] rounded-lg border-border bg-surface p-4">
+        <div className="flex flex-col gap-2">
+          <p className="text-sm font-semibold text-white">Settings</p>
+          <SettingField
+            label="Market"
+            defaultValue="tick-l2"
+            options={[
+              ["tick-l2", "Tick / L2"],
+              ["bar-ohlc", "Bar / OHLC"],
+            ]}
+          />
+          <SettingField
+            label="Type"
+            defaultValue="taker"
+            options={[
+              ["taker", "Taker"],
+              ["maker", "Maker"],
+              ["arbitrage", "Arbitrage"],
+            ]}
+          />
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+export function Toolbar({ onToggleConsole }: { onToggleConsole?: () => void }) {
   const [name, setName] = useState("Test bot AI");
+  const [simulateOpen, setSimulateOpen] = useState(false);
 
   return (
     <div className="flex h-12 shrink-0 items-center justify-between gap-4 border-b border-border px-4 bg-surface">
@@ -70,17 +150,20 @@ export function Toolbar() {
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
-        <IconButton icon={Settings} label="Settings" />
-        <IconButton icon={SidebarCode} label="Toggle console" />
+        <SettingsMenu />
+        <IconButton icon={SidebarCode} label="Toggle console" onClick={onToggleConsole} />
         <IconButton icon={Copy} label="Duplicate" />
         <button
           type="button"
+          onClick={() => setSimulateOpen(true)}
           className="inline-flex h-[34px] shrink-0 cursor-pointer items-center gap-1 rounded-full bg-[linear-gradient(164deg,#cff8ea_0%,var(--primary)_100%)] px-3 text-xs font-medium text-black transition-opacity hover:opacity-90"
         >
-          <Play weight="Bold" className="size-3.5" />
+          <SkipNext weight="Outline" className="size-3.5" />
           Simulate
         </button>
       </div>
+
+      <SimulateModal open={simulateOpen} onOpenChange={setSimulateOpen} strategyName={name} />
     </div>
   );
 }

@@ -27,7 +27,7 @@ function defineTheme(monaco: Monaco) {
 
 export function CodeEditor({ code }: { code: string }) {
   return (
-    <div className="min-h-0 flex-1 bg-background">
+    <div className="min-h-0 min-w-0 flex-1 overflow-hidden bg-background">
       <Editor
         height="100%"
         defaultLanguage="python"

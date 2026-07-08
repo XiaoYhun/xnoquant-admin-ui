@@ -12,6 +12,7 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { useDeleteVenue } from "@/hooks/api/use-venues";
+import { ApiError } from "@/lib/api-client";
 import { venueTypeLabel } from "./venue-types";
 import type { Venue } from "@/types/domain";
 
@@ -19,10 +20,12 @@ export function VenueList({
   venues,
   total,
   isLoading,
+  isError,
 }: {
   venues: Venue[];
   total: number;
   isLoading: boolean;
+  isError?: boolean;
 }) {
   const deleteVenue = useDeleteVenue();
   const [pendingDelete, setPendingDelete] = useState<Venue | null>(null);
@@ -35,7 +38,10 @@ export function VenueList({
       </header>
       <div className="flex flex-col gap-4 overflow-y-auto px-4 py-3">
         {isLoading && <p className="text-sm text-muted-foreground">Loading&hellip;</p>}
-        {!isLoading && venues.length === 0 && (
+        {isError && !isLoading && (
+          <p className="text-sm text-destructive">Couldn&rsquo;t load venues. Please try again.</p>
+        )}
+        {!isLoading && !isError && venues.length === 0 && (
           <p className="text-sm text-muted-foreground">No venues yet.</p>
         )}
         {venues.map((v) => (
@@ -61,7 +67,15 @@ export function VenueList({
         ))}
       </div>
 
-      <Dialog open={!!pendingDelete} onOpenChange={(open) => !open && setPendingDelete(null)}>
+      <Dialog
+        open={!!pendingDelete}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingDelete(null);
+            deleteVenue.reset();
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete venue</DialogTitle>
@@ -69,6 +83,13 @@ export function VenueList({
               Are you sure you want to delete &ldquo;{pendingDelete?.name}&rdquo;? This cannot be undone.
             </DialogDescription>
           </DialogHeader>
+          {deleteVenue.isError && (
+            <p className="text-xs text-destructive">
+              {deleteVenue.error instanceof ApiError && deleteVenue.error.status === 409
+                ? "This venue is still referenced by one or more accounts."
+                : "Couldn't delete venue. Please try again."}
+            </p>
+          )}
           <DialogFooter>
             <DialogClose asChild>
               <Button variant="outline">Cancel</Button>

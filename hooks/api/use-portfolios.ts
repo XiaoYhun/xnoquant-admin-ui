@@ -1,13 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { mockApi } from "@/lib/mock";
-import { apiGet, apiPost, apiDelete } from "@/lib/api-client";
-import { USE_MOCK, HFT_API_URL } from "@/lib/constant";
-import type { Portfolio } from "@/types/domain";
 
+// GAP-1: Portfolios have NO backend on HFT/XALPHA/AUTH (`domain.Portfolio` is UI-only). These
+// three hooks stay on mock regardless of USE_MOCK until a portfolio resource exists — see
+// docs/plans/api-integration.md §6 GAP-1. Pointing them at `/api/portfolios` returns 503/404.
 export function usePortfolios() {
   return useQuery({
     queryKey: ["portfolios"],
-    queryFn: () => (USE_MOCK ? mockApi.listPortfolios() : apiGet<Portfolio[]>(`${HFT_API_URL}/api/portfolios`)),
+    queryFn: () => mockApi.listPortfolios(),
   });
 }
 
@@ -15,7 +15,7 @@ export function useCreatePortfolio() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: { name: string; sources: { account_id: string; amount: number }[] }) =>
-      USE_MOCK ? mockApi.createPortfolio(input) : apiPost<Portfolio>(`${HFT_API_URL}/api/portfolios`, input),
+      mockApi.createPortfolio(input),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["portfolios"] }),
   });
 }
@@ -23,7 +23,7 @@ export function useCreatePortfolio() {
 export function useDeletePortfolio() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => (USE_MOCK ? mockApi.deletePortfolio(id) : apiDelete(`${HFT_API_URL}/api/portfolios/${id}`)),
+    mutationFn: (id: string) => mockApi.deletePortfolio(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["portfolios"] }),
   });
 }

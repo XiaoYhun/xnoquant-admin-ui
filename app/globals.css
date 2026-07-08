@@ -11,15 +11,15 @@
   --card-foreground: #f1f8f3;
   --popover: #151a24;
   --popover-foreground: #f1f8f3;
-  --primary: #67e1c1;               /* accent green-300 */
+  --primary: #67e1c1; /* accent green-300 */
   --primary-foreground: #0a0e14;
   --secondary: #1d2939;
   --secondary-foreground: #f1f8f3;
   --muted: #151a24;
-  --muted-foreground: #9db2ce;      /* gray-500 */
-  --accent: #1fad8e;                /* green-500 */
+  --muted-foreground: #9db2ce; /* gray-500 */
+  --accent: #1fad8e; /* green-500 */
   --accent-foreground: #f1f8f3;
-  --destructive: #ff135b;           /* danger red */
+  --destructive: #ff135b; /* danger red */
   --destructive-foreground: #ffffff;
   --border: #1d2939;
   --input: #1d2939;
@@ -64,14 +64,29 @@
   }
 }
 
-body { background: var(--background); color: var(--foreground); }
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+button {
+  cursor: pointer;
+}
 
 /* Cell value-change flash (trading-terminal style): a green/red tint that fades out. */
 @keyframes value-flash-up {
-  from { background-color: rgba(103, 225, 193, 0.4); }
-  to { background-color: transparent; }
+  from {
+    background-color: rgba(103, 225, 193, 0.4);
+  }
+  to {
+    background-color: transparent;
+  }
 }
 @keyframes value-flash-down {
-  from { background-color: rgba(255, 19, 91, 0.4); }
-  to { background-color: transparent; }
+  from {
+    background-color: rgba(255, 19, 91, 0.4);
+  }
+  to {
+    background-color: transparent;
+  }
 }

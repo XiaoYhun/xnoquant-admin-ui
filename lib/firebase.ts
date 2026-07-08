@@ -1,5 +1,5 @@
-import { initializeApp, getApps } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import { initializeApp, getApp, getApps, type FirebaseApp } from "firebase/app";
+import { getAuth, type Auth } from "firebase/auth";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -10,6 +10,14 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+// Firebase Auth is browser-only. Initializing it during SSR/prerender — where the
+// NEXT_PUBLIC_* config isn't present — throws `auth/invalid-api-key` and fails the
+// build (e.g. prerendering /_not-found). Only initialize in the browser; every
+// consumer (AuthProvider, useAuth) touches `auth` in client effects/handlers, never
+// during server render.
+function initAuth(): Auth {
+  const app: FirebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
+  return getAuth(app);
+}
 
-export const auth = getAuth(app);
+export const auth: Auth = typeof window === "undefined" ? (undefined as unknown as Auth) : initAuth();

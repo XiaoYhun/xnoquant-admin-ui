@@ -4,114 +4,32 @@
 // (selected card = green border + "</> View source" + "Use template" buttons).
 import { useState } from "react";
 import { AltArrowDown, CheckCircle, Code, Database, MinimalisticMagnifer } from "@solar-icons/react";
+import { CloseIcon } from "@/components/icons/close";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-
-// Self-contained mock data — richer than the shared `SAMPLES` in lib/mock/strategy-builder.
-type Sample = { id: string; name: string; description: string };
-type SampleCategory = { id: string; name: string; badgeColor: string; samples: Sample[] };
-
-const CATEGORIES: SampleCategory[] = [
-  {
-    id: "trend-momentum",
-    name: "Trend Confirmation / Momentum",
-    badgeColor: "#f1c617",
-    samples: [
-      {
-        id: "macd-adx-trend-confirmation",
-        name: "MACD-ADX Trend Confirmation",
-        description:
-          "A trend-following strategy that combines MACD crossovers with ADX strength filtering. The strategy enters a long position when MACD crosses above its signal line while ADX indicates a strong trend, and exits when momentum weakens or trend strength drops, helping to avoid trades during low-trend or choppy market conditions.",
-      },
-      {
-        id: "bollinger-bands-squeeze",
-        name: "Bollinger Bands Squeeze",
-        description:
-          "This strategy focuses on periods of low volatility, identified by a Bollinger Bands squeeze. Traders look for price breakouts once the bands narrow, entering positions in the direction of the breakout with the expectation of a significant price movement.",
-      },
-      {
-        id: "rsi-divergence",
-        name: "RSI Divergence",
-        description:
-          "This strategy utilizes the Relative Strength Index (RSI) to identify potential reversals. By spotting divergences between price action and RSI readings, traders can anticipate trend changes.",
-      },
-      {
-        id: "fibonacci-retracement-levels",
-        name: "Fibonacci Retracement Levels",
-        description:
-          "Traders use Fibonacci retracement levels to identify potential reversal points during market pullbacks, entering positions when the price approaches key retracement levels.",
-      },
-    ],
-  },
-  {
-    id: "technical-indicators",
-    name: "Technical Indicators",
-    badgeColor: "#d5d4ff",
-    samples: [
-      {
-        id: "bollinger-bands-breakout-strategy",
-        name: "Bollinger Bands Breakout Strategy",
-        description:
-          "Traders monitor the contraction and expansion of Bollinger Bands to identify potential breakout opportunities, entering positions while placing stop-loss orders to manage risk.",
-      },
-      {
-        id: "stochastic-oscillator-divergence",
-        name: "Stochastic Oscillator Divergence",
-        description:
-          "Divergence between the Stochastic Oscillator and price action can indicate potential reversals, giving traders entry points in the opposite direction with stop-loss orders to limit losses.",
-      },
-      {
-        id: "rsi-overbought-oversold-conditions",
-        name: "RSI Overbought/Oversold Conditions",
-        description:
-          "Traders utilize the RSI to identify overbought or oversold conditions in the market, looking for reversal signals at these extremes with stop-loss orders to protect their trades.",
-      },
-      {
-        id: "volume-profile-analysis",
-        name: "Volume Profile Analysis",
-        description:
-          "Analyzing volume profiles helps traders identify key support and resistance levels based on traded volume at different price levels, with stop-loss orders set to minimize risk.",
-      },
-    ],
-  },
-  {
-    id: "volatility-breakout",
-    name: "Volatility / Breakout",
-    badgeColor: "#a7f3d0",
-    samples: [
-      {
-        id: "support-and-resistance-breakouts",
-        name: "Support and Resistance Breakouts",
-        description:
-          "Traders watch for price to break through established support and resistance levels, entering trades upon breakout confirmation with stop-loss orders to manage potential losses.",
-      },
-      {
-        id: "ichimoku-cloud-trading",
-        name: "Ichimoku Cloud Trading",
-        description:
-          "The Ichimoku Cloud provides a comprehensive view of market trends, support, and resistance levels, entering positions when price interacts with the cloud and using stop-loss orders to control risk.",
-      },
-      {
-        id: "atr-volatility-breakout",
-        name: "ATR Volatility Breakout",
-        description:
-          "This strategy uses the Average True Range (ATR) to size breakout thresholds relative to recent volatility, entering trades once price moves beyond an ATR-scaled band from its recent range.",
-      },
-    ],
-  },
-];
+import { useCodeSamples, type Sample } from "@/hooks/api/use-strategy-builder";
 
 const ALL_CATEGORIES = "all";
 
-export function SamplesTab() {
+export function SamplesTab({ onUseTemplate }: { onUseTemplate?: (code: string) => void }) {
+  const { data, isPending, isError } = useCodeSamples();
+  const categories = data ?? [];
   const [search, setSearch] = useState("");
+  const [viewSource, setViewSource] = useState<Sample | null>(null);
   const [category, setCategory] = useState<string>(ALL_CATEGORIES);
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set(CATEGORIES.map((c) => c.id)));
-  const [selectedId, setSelectedId] = useState<string>(CATEGORIES[0].samples[0].id);
+  // Data loads async, so the first category/sample isn't known up front — `null` means "not
+  // customized by the user yet" and falls back to expand-all / first-sample lazily below,
+  // instead of crashing on an empty array or needing an effect to seed state once data arrives.
+  const [expandedOverride, setExpandedOverride] = useState<Set<string> | null>(null);
+  const [selectedIdOverride, setSelectedIdOverride] = useState<string | null>(null);
+  const expanded = expandedOverride ?? new Set(categories.map((c) => c.id));
+  const selectedId = selectedIdOverride ?? categories[0]?.samples[0]?.id ?? "";
 
   const query = search.trim().toLowerCase();
-  const filtered = CATEGORIES.filter((c) => category === ALL_CATEGORIES || c.id === category)
+  const filtered = categories
+    .filter((c) => category === ALL_CATEGORIES || c.id === category)
     .map((c) => ({
       ...c,
       samples: c.samples.filter(
@@ -121,8 +39,8 @@ export function SamplesTab() {
     .filter((c) => c.samples.length > 0);
 
   function toggleSection(id: string) {
-    setExpanded((prev) => {
-      const next = new Set(prev);
+    setExpandedOverride((prev) => {
+      const next = new Set(prev ?? categories.map((c) => c.id));
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
@@ -150,7 +68,7 @@ export function SamplesTab() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value={ALL_CATEGORIES}>All Categories</SelectItem>
-            {CATEGORIES.map((c) => (
+            {categories.map((c) => (
               <SelectItem key={c.id} value={c.id}>
                 {c.name}
               </SelectItem>
@@ -159,9 +77,14 @@ export function SamplesTab() {
         </Select>
       </div>
 
-      {filtered.length === 0 && <p className="py-8 text-center text-xs text-muted-foreground">No samples found.</p>}
+      {isPending && <p className="px-1 py-4 text-center text-xs text-muted-foreground">Loading…</p>}
+      {isError && <p className="px-1 py-4 text-center text-xs text-destructive">Couldn&apos;t load samples.</p>}
 
-      {filtered.map((c) => {
+      {!isPending && !isError && filtered.length === 0 && (
+        <p className="py-8 text-center text-xs text-muted-foreground">No samples found.</p>
+      )}
+
+      {!isPending && !isError && filtered.map((c) => {
         const isOpen = expanded.has(c.id);
         return (
           <div key={c.id} className="flex flex-col gap-2">
@@ -190,7 +113,7 @@ export function SamplesTab() {
                     >
                       <button
                         type="button"
-                        onClick={() => setSelectedId(s.id)}
+                        onClick={() => setSelectedIdOverride(s.id)}
                         className="flex w-full cursor-pointer items-start gap-3 text-left"
                       >
                         <span
@@ -221,9 +144,10 @@ export function SamplesTab() {
                         </span>
                       </button>
                       {isSelected && (
-                        <div className="flex justify-end gap-2 pt-3">
+                        <div className="flex justify-end gap-2 pt-3 duration-200 animate-in fade-in slide-in-from-top-1">
                           <button
                             type="button"
+                            onClick={() => setViewSource(s)}
                             className="inline-flex h-8 cursor-pointer items-center gap-1 rounded-full border border-border bg-black px-3 text-xs text-white"
                           >
                             <Code weight="Bold" className="size-4" />
@@ -231,6 +155,7 @@ export function SamplesTab() {
                           </button>
                           <button
                             type="button"
+                            onClick={() => onUseTemplate?.(s.code)}
                             className="inline-flex h-8 cursor-pointer items-center gap-1 rounded-full bg-[linear-gradient(164deg,#cff8ea_0%,var(--primary)_100%)] px-3 text-xs text-black"
                           >
                             <CheckCircle weight="Outline" className="size-4" />
@@ -246,6 +171,42 @@ export function SamplesTab() {
           </div>
         );
       })}
+
+      {/* Figma 13964:53280 — "View source" opens the sample code; "Use template" loads it into the editor. */}
+      <Dialog open={!!viewSource} onOpenChange={(o) => !o && setViewSource(null)}>
+        <DialogContent
+          showCloseButton={false}
+          className="max-w-[760px] gap-0 overflow-hidden rounded-2xl border-border bg-background p-0"
+        >
+          <DialogTitle className="border-b border-border bg-surface px-4 py-2.5 text-left text-sm font-semibold text-white">
+            {viewSource?.name}
+          </DialogTitle>
+          <pre className="max-h-[60vh] overflow-auto whitespace-pre p-4 font-mono text-xs leading-relaxed text-[#e1e4e8]">
+            {viewSource?.code?.trim() || "// No source available for this sample."}
+          </pre>
+          <div className="flex justify-end gap-3 border-t border-border bg-surface px-4 py-3">
+            <button
+              type="button"
+              onClick={() => setViewSource(null)}
+              className="inline-flex h-8 cursor-pointer items-center gap-1 rounded-full border border-border bg-black px-3 text-xs text-white"
+            >
+              <CloseIcon className="size-4" />
+              Close
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                onUseTemplate?.(viewSource?.code ?? "");
+                setViewSource(null);
+              }}
+              className="inline-flex h-8 cursor-pointer items-center gap-1 rounded-full bg-[linear-gradient(165deg,#cff8ea_0%,var(--primary)_100%)] px-3 text-xs text-black"
+            >
+              <CheckCircle weight="Outline" className="size-4" />
+              Use template
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

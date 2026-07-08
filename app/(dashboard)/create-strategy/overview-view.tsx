@@ -199,7 +199,7 @@ const MINI_GRID = { left: 2, right: 2, top: 4, bottom: 4 } as const;
 function LineMini({ data, color }: { data: number[]; color: string }) {
   const option: EChartsOption = {
     xAxis: { show: false, type: "category", boundaryGap: false },
-    yAxis: { show: false, type: "value", scale: true },
+    yAxis: { show: false, type: "value", min: "dataMin", max: "dataMax" },
     grid: MINI_GRID,
     series: [{ type: "line", data, smooth: false, showSymbol: false, lineStyle: { width: 1.5, color } }],
   };
@@ -209,7 +209,7 @@ function LineMini({ data, color }: { data: number[]; color: string }) {
 function AreaMini({ data }: { data: number[] }) {
   const option: EChartsOption = {
     xAxis: { show: false, type: "category", boundaryGap: false },
-    yAxis: { show: false, type: "value", scale: true },
+    yAxis: { show: false, type: "value", min: "dataMin", max: "dataMax" },
     grid: MINI_GRID,
     series: [
       {
@@ -240,7 +240,7 @@ function AreaMini({ data }: { data: number[] }) {
 function BarMini({ data, color }: { data: number[]; color: string }) {
   const option: EChartsOption = {
     xAxis: { show: false, type: "category" },
-    yAxis: { show: false, type: "value", scale: true },
+    yAxis: { show: false, type: "value", min: "dataMin", max: "dataMax" },
     grid: MINI_GRID,
     series: [{ type: "bar", data, itemStyle: { color, borderRadius: [1, 1, 0, 0] }, barWidth: "50%" }],
   };
@@ -369,7 +369,7 @@ export function OverviewView() {
         ))}
       </div>
 
-      <div className="min-w-0 overflow-hidden rounded-xl border border-border bg-[#0f0f0f]">
+      <div className="min-w-0 overflow-hidden rounded-xl border border-border bg-background">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-[#151a24] px-4 py-3">
           <span className="text-sm font-medium text-white">Equity Curve</span>
           <div className="flex shrink-0 items-center gap-2">

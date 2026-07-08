@@ -73,6 +73,9 @@ export function NewVenueForm() {
             />
           </div>
         </div>
+        {createVenue.isError && (
+          <p className="text-xs text-destructive">Couldn&rsquo;t create venue. Please try again.</p>
+        )}
         <button
           type="submit"
           disabled={createVenue.isPending}

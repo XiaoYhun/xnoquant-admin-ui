@@ -33,7 +33,7 @@ const COLS = [
   { key: "sharpe", label: "Sharpe", w: "10%", align: "right" },
   { key: "mdd", label: "Max drawdown", w: "11%", align: "right" },
   { key: "liveperf", label: "Live Perf", w: "10%", align: "left" },
-  { key: "sendto", label: "Send to", w: "8%", align: "right" },
+  { key: "action", label: "", w: "8%", align: "right" },
 ] as const;
 
 export function StrategiesTable({ rows }: { rows: StrategyRow[] }) {

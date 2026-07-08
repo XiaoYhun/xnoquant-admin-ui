@@ -8,7 +8,7 @@ import { VenueList } from "./venue-list";
 import { VENUE_TYPES } from "./venue-types";
 
 export default function Page() {
-  const { data: venues = [], isLoading } = useVenues();
+  const { data: venues = [], isPending, isError } = useVenues();
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
 
@@ -49,7 +49,7 @@ export default function Page() {
       </div>
       <div className="flex min-h-0 flex-1 gap-4">
         <NewVenueForm />
-        <VenueList venues={filtered} total={filtered.length} isLoading={isLoading} />
+        <VenueList venues={filtered} total={filtered.length} isLoading={isPending} isError={isError} />
       </div>
     </main>
   );

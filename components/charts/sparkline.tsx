@@ -19,7 +19,9 @@ export function Sparkline({ data, className, color }: SparklineProps) {
 
   const option: EChartsOption = {
     xAxis: { show: false, type: "category", boundaryGap: false },
-    yAxis: { show: false, type: "value", scale: true },
+    // Fit the axis tightly to the data (min→bottom, max→top) so the curve uses the
+    // full height — otherwise a value axis includes 0 and the line reads flat/linear.
+    yAxis: { show: false, type: "value", min: "dataMin", max: "dataMax" },
     grid: { left: 2, right: 10, top: 8, bottom: 8 },
     series: [
       {

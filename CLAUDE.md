@@ -77,3 +77,7 @@ Possible subagents: Planner (which is Fable or Opus), FE developer, tester, code
 
 For any task, workflow you with more than 5 steps, that you think can be reuse in future, you MUST ask me to create new skills for that agents. Say why and when to use.
 Also suggest me any community skills that you may think good for a specific agent - This is job of Planner agent
+
+## 8. Others note
+
+When you are blocked with something start read user-tasks.md and do it.

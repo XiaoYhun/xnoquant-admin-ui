@@ -35,12 +35,11 @@ const CONSOLE_LOGS: LogLine[] = [
   { time: "12:23:45", text: "Ready. Waiting for the next Simulate run." },
 ];
 
-export function ConsolePanel() {
-  const [visible, setVisible] = useState(true);
+export function ConsolePanel({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const [expanded, setExpanded] = useState(false);
   const [logs, setLogs] = useState(CONSOLE_LOGS);
 
-  if (!visible) return null;
+  if (!open) return null;
 
   return (
     <div className="shrink-0 border-t border-border bg-background">
@@ -75,7 +74,7 @@ export function ConsolePanel() {
           <button
             type="button"
             aria-label="Close console"
-            onClick={() => setVisible(false)}
+            onClick={() => onOpenChange(false)}
             className="cursor-pointer text-muted-foreground transition-colors hover:text-foreground"
           >
             <CloseIcon className="size-5" />

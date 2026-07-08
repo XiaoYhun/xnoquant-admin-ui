@@ -40,9 +40,24 @@ export function StrategyAnalyticsHeader() {
       type: "category",
       data: data.portfolioPerformance.categories,
       boundaryGap: false,
-      axisLabel: { ...AXIS_LABEL, interval: 4 },
+      axisLabel: {
+        ...AXIS_LABEL,
+        interval: Math.max(0, Math.ceil(data.portfolioPerformance.categories.length / 6) - 1),
+        hideOverlap: true,
+        // XALPHA `stats/performance` times are epoch (sec or ms) — render as M/YY, not raw digits.
+        formatter: (value: string) => {
+          const n = Number(value);
+          if (!Number.isNaN(n) && n > 1e9) {
+            const d = new Date(n < 1e12 ? n * 1000 : n);
+            return `${d.getMonth() + 1}/${String(d.getFullYear()).slice(2)}`;
+          }
+          return value;
+        },
+      },
       axisTick: { show: false },
-      splitLine: SPLIT_LINE,
+      // No per-category vertical grid lines (was cluttered on dense date data) — keep only
+      // the horizontal yAxis split lines.
+      splitLine: { show: false },
     },
     yAxis: { type: "value", interval: 1, axisLabel: { ...AXIS_LABEL, formatter: "{value}%" }, splitLine: SPLIT_LINE },
     series: [
@@ -75,7 +90,7 @@ export function StrategyAnalyticsHeader() {
     series: [
       {
         type: "pie",
-        radius: ["50%", "72%"],
+        radius: ["42%", "74%"],
         center: ["50%", "50%"],
         avoidLabelOverlap: true,
         // Rounded segment ends + a card-coloured border create the gapped, segmented ring.

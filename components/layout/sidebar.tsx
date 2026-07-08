@@ -6,6 +6,7 @@ import { Logout, AltArrowDown, DoubleAltArrowLeft, DoubleAltArrowRight } from "@
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { NAV_GROUPS, type NavItem } from "./nav-config";
+import { CreateStrategyModal } from "./create-strategy-modal";
 
 // Active nav item = green gradient pill with near-black text (from Figma).
 const ACTIVE_GRADIENT = "linear-gradient(168deg, #CFF8EA 0%, #67E1C0 100%)";
@@ -18,6 +19,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const { logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>(() => {
     const init: Record<string, boolean> = {};
     for (const g of NAV_GROUPS) if (g.heading) init[g.heading] = true;
@@ -77,7 +79,13 @@ export function Sidebar() {
             return (
               <Fragment key={`group-${i}`}>
                 {group.items.map((item) => (
-                  <NavRow key={item.href} item={item} active={isActive(item.href)} collapsed={collapsed} />
+                  <NavRow
+                    key={item.href}
+                    item={item}
+                    active={isActive(item.href)}
+                    collapsed={collapsed}
+                    onClick={item.href === "/create-strategy" ? () => setCreateOpen(true) : undefined}
+                  />
                 ))}
               </Fragment>
             );
@@ -125,6 +133,8 @@ export function Sidebar() {
           </span>
         </button>
       </div>
+
+      <CreateStrategyModal open={createOpen} onOpenChange={setCreateOpen} />
     </aside>
   );
 }
@@ -191,11 +201,20 @@ function Section({
   );
 }
 
-function NavRow({ item, active, collapsed }: { item: NavItem; active: boolean; collapsed: boolean }) {
+function NavRow({
+  item,
+  active,
+  collapsed,
+  onClick,
+}: {
+  item: NavItem;
+  active: boolean;
+  collapsed: boolean;
+  onClick?: () => void;
+}) {
   const Icon = item.icon;
-  return (
-    <Link href={item.href} title={item.label}>
-      <div className="group relative flex h-10 w-full items-center rounded-[20px]">
+  const inner = (
+    <div className="group relative flex h-10 w-full items-center rounded-[20px]">
         {/* Active pill — full row when expanded, fades out when collapsed (design shows a bare icon) */}
         {active && (
           <span
@@ -228,6 +247,14 @@ function NavRow({ item, active, collapsed }: { item: NavItem; active: boolean; c
           {item.label}
         </span>
       </div>
+  );
+  return onClick ? (
+    <button type="button" onClick={onClick} title={item.label} className="w-full cursor-pointer">
+      {inner}
+    </button>
+  ) : (
+    <Link href={item.href} title={item.label}>
+      {inner}
     </Link>
   );
 }

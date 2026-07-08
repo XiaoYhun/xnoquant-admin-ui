@@ -5,7 +5,9 @@ import { EditorsBar } from "./editors-bar";
 import { Toolbar } from "./toolbar";
 import { ConsolePanel } from "./console-panel";
 import { ResultsPanel } from "./results-panel";
-import { INITIAL_EDITORS, SAMPLE_CODE, type EditorTab } from "@/lib/mock/strategy-builder";
+import { SAMPLE_CODE, type EditorTab } from "@/lib/mock/strategy-builder";
+import { useEditors } from "@/hooks/api/use-strategy-builder";
+import { cn } from "@/lib/utils";
 
 // Draggable two-pane split (editor | results). Left width is a % clamped to [30, 70].
 function ResizableSplit({ left, right }: { left: ReactNode; right: ReactNode }) {
@@ -34,8 +36,8 @@ function ResizableSplit({ left, right }: { left: ReactNode; right: ReactNode }) 
   }, []);
 
   return (
-    <div ref={containerRef} className="flex min-h-0 flex-1">
-      <div style={{ width: `${leftPct}%` }} className="min-w-0">
+    <div ref={containerRef} className="flex min-h-0 min-w-0 flex-1">
+      <div style={{ flex: `${leftPct} 1 0%` }} className="min-w-0 overflow-hidden">
         {left}
       </div>
       <div
@@ -48,20 +50,32 @@ function ResizableSplit({ left, right }: { left: ReactNode; right: ReactNode }) 
         }}
         className="group flex w-1 shrink-0 cursor-col-resize items-center justify-center hover:bg-[#344054]"
       >
-        <div className="h-10 w-0.5 pl-px rounded-full bg-border/70 transition-colors group-hover:bg-primary/60" />
+        <div className={cn("h-10 w-0.5 pl-px rounded-full bg-border/70 transition-colors group-hover:bg-primary/60", !!dragging.current && "bg-primary/60")} />
       </div>
-      <div style={{ width: `${100 - leftPct}%` }} className="min-w-0">
+      <div style={{ flex: `${100 - leftPct} 1 0%` }} className="min-w-0 overflow-hidden">
         {right}
       </div>
     </div>
   );
 }
 
+// T1 — the editor tabs come from the XALPHA editors list (`GET /v2/editors`). Load them, then
+// mount the builder seeded from that list so it can own them locally (add/close/edit) without a
+// set-state-in-effect. The loading gap is momentary (mock resolves immediately).
 export default function Page() {
-  const [editors, setEditors] = useState<EditorTab[]>(INITIAL_EDITORS);
-  const [activeId, setActiveId] = useState(INITIAL_EDITORS[0].id);
-  const nextId = useRef(INITIAL_EDITORS.length + 1);
+  const { data: initialEditors } = useEditors();
+  if (!initialEditors || initialEditors.length === 0) {
+    return <div className="min-h-0 flex-1 bg-surface p-3" />;
+  }
+  return <StrategyBuilder initialEditors={initialEditors} />;
+}
+
+function StrategyBuilder({ initialEditors }: { initialEditors: EditorTab[] }) {
+  const [editors, setEditors] = useState<EditorTab[]>(initialEditors);
+  const [activeId, setActiveId] = useState(initialEditors[0].id);
+  const nextId = useRef(initialEditors.length + 1);
   const active = editors.find((e) => e.id === activeId) ?? editors[0];
+  const [consoleOpen, setConsoleOpen] = useState(true);
 
   const addEditor = () => {
     const n = nextId.current++;
@@ -76,25 +90,28 @@ export default function Page() {
       return next;
     });
   };
+  // "Use template" (Samples tab) loads a sample's code into the active editor.
+  const setActiveCode = (code: string) =>
+    setEditors((prev) => prev.map((e) => (e.id === activeId ? { ...e, code } : e)));
 
   const left = (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-surface">
-      <Toolbar />
+      <Toolbar onToggleConsole={() => setConsoleOpen((v) => !v)} />
       <CodeEditor code={active?.code ?? ""} />
-      <ConsolePanel />
+      <ConsolePanel open={consoleOpen} onOpenChange={setConsoleOpen} />
     </div>
   );
 
   return (
-    <div className="p-3 bg-surface flex-1">
-      <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-surface rounded-[16px] border">
+    <div className="p-3 bg-surface flex-1 min-h-0">
+      <main className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-surface rounded-[16px] border">
         <EditorsBar editors={editors} activeId={activeId} onSelect={setActiveId} onClose={closeEditor} onAdd={addEditor} />
-        <div className="flex min-h-0 flex-1">
+        <div className="flex min-h-0 min-w-0 flex-1">
           <ResizableSplit
             left={left}
             right={
               <div className="h-full min-h-0 overflow-hidden bg-background">
-                <ResultsPanel />
+                <ResultsPanel onUseTemplate={setActiveCode} />
               </div>
             }
           />

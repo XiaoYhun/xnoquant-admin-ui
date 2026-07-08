@@ -15,7 +15,7 @@ import { StrategyAnalyticsHeader } from "./strategy-analytics";
 import { StrategiesTable } from "./strategies-table";
 import type { StrategyGroup } from "@/lib/mock/strategies";
 
-const PAGE_SIZE = 8;
+const PAGE_SIZE = 10;
 const GROUP_TABS: { value: StrategyGroup; label: string }[] = [
   { value: "MFT", label: "MFT Strategies" },
   { value: "HFT", label: "HFT Strategies" },

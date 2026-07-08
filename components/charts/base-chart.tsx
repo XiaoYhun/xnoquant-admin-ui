@@ -9,6 +9,13 @@ echarts.registerTheme(THEME_NAME, {
   color: ["#67e1c1", "#ff135b", "#1fad8e", "#9db2ce"],
   backgroundColor: "transparent",
   textStyle: { fontFamily: "var(--font-be-vietnam-pro), sans-serif", color: "#9db2ce" },
+  tooltip: {
+    backgroundColor: "#151a24",
+    borderColor: "#1d2939",
+    borderWidth: 1,
+    textStyle: { color: "#f1f8f3", fontSize: 12 },
+    extraCssText: "border-radius:8px;padding:6px 12px;box-shadow:0 4px 16px rgba(0,0,0,0.35);",
+  },
   grid: { left: 8, right: 8, top: 16, bottom: 8, containLabel: true },
   categoryAxis: {
     axisLine: { lineStyle: { color: "#1d2939" } },

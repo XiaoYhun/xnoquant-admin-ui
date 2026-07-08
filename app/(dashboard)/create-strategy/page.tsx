@@ -1,10 +1,11 @@
 "use client";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Play } from "@solar-icons/react";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CodeEditor } from "./code-editor";
+import { EditorsBar } from "./editors-bar";
+import { Toolbar } from "./toolbar";
+import { ConsolePanel } from "./console-panel";
 import { ResultsPanel } from "./results-panel";
+import { INITIAL_EDITORS, SAMPLE_CODE, type EditorTab } from "@/lib/mock/strategy-builder";
 
 // Draggable two-pane split (editor | results). Left width is a % clamped to [30, 70].
 function ResizableSplit({ left, right }: { left: ReactNode; right: ReactNode }) {
@@ -45,8 +46,10 @@ function ResizableSplit({ left, right }: { left: ReactNode; right: ReactNode }) 
           document.body.style.cursor = "col-resize";
           document.body.style.userSelect = "none";
         }}
-        className="w-1 shrink-0 cursor-col-resize bg-border transition-colors hover:bg-primary/50"
-      />
+        className="group flex w-1 shrink-0 cursor-col-resize items-center justify-center hover:bg-[#344054]"
+      >
+        <div className="h-10 w-0.5 pl-px rounded-full bg-border/70 transition-colors group-hover:bg-primary/60" />
+      </div>
       <div style={{ width: `${100 - leftPct}%` }} className="min-w-0">
         {right}
       </div>
@@ -55,69 +58,48 @@ function ResizableSplit({ left, right }: { left: ReactNode; right: ReactNode }) 
 }
 
 export default function Page() {
-  const [group, setGroup] = useState("HFT");
-  const [market, setMarket] = useState("crypto");
-  const [tf, setTf] = useState("5m");
-  const [name, setName] = useState("MACD-ADX Trend Confirmation");
+  const [editors, setEditors] = useState<EditorTab[]>(INITIAL_EDITORS);
+  const [activeId, setActiveId] = useState(INITIAL_EDITORS[0].id);
+  const nextId = useRef(INITIAL_EDITORS.length + 1);
+  const active = editors.find((e) => e.id === activeId) ?? editors[0];
+
+  const addEditor = () => {
+    const n = nextId.current++;
+    const id = `ed-${n}`;
+    setEditors((prev) => [...prev, { id, name: `Strategy ${n}`, code: SAMPLE_CODE }]);
+    setActiveId(id);
+  };
+  const closeEditor = (id: string) => {
+    setEditors((prev) => {
+      const next = prev.filter((e) => e.id !== id);
+      if (id === activeId && next.length) setActiveId(next[0].id);
+      return next;
+    });
+  };
+
+  const left = (
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-surface">
+      <Toolbar />
+      <CodeEditor code={active?.code ?? ""} />
+      <ConsolePanel />
+    </div>
+  );
 
   return (
-    <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-surface">
-      {/* Toolbar */}
-      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-2.5">
-        <div className="flex items-center gap-3">
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            aria-label="Strategy name"
-            className="h-8 w-72 rounded-[20px] border border-border bg-background px-3 text-sm font-medium text-foreground outline-none focus-visible:border-ring"
+    <div className="p-3 bg-surface flex-1">
+      <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-surface rounded-[16px] border">
+        <EditorsBar editors={editors} activeId={activeId} onSelect={setActiveId} onClose={closeEditor} onAdd={addEditor} />
+        <div className="flex min-h-0 flex-1">
+          <ResizableSplit
+            left={left}
+            right={
+              <div className="h-full min-h-0 overflow-hidden bg-background">
+                <ResultsPanel />
+              </div>
+            }
           />
-          <Tabs value={group} onValueChange={(v) => setGroup(v ?? "HFT")}>
-            <TabsList>
-              <TabsTrigger value="HFT">HFT</TabsTrigger>
-              <TabsTrigger value="MFT">MFT</TabsTrigger>
-            </TabsList>
-          </Tabs>
-          <Select value={market} onValueChange={(v) => setMarket(v ?? "crypto")}>
-            <SelectTrigger className="h-8 w-auto gap-2 rounded-full border-border bg-background px-3 text-xs text-foreground">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="crypto">Crypto</SelectItem>
-              <SelectItem value="vn30">VN30</SelectItem>
-              <SelectItem value="vn100">VN100</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={tf} onValueChange={(v) => setTf(v ?? "5m")}>
-            <SelectTrigger className="h-8 w-auto gap-2 rounded-full border-border bg-background px-3 text-xs text-foreground">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="1m">1m</SelectItem>
-              <SelectItem value="5m">5m</SelectItem>
-              <SelectItem value="15m">15m</SelectItem>
-              <SelectItem value="1h">1h</SelectItem>
-            </SelectContent>
-          </Select>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className="h-8 cursor-pointer rounded-full border border-border px-4 text-xs font-medium text-foreground transition-colors hover:bg-white/5"
-          >
-            Save
-          </button>
-          <button
-            type="button"
-            className="flex h-8 cursor-pointer items-center gap-1.5 rounded-full bg-[linear-gradient(164deg,#cff8ea_0%,var(--primary)_100%)] px-4 text-xs font-medium text-black transition-opacity hover:opacity-90"
-          >
-            <Play weight="Bold" className="size-3.5" />
-            Simulate
-          </button>
-        </div>
-      </div>
-
-      {/* Editor + results split */}
-      <ResizableSplit left={<CodeEditor />} right={<ResultsPanel />} />
-    </main>
+      </main>
+    </div>
   );
 }

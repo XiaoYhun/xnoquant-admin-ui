@@ -28,7 +28,7 @@ export function StrategyAnalyticsHeader() {
       <div className="flex gap-4">
         <Skeleton className="h-[226px] flex-1" />
         <Skeleton className="h-[226px] flex-1" />
-        <Skeleton className="h-[226px] max-w-sm flex-1" />
+        <Skeleton className="h-[226px] flex-1" />
       </div>
     );
   }
@@ -64,8 +64,8 @@ export function StrategyAnalyticsHeader() {
     xAxis: { type: "category", data: data.strategyPipeline.categories, axisLabel: { ...AXIS_LABEL, interval: 4 }, axisTick: { show: false } },
     yAxis: { type: "value", axisLabel: AXIS_LABEL, splitLine: SPLIT_LINE },
     series: [
-      { name: "Total", type: "bar", data: data.strategyPipeline.total, itemStyle: { color: "#cdbfe8", borderRadius: [3, 3, 0, 0] }, barMaxWidth: 6 },
-      { name: "Published", type: "bar", data: data.strategyPipeline.published, itemStyle: { color: "#67e1c1", borderRadius: [3, 3, 0, 0] }, barMaxWidth: 6 },
+      { name: "Total", type: "bar", stack: "pipeline", data: data.strategyPipeline.total, itemStyle: { color: "#cdbfe8" }, barMaxWidth: 12 },
+      { name: "Published", type: "bar", stack: "pipeline", data: data.strategyPipeline.published, itemStyle: { color: "#67e1c1", borderRadius: [3, 3, 0, 0] }, barMaxWidth: 12 },
     ],
   };
 
@@ -102,7 +102,7 @@ export function StrategyAnalyticsHeader() {
       <ChartCard title="Strategy Pipeline (1 month)">
         <BaseChart option={barOption} style={{ height: 180 }} />
       </ChartCard>
-      <ChartCard title="Market Allocation" className="max-w-sm">
+      <ChartCard title="Market Allocation">
         <BaseChart option={donutOption} style={{ height: 180 }} />
       </ChartCard>
     </div>

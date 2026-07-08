@@ -1,24 +1,59 @@
 // Mock data for the Create Strategy (HFT builder) screen — UI-only, no backend.
 
-export const SAMPLE_CODE = `// MACD-ADX Trend Confirmation
-// Enters with the MACD/signal cross, gated by ADX trend strength.
+export const SAMPLE_CODE = `from src.algo import StockAlgorithm
 
-let fast = ema(last_price, 12);
-let slow = ema(last_price, 26);
-let macd = fast - slow;
-let signal = ema(macd, 9);
-let trend = adx(high, low, last_price, 14);
 
-fn on_bar() {
-    if macd > signal && trend > 25.0 {
-        enter_long(1.0);
-    } else if macd < signal && trend > 25.0 {
-        enter_short(1.0);
-    } else {
-        close_all();
-    }
-}
+class MyAlgorithm(StockAlgorithm):
+    def __setup_data__(self):
+        """Setup additional data fields if needed."""
+
+    def __generate_signals__(self):
+        # Indicators
+        rsi = self.feat.rsi()
+        adx = self.feat.adx()
+
+        # The logical AND operator can be used directly by using \`&\` or \`self.And()\`
+        buy_signal = (self.op.current(rsi) > self.op.previous(rsi)) & \\
+            (self.op.current(adx) < self.op.previous(adx))
+
+        # You can also use \`self.And()\` for logical AND
+        sell_signal = self.op.And(self.op.current(rsi) < self.op.previous(rsi),
+            self.op.current(adx) > self.op.previous(adx))
+
+        # Set the buy and sell signals
+        self.buy(buy_signal, 1)
+        self.sell(sell_signal, 1)
 `;
+
+export const SAMPLE_CODE_2 = `from src.algo import StockAlgorithm
+
+
+class CryptoScalping(StockAlgorithm):
+    def __generate_signals__(self):
+        rsi = self.feat.rsi(window=14)
+        upper, lower = self.feat.bollinger(window=20)
+
+        self.buy((self.op.current(rsi) < 30) & (self.op.current(self.close) < lower), 0.5)
+        self.sell((self.op.current(rsi) > 70) & (self.op.current(self.close) > upper), 0.5)
+`;
+
+// The open-editor tabs (would come from an API in production).
+export type EditorTab = { id: string; name: string; code: string };
+export const INITIAL_EDITORS: EditorTab[] = [
+  { id: "ed-1", name: "Test bot AI", code: SAMPLE_CODE },
+  { id: "ed-2", name: "Crypto Scalping", code: SAMPLE_CODE_2 },
+];
+
+export const OPERATORS: { name: string; desc: string }[] = [
+  { name: "if / else", desc: "Conditional branch" },
+  { name: "&& · ||", desc: "Logical and / or" },
+  { name: "> · < · >= · <=", desc: "Comparison operators" },
+  { name: "+ · - · * · /", desc: "Arithmetic operators" },
+  { name: "crossover(a, b)", desc: "a crosses above b" },
+  { name: "crossunder(a, b)", desc: "a crosses below b" },
+  { name: "abs(x)", desc: "Absolute value" },
+  { name: "min(a, b) · max(a, b)", desc: "Minimum / maximum" },
+];
 
 export type Metric = { label: string; value: string; positive?: boolean };
 export const RESULT_METRICS: Metric[] = [

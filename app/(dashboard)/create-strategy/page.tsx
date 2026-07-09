@@ -1,12 +1,13 @@
 "use client";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { CodeEditor } from "./code-editor";
 import { EditorsBar } from "./editors-bar";
 import { Toolbar } from "./toolbar";
 import { ConsolePanel } from "./console-panel";
-import { ResultsPanel } from "./results-panel";
+import { ResultsPanel, type ResultsPanelTab } from "./results-panel";
 import { type EditorTab } from "@/lib/mock/strategy-builder";
-import { useEditors, useCreateEditor } from "@/hooks/api/use-strategy-builder";
+import { useEditors, useCreateEditor, useSimulateEditor, useUpdateEditor, useDeleteEditor, fetchEditors } from "@/hooks/api/use-strategy-builder";
 import { useHftStrategies, useCreateHftStrategy } from "@/hooks/api/use-hft-strategies";
 import { CreateStrategyModal } from "@/components/layout/create-strategy-modal";
 import { cn } from "@/lib/utils";
@@ -64,10 +65,6 @@ function ResizableSplit({ left, right }: { left: ReactNode; right: ReactNode }) 
   );
 }
 
-// T1/T16 — the editor tabs come from the XALPHA editors list (`GET /v2/editors`, MFT) merged
-// with the HFT strategies list (`GET /hft/api/strategies`), MFT first. Load them, then mount the
-// builder seeded from that merged list so it can own them locally (add/close/edit) without a
-// set-state-in-effect. Only MFT gates mounting — HFT still loading/empty must not block the page.
 export default function Page() {
   const { data: mftEditors } = useEditors();
   const { data: hftEditors } = useHftStrategies();
@@ -83,18 +80,39 @@ function StrategyBuilder({ initialEditors }: { initialEditors: EditorTab[] }) {
   const active = editors.find((e) => e.id === activeId) ?? editors[0];
   const [consoleOpen, setConsoleOpen] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
+  const [resultsTab, setResultsTab] = useState<ResultsPanelTab>("Results");
   const createHftStrategy = useCreateHftStrategy();
   const createEditor = useCreateEditor();
+  const simulateEditor = useSimulateEditor();
+  const updateEditor = useUpdateEditor();
+  const deleteEditor = useDeleteEditor();
+  const qc = useQueryClient();
 
-  // T15/T17 — both types create via the API and append the returned tab: MFT via
-  // POST /v2/editors (revalidates the editors list), HFT via POST /api/strategies.
   const addEditor = async (type: "mft" | "hft", name: string) => {
     // Errors propagate to CreateStrategyModal so it can stay open + surface the failure (e.g. 409).
     const tab = type === "hft" ? await createHftStrategy.mutateAsync(name) : await createEditor.mutateAsync(name);
     setEditors((prev) => [...prev, tab]);
     setActiveId(tab.id);
   };
+  const handleSimulate = async (editorId: string) => {
+    // Focus the Results tab so the running screen is visible even if the user is on Samples.
+    setResultsTab("Results");
+    // Save the on-screen code first (like xno-builder): otherwise the run uses the stale server
+    // copy, which for a freshly-created editor is empty and fails the simulation.
+    const editor = editors.find((e) => e.id === editorId);
+    await updateEditor.mutateAsync({ id: editorId, code: editor?.code ?? "" });
+    await simulateEditor.mutateAsync(editorId);
+    await qc.invalidateQueries({ queryKey: ["strategy-builder", "editors"] });
+    const fresh = await qc.fetchQuery({ queryKey: ["strategy-builder", "editors"], queryFn: fetchEditors });
+    const match = fresh.find((e) => e.id === editorId);
+    if (match) {
+      setEditors((prev) => prev.map((e) => (e.id === editorId ? { ...e, strategy_ids: match.strategy_ids } : e)));
+    }
+  };
   const closeEditor = (id: string) => {
+    // MFT editors are real XALPHA editors — delete them server-side; HFT tabs are removed locally.
+    const editor = editors.find((e) => e.id === id);
+    if (editor?.type === "mft") deleteEditor.mutate(id);
     setEditors((prev) => {
       const next = prev.filter((e) => e.id !== id);
       if (id === activeId && next.length) setActiveId(next[0].id);
@@ -112,14 +130,13 @@ function StrategyBuilder({ initialEditors }: { initialEditors: EditorTab[] }) {
         type={active?.type ?? "mft"}
         id={active?.id ?? ""}
         onToggleConsole={() => setConsoleOpen((v) => !v)}
+        onSimulate={handleSimulate}
       />
       <CodeEditor code={active?.code ?? ""} />
       <ConsolePanel open={consoleOpen} onOpenChange={setConsoleOpen} />
     </div>
   );
 
-  // B7 — Results panel variant/strategyId follow the active editor's type: MFT resolves its
-  // strategy from `strategy_ids` (XALPHA editor -> strategy link); HFT's own id IS the strategy id.
   const resultsStrategyId = active.type === "hft" ? active.id : active.strategy_ids?.at(-1);
 
   return (
@@ -131,7 +148,7 @@ function StrategyBuilder({ initialEditors }: { initialEditors: EditorTab[] }) {
             left={left}
             right={
               <div className="h-full min-h-0 overflow-hidden bg-background">
-                <ResultsPanel onUseTemplate={setActiveCode} variant={active.type} strategyId={resultsStrategyId} />
+                <ResultsPanel onUseTemplate={setActiveCode} variant={active.type} strategyId={resultsStrategyId} tab={resultsTab} onTabChange={setResultsTab} />
               </div>
             }
           />

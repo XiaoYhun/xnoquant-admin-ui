@@ -41,7 +41,6 @@ export function ConsolePanel({ open, onOpenChange }: { open: boolean; onOpenChan
   const [bodyHeight, setBodyHeight] = useState(180);
   const drag = useRef<{ startY: number; startH: number } | null>(null);
 
-  // T12 — drag the top edge to resize the console body height.
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
       if (!drag.current) return;

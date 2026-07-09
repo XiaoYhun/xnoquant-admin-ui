@@ -10,18 +10,24 @@ import { OperatorsTab } from "./operators-tab";
 // Right-panel underline tabs (Figma 14180:15378). Each tab's content lives in its own
 // component file (owned by a subagent).
 const TABS = ["Samples", "Results", "Data", "Features", "Operators"] as const;
-type Tab = (typeof TABS)[number];
+export type ResultsPanelTab = (typeof TABS)[number];
 
 export function ResultsPanel({
   onUseTemplate,
   variant = "hft",
   strategyId,
+  tab: controlledTab,
+  onTabChange,
 }: {
   onUseTemplate?: (code: string) => void;
   variant?: "mft" | "hft";
   strategyId?: string;
+  tab?: ResultsPanelTab;
+  onTabChange?: (tab: ResultsPanelTab) => void;
 }) {
-  const [tab, setTab] = useState<Tab>("Results");
+  const [internalTab, setInternalTab] = useState<ResultsPanelTab>("Results");
+  const tab = controlledTab ?? internalTab;
+  const setTab = onTabChange ?? setInternalTab;
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
       <div className="flex h-11 shrink-0 items-stretch overflow-x-auto border-b border-border">

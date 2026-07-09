@@ -91,7 +91,7 @@ button {
   }
 }
 
-/* T10/B8 — scrollbars matched to xno-builder: 6px, transparent track, translucent rounded thumb.
+/* Scrollbars matched to xno-builder: 6px, transparent track, translucent rounded thumb.
    Native scrollbars only (Monaco/ECharts render their own). Firefox uses scrollbar-width/color. */
 * {
   scrollbar-width: thin;

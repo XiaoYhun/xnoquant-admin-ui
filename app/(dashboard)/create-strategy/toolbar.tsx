@@ -6,8 +6,7 @@ import type { IconProps } from "@solar-icons/react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SimulateModal } from "./simulate-modal";
-import { apiPostData } from "@/lib/api-client";
-import { USE_MOCK, XALPHA_API_URL_V2 } from "@/lib/constant";
+import { USE_MOCK } from "@/lib/constant";
 
 // Toolbar row above the code editor — Figma node 13964:52172 (inside 13964:50200).
 // Self-contained: strategy name is local state, all buttons are no-ops (page-level
@@ -101,19 +100,18 @@ function SettingsMenu() {
   );
 }
 
-// B5 — the strategy name reflects the currently-selected editor and is not editable yet.
-// B7 — `type`/`id` (the active editor's) drive the MFT/HFT badge and the Simulate button: HFT
-// opens the existing SimulateModal; MFT calls the XALPHA simulate endpoint directly, no modal.
 export function Toolbar({
   name,
   type,
   id,
   onToggleConsole,
+  onSimulate,
 }: {
   name: string;
   type: "mft" | "hft";
   id: string;
   onToggleConsole?: () => void;
+  onSimulate?: (editorId: string) => Promise<void>;
 }) {
   const [simulateOpen, setSimulateOpen] = useState(false);
   const [mftSimStatus, setMftSimStatus] = useState<"idle" | "running" | "done" | "error">("idle");
@@ -130,7 +128,7 @@ export function Toolbar({
     }
     setMftSimStatus("running");
     try {
-      await apiPostData(`${XALPHA_API_URL_V2}/editors/${id}/simulate`, {});
+      await onSimulate?.(id);
       console.log(`Simulate started for "${name}"`);
       setMftSimStatus("done");
     } catch (err) {

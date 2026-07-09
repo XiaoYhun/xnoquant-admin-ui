@@ -20,7 +20,6 @@ const DONUT_COLORS = ["#ffab91", "#6db3f2", "#f5c451", "#c3b1e1", "#67e1c1"];
 const AXIS_LABEL = { color: "#475467", fontSize: 10 } as const;
 const SPLIT_LINE = { show: true, lineStyle: { color: "#1d2939", type: "dashed" } } as const;
 
-// B3 — chart x-axis values are epoch (sec/ms) or ISO strings; render a plain date (no time).
 function dateLabel(value: string): string {
   const n = Number(value);
   const d = !Number.isNaN(n) && n > 1e9 ? new Date(n < 1e12 ? n * 1000 : n) : new Date(value);

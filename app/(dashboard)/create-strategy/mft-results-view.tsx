@@ -30,7 +30,7 @@ import {
   type SummaryAggregateItem,
   type SummaryTableItem,
 } from "@/hooks/api/use-strategy-results";
-import { useStrategyById, isRunningStatus } from "@/hooks/api/use-strategy-run";
+import { useStrategyById } from "@/hooks/api/use-strategy-run";
 import { RunningSimulateScreen } from "./running-simulate-screen";
 import { RETURNS_SERIES, CORRELATION_ROWS } from "@/lib/mock/strategy-builder";
 
@@ -542,27 +542,25 @@ export function MftResultsView({ strategyId }: { strategyId?: string }) {
   // `isLoading` (not `isPending`) — a disabled query (no strategyId) sits in `pending` status
   // forever since it never fetches, which would permanently block the empty-state check below.
   // `isLoading` is `pending && fetching`, so it's false immediately once disabled/settled.
-  const { data: aggregate, isLoading: aggregateLoading } = useSummaryAggregate(strategyId, selectedStage);
   const { data: strategy, isLoading: strategyLoading } = useStrategyById(strategyId);
 
   const toggleSeries = (name: string) => {
     setSelectedSeries((prev) => (prev.includes(name) ? prev.filter((s) => s !== name) : [...prev, name]));
   };
 
-  // T18 — status gating (xno-builder's KetQuaStrategy): no strategy/CREATED -> empty state;
-  // running-ish -> the live progress screen; ERROR/CANCELED -> their cards; else -> results below.
   const showNoResults =
-    !USE_MOCK &&
-    !strategyLoading &&
-    !aggregateLoading &&
-    (!strategyId || !strategy || strategy.status === "created");
+    !USE_MOCK && !strategyLoading && (!strategyId || !strategy || strategy.status === "created");
 
   if (showNoResults) return <NoResultsState />;
 
   if (!USE_MOCK && strategy) {
-    if (isRunningStatus(strategy.status)) return <RunningSimulateScreen strategy={strategy} />;
     if (strategy.status === "error") return <ErrorState />;
     if (strategy.status === "canceled") return <CanceledState />;
+    // Only completed/published show results (and fire the summary/chart API calls); anything still
+    // in flight (running/queued/evaluating/waiting/…) shows the progress screen instead of 404ing.
+    if (strategy.status !== "completed" && strategy.status !== "published") {
+      return <RunningSimulateScreen strategy={strategy} />;
+    }
   }
 
   return (

@@ -31,7 +31,7 @@ export function EditorsBar({
 }) {
   const [pendingClose, setPendingClose] = useState<EditorTab | null>(null);
   return (
-    <div className="flex h-14 shrink-0 items-stretch overflow-x-auto border-b border-border bg-background">
+    <div className="flex h-14 shrink-0 items-stretch overflow-x-auto border-b border-border bg-background overflow-y-hidden">
       {editors.map((e) => {
         const active = e.id === activeId;
         return (
@@ -69,7 +69,6 @@ export function EditorsBar({
         <PlusIcon className="size-4" />
       </button>
 
-      {/* T11 — confirm before closing an editor. */}
       <Dialog open={!!pendingClose} onOpenChange={(o) => !o && setPendingClose(null)}>
         <DialogContent>
           <DialogHeader>

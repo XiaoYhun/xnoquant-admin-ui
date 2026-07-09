@@ -150,8 +150,6 @@ export function SamplesTab({ onUseTemplate }: { onUseTemplate?: (code: string) =
                           )}
                         </span>
                       </button>
-                      {/* T4 + B6 — the card grows in height (grid-rows 0fr→1fr) revealing the FULL
-                          description and the actions. */}
                       <div
                         className={cn(
                           "grid transition-[grid-template-rows] duration-300 ease-out",
@@ -224,7 +222,6 @@ export function SamplesTab({ onUseTemplate }: { onUseTemplate?: (code: string) =
         </DialogContent>
       </Dialog>
 
-      {/* T13 — confirm before replacing the editor code with a template. */}
       <Dialog open={!!pendingTemplate} onOpenChange={(o) => !o && setPendingTemplate(null)}>
         <DialogContent>
           <DialogHeader>

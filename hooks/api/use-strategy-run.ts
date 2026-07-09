@@ -3,10 +3,6 @@ import { apiGetData, apiPostData } from "@/lib/api-client";
 import { USE_MOCK, XALPHA_API_URL, XALPHA_API_URL_V2 } from "@/lib/constant";
 import type { components } from "@/types/api/xalpha";
 
-// T18 — MFT Simulate "running" flow (ports xno-builder's KetQuaStrategy/RunningSimulateScreen +
-// useStrategyDataById/useStrategyProgress/useCancelStrategy). The real XALPHA schema types
-// `status` as a plain string (no generated enum), so these are just the known values xno-builder's
-// `EStrategyStatus` uses, not a codegen symbol.
 export type StrategyInfo = components["schemas"]["models.StrategyInfo"];
 export type StrategyProgress = components["schemas"]["models.StrategyProgress"];
 

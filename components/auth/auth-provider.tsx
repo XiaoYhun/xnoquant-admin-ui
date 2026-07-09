@@ -34,8 +34,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => unsubscribe();
   }, []);
 
-  // T19 — fetch GET /auth/v1/me and surface it for browser inspection (Network tab + console log +
-  // `window.__me`). The user carries `roles` we'll gate features on later.
   const { data: me } = useMe();
   useEffect(() => {
     if (!me) return;

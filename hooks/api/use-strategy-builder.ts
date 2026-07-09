@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiGetData, apiPostData } from "@/lib/api-client";
+import { apiDelete, apiGetData, apiPostData, apiPutData } from "@/lib/api-client";
 import { USE_MOCK, XALPHA_API_URL, XALPHA_API_URL_V2 } from "@/lib/constant";
 import { FEATURES, OPERATORS, INITIAL_EDITORS, type EditorTab } from "@/lib/mock/strategy-builder";
 import type { components } from "@/types/api/xalpha";
@@ -277,35 +277,55 @@ export function useCodeSamples() {
   });
 }
 
-// T1 — the Create-Strategy editor tabs come from the XALPHA editors list (`GET /v2/editors`).
-// `StrategyEditorInfo` → the UI's `EditorTab {id,name,code}`; mock falls back to INITIAL_EDITORS.
+export async function fetchEditors(): Promise<EditorTab[]> {
+  if (USE_MOCK) return INITIAL_EDITORS;
+  try {
+    const data = await apiGetData<StrategyEditorInfo[]>(`${XALPHA_API_URL_V2}/editors`);
+    const tabs = (data ?? []).map((e) => ({
+      id: e.id ?? "",
+      name: e.name ?? "Untitled",
+      code: e.code ?? "",
+      strategy_ids: e.strategy_ids,
+      type: "mft" as const,
+    }));
+    // Never leave the builder with zero tabs (the UI derives the active editor from index 0).
+    return tabs.length > 0 ? tabs : INITIAL_EDITORS;
+  } catch {
+    // The builder needs at least one editor to render — fall back to the mock on any failure.
+    return INITIAL_EDITORS;
+  }
+}
+
 export function useEditors() {
-  return useQuery({
-    queryKey: ["strategy-builder", "editors"],
-    queryFn: async (): Promise<EditorTab[]> => {
-      if (USE_MOCK) return INITIAL_EDITORS;
-      try {
-        const data = await apiGetData<StrategyEditorInfo[]>(`${XALPHA_API_URL_V2}/editors`);
-        const tabs = (data ?? []).map((e) => ({
-          id: e.id ?? "",
-          name: e.name ?? "Untitled",
-          code: e.code ?? "",
-          strategy_ids: e.strategy_ids,
-          type: "mft" as const,
-        }));
-        // Never leave the builder with zero tabs (the UI derives the active editor from index 0).
-        return tabs.length > 0 ? tabs : INITIAL_EDITORS;
-      } catch {
-        // The builder needs at least one editor to render — fall back to the mock on any failure.
-        return INITIAL_EDITORS;
-      }
-    },
+  return useQuery({ queryKey: ["strategy-builder", "editors"], queryFn: fetchEditors });
+}
+
+export function useSimulateEditor() {
+  return useMutation({
+    mutationFn: (editorId: string) =>
+      apiPostData<Record<string, never>>(`${XALPHA_API_URL_V2}/editors/${editorId}/simulate`, {}),
   });
 }
 
-// T17 — Editors "+" with MFT selected creates a real editor (POST /v2/editors) and revalidates
-// the editors list. Mirrors useCreateHftStrategy; the modal collects no fields, so the server
-// applies its defaults for a minimally-named editor.
+// Persist the editor's current code (PUT /v2/editors/{id}/update) — xno-builder saves then
+// simulates so the run uses the on-screen code, not the stale server copy (empty for a new editor).
+export function useUpdateEditor() {
+  return useMutation({
+    mutationFn: ({ id, code }: { id: string; code: string }) =>
+      apiPutData<StrategyEditorInfo>(`${XALPHA_API_URL_V2}/editors/${id}/update`, { code }),
+  });
+}
+
+// DELETE /v2/editors/{id}/delete — remove the editor (called from the Editors "×" confirm), then
+// revalidate the list.
+export function useDeleteEditor() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiDelete(`${XALPHA_API_URL_V2}/editors/${id}/delete`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["strategy-builder", "editors"] }),
+  });
+}
+
 export function useCreateEditor() {
   const qc = useQueryClient();
   return useMutation({
@@ -313,13 +333,13 @@ export function useCreateEditor() {
       if (USE_MOCK) {
         return { id: crypto.randomUUID(), name, code: "", type: "mft" };
       }
-      const editor = await apiPostData<StrategyEditorInfo>(`${XALPHA_API_URL_V2}/editors`, {
-        name,
-        code: "",
-      });
+      // POST /v2/editors takes no body and auto-names the editor ("Untitled N"). The editor API has
+      // no rename (update only accepts code/universe/train_ratio — no `name`), so we surface the
+      // chosen name on the tab client-side; the server keeps its auto name until reload.
+      const editor = await apiPostData<StrategyEditorInfo>(`${XALPHA_API_URL_V2}/editors`, {});
       return {
         id: editor.id ?? crypto.randomUUID(),
-        name: editor.name ?? name,
+        name,
         code: editor.code ?? "",
         strategy_ids: editor.strategy_ids,
         type: "mft",

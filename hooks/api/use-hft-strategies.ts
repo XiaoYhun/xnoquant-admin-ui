@@ -4,17 +4,16 @@ import { USE_MOCK, HFT_API_URL } from "@/lib/constant";
 import type { EditorTab } from "@/lib/mock/strategy-builder";
 import type { components } from "@/types/api/hft";
 
-// T16/T15 — HFT strategies (`GET/POST /api/strategies`, raw — no envelope) surfaced as editor
-// tabs alongside the XALPHA/MFT editors (see use-strategy-builder.ts's useEditors).
+// HFT strategies (`GET/POST /api/strategies`, raw — no envelope) surfaced as editor tabs
+// alongside the XALPHA/MFT editors (see use-strategy-builder.ts's useEditors).
 type Strategy = components["schemas"]["Strategy"];
 
 function toEditorTab(s: Strategy): EditorTab {
   return { id: s.id, name: s.name, code: s.code, type: "hft" };
 }
 
-// T16 — merged into the Create Strategy editors list (page.tsx). Tolerate any failure (401,
-// empty list, network error) by falling back to `[]` so a broken HFT backend never blocks the
-// page — the MFT editors alone are enough to mount the builder.
+// Merged into the Create Strategy editors list (page.tsx). Tolerate any failure (401, empty list,
+// network error) by falling back to `[]` so a broken HFT backend never blocks the page.
 export function useHftStrategies() {
   return useQuery({
     queryKey: ["hft-strategies"],
@@ -30,7 +29,6 @@ export function useHftStrategies() {
   });
 }
 
-// T15 — Editors "+" with HFT selected creates a strategy via the HFT API and appends its tab.
 export function useCreateHftStrategy() {
   const qc = useQueryClient();
   return useMutation({

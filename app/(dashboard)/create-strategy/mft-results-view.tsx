@@ -29,15 +29,25 @@ import {
   useStrategyChart,
   type SummaryAggregateItem,
   type SummaryTableItem,
+  type StrategyChartData,
 } from "@/hooks/api/use-strategy-results";
 import { useStrategyById } from "@/hooks/api/use-strategy-run";
 import { RunningSimulateScreen } from "./running-simulate-screen";
-import { RETURNS_SERIES, CORRELATION_ROWS } from "@/lib/mock/strategy-builder";
+import { PerformanceMftView } from "./performance-mft";
+import { AnalysisMftView } from "./analysis-mft";
 
-const GREEN = "#67e1c1";
-const RED = "#ff135b";
 const GREEN_TEXT =
   "bg-[linear-gradient(158deg,#cff8ea_0%,#67e1c1_100%)] bg-clip-text text-transparent";
+
+// Multi-stage overlay chart colors — copied exactly from xno-builder (train/test/live). xno-builder
+// has no dedicated simulate color (its charts only ever carry train/test/live); any other stage
+// falls back below.
+const STAGE_COLORS = {
+  train: "#38C9A7",
+  test: "#FFA500",
+  live: "#3B82F6",
+};
+const STAGE_FALLBACK = "#67e1c1";
 
 const STAGES = [
   { label: "Train", value: "train" },
@@ -94,181 +104,106 @@ function ExpandButton({ label }: { label: string }) {
   );
 }
 
-// Two series clamped at zero (rather than nulled out) so the area/line reads green above 0,
-// red below, with no gap at the zero-crossings.
-function splitByZero(data: number[]) {
-  return {
-    positive: data.map((v) => (v >= 0 ? v : 0)),
-    negative: data.map((v) => (v < 0 ? v : 0)),
-  };
+// Returns [time,value] pairs (as string/number tuples for an ECharts category axis) for one
+// stage's [from,to] range (inclusive). Guards missing stage/from/to/timestamp lookups.
+function extractStageData(data: StrategyChartData, name: string): [string, number][] {
+  const times = data.times ?? [];
+  const values = data.values ?? [];
+  const range = data.stages?.[name];
+  if (range?.from == null || range?.to == null) return [];
+  const fromIdx = times.indexOf(range.from);
+  const toIdx = times.indexOf(range.to);
+  if (fromIdx === -1 || toIdx === -1) return [];
+  return times.slice(fromIdx, toIdx + 1).map((t, i) => [String(t), values[fromIdx + i]]);
 }
 
-function twoToneAreaOption(data: number[]): EChartsOption {
-  const { positive, negative } = splitByZero(data);
+// One colored line series for a stage segment ([time,value] pairs). Series-level `color` + emphasis
+// pin the color so hover doesn't fall back to the theme palette (which starts green) and repaint the
+// line; the area fades full-color → transparent (xno-builder parity).
+function stageSeries(name: string, color: string, data: [string, number][]) {
   return {
-    tooltip: { trigger: "axis" },
-    grid: { left: 8, right: 8, top: 16, bottom: 8, containLabel: true },
-    xAxis: {
-      type: "category",
-      data: data.map((_, i) => `${i + 1}`),
-      boundaryGap: false,
-      axisLabel: { show: false },
-      axisTick: { show: false },
+    type: "line" as const,
+    name,
+    color,
+    data,
+    smooth: true,
+    showSymbol: false,
+    symbol: "none" as const,
+    connectNulls: true,
+    lineStyle: { width: 2, color },
+    itemStyle: { color },
+    emphasis: { lineStyle: { width: 2, color } },
+    areaStyle: {
+      color: {
+        type: "linear" as const,
+        x: 0,
+        y: 0,
+        x2: 0,
+        y2: 1,
+        colorStops: [
+          { offset: 0, color },
+          { offset: 1, color: `${color}00` },
+        ],
+      },
     },
-    yAxis: { type: "value" },
-    series: [
-      {
-        type: "line",
-        data: positive,
-        smooth: true,
-        showSymbol: false,
-        symbol: "none",
-        lineStyle: { width: 1.5, color: GREEN },
-        itemStyle: { color: GREEN },
-        areaStyle: {
-          color: {
-            type: "linear",
-            x: 0,
-            y: 0,
-            x2: 0,
-            y2: 1,
-            colorStops: [
-              { offset: 0, color: "rgba(103,225,193,0.35)" },
-              { offset: 1, color: "rgba(103,225,193,0)" },
-            ],
-          },
-        },
-        z: 2,
-      },
-      {
-        type: "line",
-        data: negative,
-        smooth: true,
-        showSymbol: false,
-        symbol: "none",
-        lineStyle: { width: 1.5, color: RED },
-        itemStyle: { color: RED },
-        areaStyle: {
-          color: {
-            type: "linear",
-            x: 0,
-            y: 0,
-            x2: 0,
-            y2: 1,
-            colorStops: [
-              { offset: 0, color: "rgba(255,19,91,0)" },
-              { offset: 1, color: "rgba(255,19,91,0.35)" },
-            ],
-          },
-        },
-        z: 1,
-      },
-    ],
   };
 }
 
-// Real/mock stage-sliced series chart: one solid color (green/red) or the two-tone split above,
-// x-axis labeled with actual dates instead of the Performance tab's plain index labels.
-function buildStageChartOption(
-  times: number[],
-  values: number[],
-  kind: "twoTone" | "green" | "red",
-): EChartsOption {
-  const xAxisData = times.map((t) => formatTimestamp(t));
+// Multi-stage overlay (xno-builder parity): draw the sequential Train / Test / Live segments as
+// separate colored lines on one shared date axis. A data "simulate" stage spans the FULL range and
+// overlaps train+test, so it is intentionally NOT drawn — exactly like xno-builder, which only ever
+// renders train/test/live. Cumulative: Test appears once you leave the Train stage; Live is always
+// included (empty when the strategy has no live stage). Falls back to one line when no
+// train/test/live boundaries exist.
+function buildMultiStageOption(data: StrategyChartData, stage: string): EChartsOption {
+  const times = data.times ?? [];
+  const values = data.values ?? [];
+  const stages = data.stages ?? {};
+  const tr = stages.train;
+  const te = stages.test;
+
   const shared = {
     tooltip: { trigger: "axis" as const },
     grid: { left: 8, right: 8, top: 16, bottom: 8, containLabel: true },
-    xAxis: {
-      type: "category" as const,
-      data: xAxisData,
-      boundaryGap: false,
-      axisTick: { show: false },
-      axisLabel: { fontSize: 10, interval: Math.max(0, Math.ceil(xAxisData.length / 8) - 1) },
-    },
     yAxis: { type: "value" as const },
   };
+  const axisFor = (arr: number[]) => ({
+    type: "category" as const,
+    data: arr.map(String),
+    boundaryGap: false,
+    axisTick: { show: false },
+    axisLabel: {
+      fontSize: 10,
+      color: "#9db2ce",
+      interval: Math.max(0, Math.ceil(arr.length / 8) - 1),
+      formatter: (v: string) => formatTimestamp(Number(v)),
+    },
+  });
 
-  if (kind === "twoTone") {
-    const { positive, negative } = splitByZero(values);
+  // No sequential stage boundaries → one plain line over everything.
+  if (!stages.train && !stages.test && !stages.live) {
     return {
       ...shared,
-      series: [
-        {
-          type: "line",
-          data: positive,
-          smooth: true,
-          showSymbol: false,
-          symbol: "none",
-          lineStyle: { width: 1.5, color: GREEN },
-          itemStyle: { color: GREEN },
-          areaStyle: {
-            color: {
-              type: "linear",
-              x: 0,
-              y: 0,
-              x2: 0,
-              y2: 1,
-              colorStops: [
-                { offset: 0, color: "rgba(103,225,193,0.35)" },
-                { offset: 1, color: "rgba(103,225,193,0)" },
-              ],
-            },
-          },
-          z: 2,
-        },
-        {
-          type: "line",
-          data: negative,
-          smooth: true,
-          showSymbol: false,
-          symbol: "none",
-          lineStyle: { width: 1.5, color: RED },
-          itemStyle: { color: RED },
-          areaStyle: {
-            color: {
-              type: "linear",
-              x: 0,
-              y: 0,
-              x2: 0,
-              y2: 1,
-              colorStops: [
-                { offset: 0, color: "rgba(255,19,91,0)" },
-                { offset: 1, color: "rgba(255,19,91,0.35)" },
-              ],
-            },
-          },
-          z: 1,
-        },
-      ],
+      xAxis: axisFor(times),
+      series: [stageSeries("", STAGE_FALLBACK, times.map((t, i) => [String(t), values[i]]))],
     };
   }
 
-  const color = kind === "red" ? RED : GREEN;
-  const colorStops =
-    kind === "red"
-      ? [
-          { offset: 0, color: "rgba(255,19,91,0)" },
-          { offset: 1, color: "rgba(255,19,91,0.35)" },
-        ]
-      : [
-          { offset: 0, color: "rgba(103,225,193,0.35)" },
-          { offset: 1, color: "rgba(103,225,193,0)" },
-        ];
-  return {
-    ...shared,
-    series: [
-      {
-        type: "line",
-        data: values,
-        smooth: true,
-        showSymbol: false,
-        symbol: "none",
-        lineStyle: { width: 1.5, color },
-        itemStyle: { color },
-        areaStyle: { color: { type: "linear", x: 0, y: 0, x2: 0, y2: 1, colorStops } },
-      },
-    ],
-  };
+  // X-axis window: Train → train range; Test → train→test; Simulate/Live → full timeline.
+  let axisTimes = times;
+  if (stage === "train" && tr?.from != null && tr?.to != null) {
+    axisTimes = times.filter((t) => t >= tr.from! && t <= tr.to!);
+  } else if (stage === "test" && tr?.from != null && te?.to != null) {
+    axisTimes = times.filter((t) => t >= tr.from! && t <= te.to!);
+  }
+
+  const series = [
+    stageSeries("Train", STAGE_COLORS.train, extractStageData(data, "train")),
+    stage !== "train" ? stageSeries("Test", STAGE_COLORS.test, extractStageData(data, "test")) : null,
+    stageSeries("Live", STAGE_COLORS.live, extractStageData(data, "live")),
+  ].filter(Boolean) as ReturnType<typeof stageSeries>[];
+
+  return { ...shared, xAxis: axisFor(axisTimes), series };
 }
 
 // ---- shared chart card chrome (title + remove + expand icon), Figma 14039:68722 ----
@@ -371,16 +306,16 @@ function YearTable({ rows }: { rows: SummaryTableItem[] }) {
         <TableBody>
           {rows.map((r) => (
             <TableRow key={r.time}>
-              <TableCell className="text-right text-white">{r.time}</TableCell>
-              <TableCell className="text-right text-white">{formatMetricNumber(r.sharpe)}</TableCell>
-              <TableCell className={cn("text-right", metricPositive(r.cagr) ? GREEN_TEXT : "text-[#ff135b]")}>
+              <TableCell className="text-left text-white">{r.time}</TableCell>
+              <TableCell className="text-left text-white">{formatMetricNumber(r.sharpe)}</TableCell>
+              <TableCell className={cn("text-left", metricPositive(r.cagr) ? GREEN_TEXT : "text-[#ff135b]")}>
                 {formatMetricPercent(r.cagr)}
               </TableCell>
-              <TableCell className="text-right text-[#ff135b]">
+              <TableCell className="text-left text-[#ff135b]">
                 {formatMetricNumber((r.max_drawdown ?? 0) * 100)}%
               </TableCell>
-              <TableCell className="text-right text-white">{formatMetricNumber(r.profit_factor)}</TableCell>
-              <TableCell className="text-right text-white">{formatMetricNumber(r.calmar)}</TableCell>
+              <TableCell className="text-left text-white">{formatMetricNumber(r.profit_factor)}</TableCell>
+              <TableCell className="text-left text-white">{formatMetricNumber(r.calmar)}</TableCell>
             </TableRow>
           ))}
         </TableBody>
@@ -402,9 +337,7 @@ function SeriesChartCard({
   onRemove: () => void;
 }) {
   const meta = SERIES_META[series] ?? { title: series, kind: "green" as const };
-  const { data, isLoading } = useStrategyChart(strategyId, stage, series);
-  const times = data?.times ?? [];
-  const values = data?.values ?? [];
+  const { data, isLoading } = useStrategyChart(strategyId, series);
 
   return (
     <ChartCard title={meta.title} onRemove={onRemove}>
@@ -412,12 +345,12 @@ function SeriesChartCard({
         <div className="flex h-[240px] items-center justify-center text-sm text-muted-foreground">
           Loading data...
         </div>
-      ) : times.length === 0 ? (
+      ) : !data?.times?.length ? (
         <div className="flex h-[240px] items-center justify-center text-sm text-muted-foreground">
           No data available
         </div>
       ) : (
-        <BaseChart option={buildStageChartOption(times, values, meta.kind)} style={{ height: 240 }} />
+        <BaseChart option={buildMultiStageOption(data, stage)} style={{ height: 240 }} />
       )}
     </ChartCard>
   );
@@ -456,45 +389,6 @@ function OverviewMft({
           />
         ))
       )}
-    </div>
-  );
-}
-
-function PerformanceMft() {
-  return (
-    <ChartCard title="Returns">
-      <BaseChart option={twoToneAreaOption(RETURNS_SERIES)} style={{ height: 260 }} />
-    </ChartCard>
-  );
-}
-
-function AnalysisMft() {
-  return (
-    <div className="min-w-0 overflow-hidden rounded-xl border border-border">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Strategy</TableHead>
-            <TableHead>Universe</TableHead>
-            <TableHead>Correlation</TableHead>
-            <TableHead>Sharpe</TableHead>
-            <TableHead>Returns</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {CORRELATION_ROWS.map((r) => (
-            <TableRow key={r.name}>
-              <TableCell className="text-white">{r.name}</TableCell>
-              <TableCell className="text-white">{r.universe}</TableCell>
-              <TableCell className="text-white">{r.correlation.toFixed(2)}</TableCell>
-              <TableCell className="text-white">{r.sharpe}</TableCell>
-              <TableCell className={r.returns.startsWith("-") ? "text-[#ff135b]" : GREEN_TEXT}>
-                {r.returns}
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
     </div>
   );
 }
@@ -567,10 +461,16 @@ export function MftResultsView({ strategyId }: { strategyId?: string }) {
     <div className="flex min-w-0 flex-col gap-4 p-4">
       <div className="flex flex-wrap items-center gap-2">
         <span className="shrink-0 text-sm font-medium text-white">Stage:</span>
+        {/* Live is clickable only when the strategy is eligible and the lock-up has elapsed
+            (xno-builder parity: valid_to_show_live && live_remaining_days <= 0). */}
         <Tabs value={selectedStage} onValueChange={(v) => v && setSelectedStage(v)}>
           <TabsList>
             {STAGES.map((s) => (
-              <TabsTrigger key={s.value} value={s.value}>
+              <TabsTrigger
+                key={s.value}
+                value={s.value}
+                disabled={s.value === "live" && !(strategy?.valid_to_show_live && (strategy?.live_remaining_days ?? 0) <= 0)}
+              >
                 {s.label}
               </TabsTrigger>
             ))}
@@ -633,8 +533,10 @@ export function MftResultsView({ strategyId }: { strategyId?: string }) {
             onToggleSeries={toggleSeries}
           />
         )}
-        {view === "Performance" && <PerformanceMft />}
-        {view === "Analysis" && <AnalysisMft />}
+        {view === "Performance" && (
+          <PerformanceMftView strategyId={strategyId} stage={selectedStage} market={strategy?.market} />
+        )}
+        {view === "Analysis" && <AnalysisMftView strategy={strategy} strategyId={strategyId} />}
       </div>
     </div>
   );

@@ -80,4 +80,4 @@ Also suggest me any community skills that you may think good for a specific agen
 
 ## 8. Others note
 
-When you are blocked with something start read user-tasks.md and do it.
+When you are blocked with something or going to stop working, start read user-tasks.md and do it, only actual stop if all user-tasks is marked as done in task-progress.md.

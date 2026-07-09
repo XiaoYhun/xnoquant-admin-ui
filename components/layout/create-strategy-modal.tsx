@@ -4,7 +4,9 @@ import { Bolt, ClockCircle } from "@solar-icons/react";
 import type { ComponentType } from "react";
 import type { IconProps } from "@solar-icons/react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import type { HftStrategyType } from "@/hooks/api/use-hft-strategies";
 
 // Figma node 14135:29458 — "Select Strategy Type" popup: pick MFT or HFT, then confirm.
 // Opened from the Editors "+" button to add a new editor. HFT is the default selection.
@@ -15,6 +17,12 @@ const OPTIONS: { id: StrategyType; label: string; icon: ComponentType<IconProps>
   { id: "hft", label: "HFT Strategy", icon: Bolt },
 ];
 
+const HFT_TYPE_OPTIONS: { value: HftStrategyType; label: string }[] = [
+  { value: "taker", label: "Taker" },
+  { value: "maker", label: "Maker" },
+  { value: "arbitrage", label: "Arbitrage" },
+];
+
 export function CreateStrategyModal({
   open,
   onOpenChange,
@@ -22,9 +30,10 @@ export function CreateStrategyModal({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onConfirm?: (type: StrategyType, name: string) => Promise<void> | void;
+  onConfirm?: (type: StrategyType, name: string, hftStrategyType?: HftStrategyType) => Promise<void> | void;
 }) {
   const [selected, setSelected] = useState<StrategyType>("hft");
+  const [hftType, setHftType] = useState<HftStrategyType>("taker");
   const [name, setName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,7 +52,7 @@ export function CreateStrategyModal({
     setSubmitting(true);
     setError(null);
     try {
-      await onConfirm?.(selected, name.trim());
+      await onConfirm?.(selected, name.trim(), selected === "hft" ? hftType : undefined);
       reset();
       onOpenChange(false);
     } catch {
@@ -119,6 +128,26 @@ export function CreateStrategyModal({
             );
           })}
         </div>
+
+        {selected === "hft" && (
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="hft-strategy-type" className="text-xs font-medium text-muted-foreground">
+              Strategy type
+            </label>
+            <Select value={hftType} onValueChange={(v) => v && setHftType(v as HftStrategyType)}>
+              <SelectTrigger id="hft-strategy-type" className="h-10 w-full justify-between rounded-xl border-border bg-surface px-3 text-sm text-white">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-background!">
+                {HFT_TYPE_OPTIONS.map(({ value, label }) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
         {error && <p className="text-center text-xs text-destructive">{error}</p>}
 

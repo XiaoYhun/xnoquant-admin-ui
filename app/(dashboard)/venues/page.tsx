@@ -5,12 +5,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useVenues } from "@/hooks/api/use-venues";
 import { NewVenueForm } from "./new-venue-form";
 import { VenueList } from "./venue-list";
+import { EditVenueModal } from "./edit-venue-modal";
 import { VENUE_TYPES } from "./venue-types";
+import type { Venue } from "@/types/domain";
 
 export default function Page() {
   const { data: venues = [], isPending, isError } = useVenues();
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [editingVenue, setEditingVenue] = useState<Venue | null>(null);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -49,8 +52,15 @@ export default function Page() {
       </div>
       <div className="flex min-h-0 flex-1 gap-4">
         <NewVenueForm />
-        <VenueList venues={filtered} total={filtered.length} isLoading={isPending} isError={isError} />
+        <VenueList
+          venues={filtered}
+          total={filtered.length}
+          isLoading={isPending}
+          isError={isError}
+          onEdit={setEditingVenue}
+        />
       </div>
+      <EditVenueModal venue={editingVenue} onClose={() => setEditingVenue(null)} />
     </main>
   );
 }

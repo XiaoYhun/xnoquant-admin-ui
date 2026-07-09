@@ -23,6 +23,15 @@ export const mockApi = {
     MOCK_VENUES.push(venue);
     return venue;
   },
+  async updateVenue(id: string, input: { name: string; venue_type: Venue["venue_type"] }): Promise<Venue> {
+    await delay();
+    const venue = MOCK_VENUES.find((v) => v.id === id);
+    if (!venue) throw new Error("Venue not found");
+    venue.name = input.name;
+    venue.venue_type = input.venue_type;
+    venue.updated_at = new Date().toISOString();
+    return venue;
+  },
   async deleteVenue(id: string): Promise<void> {
     await delay();
     const idx = MOCK_VENUES.findIndex((v) => v.id === id);

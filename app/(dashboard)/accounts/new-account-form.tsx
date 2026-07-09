@@ -7,8 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useVenues } from "@/hooks/api/use-venues";
-import { useCreateAccount, useUpdateAccount } from "@/hooks/api/use-accounts";
-import type { Account } from "@/types/domain";
+import { useCreateAccount } from "@/hooks/api/use-accounts";
 
 const schema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -21,18 +20,9 @@ type FormValues = z.infer<typeof schema>;
 const fieldClass =
   "h-10 w-full rounded-[20px] border-border bg-surface px-3 text-sm text-foreground dark:bg-surface";
 
-export function NewAccountForm({
-  editingAccount,
-  onDone,
-}: {
-  editingAccount?: Account | null;
-  onDone?: () => void;
-}) {
+export function NewAccountForm() {
   const { data: venues = [] } = useVenues();
   const createAccount = useCreateAccount();
-  const updateAccount = useUpdateAccount();
-  const isEditing = !!editingAccount;
-  const mutation = isEditing ? updateAccount : createAccount;
 
   const {
     register,
@@ -44,29 +34,14 @@ export function NewAccountForm({
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
-      name: editingAccount?.name ?? "",
-      venue_id: editingAccount?.venue_id ?? "",
+      name: "",
+      venue_id: "",
       api_key: "",
       secret_key: "",
     },
   });
 
   const onSubmit = handleSubmit((values) => {
-    if (editingAccount) {
-      updateAccount.mutate(
-        {
-          id: editingAccount.id,
-          name: values.name,
-          venue_id: values.venue_id,
-          // account_type has no UI control (design omits it) — carry the account's existing type forward.
-          account_type: editingAccount.account_type,
-          ...(values.api_key.trim() ? { api_key: values.api_key.trim() } : {}),
-          ...(values.secret_key.trim() ? { secret_key: values.secret_key.trim() } : {}),
-        },
-        { onSuccess: () => onDone?.() },
-      );
-      return;
-    }
     if (!values.api_key.trim()) setError("api_key", { message: "API key is required" });
     if (!values.secret_key.trim()) setError("secret_key", { message: "Secret key is required" });
     if (!values.api_key.trim() || !values.secret_key.trim()) return;
@@ -86,24 +61,21 @@ export function NewAccountForm({
   return (
     <section className="flex h-full min-h-0 w-[480px] shrink-0 flex-col overflow-hidden rounded-xl border border-border shadow-[0_4px_12px_0_rgba(0,0,0,0.05)] bg-background">
       <header className="flex items-center justify-between border-b border-border bg-secondary px-4 py-3">
-        <h2 className="text-sm font-semibold text-foreground">{isEditing ? "Edit live account" : "New live account"}</h2>
-        {isEditing && (
-          <button
-            type="button"
-            onClick={() => onDone?.()}
-            className="text-xs font-medium text-muted-foreground hover:text-foreground"
-          >
-            Cancel
-          </button>
-        )}
+        <h2 className="text-sm font-semibold text-foreground">New live account</h2>
       </header>
-      <form onSubmit={onSubmit} className="flex flex-col gap-4 overflow-y-auto px-4 py-3">
+      <form onSubmit={onSubmit} autoComplete="off" className="flex flex-col gap-4 overflow-y-auto px-4 py-3">
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="account-name" className="font-normal text-muted-foreground">
               Name
             </Label>
-            <Input id="account-name" placeholder="Account name" className={fieldClass} {...register("name")} />
+            <Input
+              id="account-name"
+              placeholder="Account name"
+              autoComplete="off"
+              className={fieldClass}
+              {...register("name")}
+            />
             {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
           </div>
           <div className="flex flex-col gap-1.5">
@@ -136,7 +108,8 @@ export function NewAccountForm({
             </Label>
             <Input
               id="account-api-key"
-              placeholder={isEditing ? "Leave blank to keep existing" : "API key"}
+              placeholder="API key"
+              autoComplete="off"
               className={fieldClass}
               {...register("api_key")}
             />
@@ -149,7 +122,8 @@ export function NewAccountForm({
             <Input
               id="account-secret-key"
               type="password"
-              placeholder={isEditing ? "Leave blank to keep existing" : "Secret key"}
+              placeholder="Secret key"
+              autoComplete="new-password"
               className={fieldClass}
               {...register("secret_key")}
             />
@@ -172,18 +146,16 @@ export function NewAccountForm({
             </div>
           </div>
         </div>
-        {mutation.isError && (
-          <p className="text-xs text-destructive">
-            {isEditing ? "Couldn't update account. Please try again." : "Couldn't create account. Please try again."}
-          </p>
+        {createAccount.isError && (
+          <p className="text-xs text-destructive">Couldn&rsquo;t create account. Please try again.</p>
         )}
         <button
           type="submit"
-          disabled={mutation.isPending}
+          disabled={createAccount.isPending}
           className="flex h-[34px] w-fit items-center justify-center gap-1 rounded-full bg-[linear-gradient(164deg,#cff8ea_0%,var(--primary)_100%)] px-3 text-xs font-medium text-black transition-opacity hover:opacity-90 disabled:opacity-50"
         >
           <PlusIcon className="size-3.5" />
-          {isEditing ? "Update account" : "Create account"}
+          Create account
         </button>
       </form>
     </section>

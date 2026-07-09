@@ -8,7 +8,7 @@ import { ConsolePanel } from "./console-panel";
 import { ResultsPanel, type ResultsPanelTab } from "./results-panel";
 import { type EditorTab } from "@/lib/mock/strategy-builder";
 import { useEditors, useCreateEditor, useSimulateEditor, useUpdateEditor, useDeleteEditor, fetchEditors } from "@/hooks/api/use-strategy-builder";
-import { useHftStrategies, useCreateHftStrategy } from "@/hooks/api/use-hft-strategies";
+import { useHftStrategies, useCreateHftStrategy, useDeleteHftStrategy, type HftStrategyType } from "@/hooks/api/use-hft-strategies";
 import { CreateStrategyModal } from "@/components/layout/create-strategy-modal";
 import { useConsoleLog } from "@/store/console-log-store";
 import { cn } from "@/lib/utils";
@@ -87,12 +87,16 @@ function StrategyBuilder({ initialEditors }: { initialEditors: EditorTab[] }) {
   const simulateEditor = useSimulateEditor();
   const updateEditor = useUpdateEditor();
   const deleteEditor = useDeleteEditor();
+  const deleteHftStrategy = useDeleteHftStrategy();
   const qc = useQueryClient();
   const addLog = useConsoleLog((s) => s.addLog);
 
-  const addEditor = async (type: "mft" | "hft", name: string) => {
+  const addEditor = async (type: "mft" | "hft", name: string, hftStrategyType?: HftStrategyType) => {
     // Errors propagate to CreateStrategyModal so it can stay open + surface the failure (e.g. 409).
-    const tab = type === "hft" ? await createHftStrategy.mutateAsync(name) : await createEditor.mutateAsync(name);
+    const tab =
+      type === "hft"
+        ? await createHftStrategy.mutateAsync({ name, strategyType: hftStrategyType ?? "taker" })
+        : await createEditor.mutateAsync(name);
     setEditors((prev) => [...prev, tab]);
     setActiveId(tab.id);
   };
@@ -112,9 +116,11 @@ function StrategyBuilder({ initialEditors }: { initialEditors: EditorTab[] }) {
     }
   };
   const closeEditor = (id: string) => {
-    // MFT editors are real XALPHA editors — delete them server-side; HFT tabs are removed locally.
+    // Both MFT editors and HFT strategies are real server-side records — delete them; the tab is
+    // also removed locally below regardless of the delete outcome.
     const editor = editors.find((e) => e.id === id);
     if (editor?.type === "mft") deleteEditor.mutate(id);
+    if (editor?.type === "hft") deleteHftStrategy.mutate(id);
     setEditors((prev) => {
       const next = prev.filter((e) => e.id !== id);
       if (id === activeId && next.length) setActiveId(next[0].id);

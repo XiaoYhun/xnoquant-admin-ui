@@ -56,3 +56,13 @@ export function useDeleteAccount() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["accounts"] }),
   });
 }
+
+// DNSE-venue accounts only — emails a one-time passcode to the account owner, consumed by
+// `LaunchRequest.otp_passcode` when launching a DNSE live run. Side-effect only (no stored
+// state to invalidate), 204/no body.
+export function useSendDnseOtp() {
+  return useMutation({
+    mutationFn: (id: string) =>
+      USE_MOCK ? Promise.resolve() : apiPost<void>(`${HFT_API_URL}/api/accounts/${id}/dnse/send-otp`, undefined),
+  });
+}

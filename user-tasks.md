@@ -1,16 +1,15 @@
 ## Purpose
 
 I will write down tasks here, you do them whenever you have free time or got blocked, bring in subagents to help. Have another md file to track progress.
+Sync tasks-progress.md ↔ user-tasks.md; remove tasks the user removes. Do NOT edit user-tasks.md (user manages it).
+Before do any task, make sure tasks-progress.md synced up
 
 ## Tasks
+- For MFT Charts, when select Stage Test, Simulate or Live, chart should have multiple stage show on chart, with different color, you can check how it works in xno-builder.
+- There is incorrect design Performance tab, and Analysis tab for MFT only, bring them from xno-builder. For current implement, leave them as HFT related
+- The Live stage select button has a disable condition in xno-builder, bring them in
 
-- Console logic should match one in xno-builder
-- Settings dropdown of MFT also different, get it from xno-builder
-- Implement Live Account page, your last implement is incorrect design, remove and create new one from this Implement these
-@https://www.figma.com/design/B7Hh2GpERHUPyy3Zdv35sY/XNO-QUANT-AI?node-id=13970-23099&m=dev
-@https://www.figma.com/design/B7Hh2GpERHUPyy3Zdv35sY/XNO-QUANT-AI?node-id=13970-23460&m=dev
-- Connect API to Live Account page, which is hft accounts APIs, make it functional
-
+- Help me check if Paper Trading exist in xno-buider, or in xalpha API? write down answer in tasks-progress
+- Help me read project hft-platform and understand how hft apis work, and start implement them on all HFT related features
+ 
 ## Bugs
-- Settings dropdown content got overflowed
-- Do not auto fill Name and Secret key in New live account 

@@ -5,6 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useAccounts } from "@/hooks/api/use-accounts";
 import { NewAccountForm } from "./new-account-form";
 import { AccountList } from "./account-list";
+import { EditAccountModal } from "./edit-account-modal";
 import { ACCOUNT_TYPES } from "./account-types";
 import type { Account } from "@/types/domain";
 
@@ -50,11 +51,7 @@ export default function Page() {
         </Select>
       </div>
       <div className="flex min-h-0 flex-1 gap-4">
-        <NewAccountForm
-          key={editingAccount?.id ?? "new"}
-          editingAccount={editingAccount}
-          onDone={() => setEditingAccount(null)}
-        />
+        <NewAccountForm />
         <AccountList
           accounts={filtered}
           total={filtered.length}
@@ -63,6 +60,7 @@ export default function Page() {
           onEdit={setEditingAccount}
         />
       </div>
+      <EditAccountModal account={editingAccount} onClose={() => setEditingAccount(null)} />
     </main>
   );
 }

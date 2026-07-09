@@ -82,22 +82,6 @@ const MOCK_CHARTS: Record<string, StrategyChartData> = {
   ),
 };
 
-// Slices {times,values} down to a stage's [from,to] range (looked up in `stages`) — done here via
-// `select` so switching stages re-slices already-fetched data instead of refetching.
-function sliceStage(
-  data: StrategyChartData | undefined,
-  stage?: string,
-): { times: number[]; values: number[] } {
-  const times = data?.times ?? [];
-  const values = data?.values ?? [];
-  const range = stage ? data?.stages?.[stage] : undefined;
-  if (range?.from == null || range?.to == null) return { times, values };
-  const fromIdx = times.indexOf(range.from);
-  const toIdx = times.indexOf(range.to);
-  if (fromIdx === -1 || toIdx === -1) return { times, values };
-  return { times: times.slice(fromIdx, toIdx + 1), values: values.slice(fromIdx, toIdx + 1) };
-}
-
 // Multi-select options for "Select charts" — no strategyId/stage dependency, so no `enabled` gate.
 export function useResultSeries() {
   return useQuery({
@@ -135,9 +119,9 @@ export function useSummaryTable(strategyId?: string, stage?: string) {
   });
 }
 
-// Chart data doesn't depend on `stage` server-side (the endpoint returns all stages at once) —
-// only strategyId+series gate the fetch/cache key; `stage` just drives the client-side `select` slice.
-export function useStrategyChart(strategyId?: string, stage?: string, series?: string) {
+// Chart data doesn't depend on stage server-side (the endpoint returns all stages at once) —
+// only strategyId+series gate the fetch/cache key. The caller slices per-stage client-side.
+export function useStrategyChart(strategyId?: string, series?: string) {
   return useQuery({
     queryKey: ["strategy-results", "chart", strategyId, series],
     queryFn: async (): Promise<StrategyChartData> => {
@@ -145,6 +129,5 @@ export function useStrategyChart(strategyId?: string, stage?: string, series?: s
       return apiGetData<StrategyChartData>(`${XALPHA_API_URL}/strategies/${strategyId}/charts?series=${series}`);
     },
     enabled: USE_MOCK || (!!strategyId && !!series),
-    select: (data) => sliceStage(data, stage),
   });
 }

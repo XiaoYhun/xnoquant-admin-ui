@@ -13,8 +13,10 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { useVenues } from "@/hooks/api/use-venues";
-import { useDeleteAccount } from "@/hooks/api/use-accounts";
+import { useDeleteAccount, useSendDnseOtp } from "@/hooks/api/use-accounts";
 import type { Account } from "@/types/domain";
+
+type OtpFeedback = "sending" | "sent" | "error";
 
 const COLS = [
   { key: "name", label: "Name", w: "22%" },
@@ -40,8 +42,25 @@ export function AccountList({
 }) {
   const { data: venues = [] } = useVenues();
   const deleteAccount = useDeleteAccount();
+  const sendOtp = useSendDnseOtp();
   const [pendingDelete, setPendingDelete] = useState<Account | null>(null);
+  const [otpFeedback, setOtpFeedback] = useState<Record<string, OtpFeedback | undefined>>({});
   const venueName = (venueId: string) => venues.find((v) => v.id === venueId)?.name ?? venueId;
+  const isDnseAccount = (venueId: string) => venues.find((v) => v.id === venueId)?.venue_type === "dnse";
+
+  const handleSendOtp = (account: Account) => {
+    setOtpFeedback((prev) => ({ ...prev, [account.id]: "sending" }));
+    sendOtp.mutate(account.id, {
+      onSuccess: () => {
+        setOtpFeedback((prev) => ({ ...prev, [account.id]: "sent" }));
+        setTimeout(() => setOtpFeedback((prev) => ({ ...prev, [account.id]: undefined })), 2000);
+      },
+      onError: () => {
+        setOtpFeedback((prev) => ({ ...prev, [account.id]: "error" }));
+        setTimeout(() => setOtpFeedback((prev) => ({ ...prev, [account.id]: undefined })), 2000);
+      },
+    });
+  };
 
   return (
     <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border shadow-[0_4px_12px_0_rgba(0,0,0,0.05)] bg-background">
@@ -83,6 +102,30 @@ export function AccountList({
                   <TableCell className="text-sm text-muted-foreground">-</TableCell>
                   <TableCell>
                     <div className="flex items-center justify-end gap-1">
+                      {isDnseAccount(a.venue_id) && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          disabled={otpFeedback[a.id] === "sending"}
+                          className={`h-8 px-2 text-xs ${
+                            otpFeedback[a.id] === "error"
+                              ? "text-destructive"
+                              : otpFeedback[a.id] === "sent"
+                                ? "text-primary"
+                                : "text-muted-foreground hover:text-foreground"
+                          }`}
+                          onClick={() => handleSendOtp(a)}
+                        >
+                          {otpFeedback[a.id] === "sent"
+                            ? "OTP sent"
+                            : otpFeedback[a.id] === "error"
+                              ? "Failed"
+                              : otpFeedback[a.id] === "sending"
+                                ? "Sending…"
+                                : "Send OTP"}
+                        </Button>
+                      )}
                       <Button
                         type="button"
                         variant="ghost"

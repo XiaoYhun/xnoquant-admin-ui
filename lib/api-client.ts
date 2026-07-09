@@ -34,6 +34,7 @@ export async function apiPost<T>(
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new ApiError(res.status, res.statusText);
+  if (res.status === 204) return undefined as T; // no-content responses (e.g. DNSE send-otp) have no body to parse
   return res.json() as Promise<T>;
 }
 export async function apiPut<T>(

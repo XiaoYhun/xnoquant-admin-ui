@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { TrashBinTrash } from "@solar-icons/react";
+import { Pen2, TrashBinTrash } from "@solar-icons/react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -21,11 +21,13 @@ export function VenueList({
   total,
   isLoading,
   isError,
+  onEdit,
 }: {
   venues: Venue[];
   total: number;
   isLoading: boolean;
   isError?: boolean;
+  onEdit: (venue: Venue) => void;
 }) {
   const deleteVenue = useDeleteVenue();
   const [pendingDelete, setPendingDelete] = useState<Venue | null>(null);
@@ -53,6 +55,16 @@ export function VenueList({
               <span className="truncate text-sm font-semibold text-foreground">{v.name}</span>
               <span className="truncate text-xs text-muted-foreground">{venueTypeLabel(v.venue_type)}</span>
             </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`Edit ${v.name}`}
+              className="text-muted-foreground hover:text-foreground"
+              onClick={() => onEdit(v)}
+            >
+              <Pen2 weight="Outline" className="size-5" />
+            </Button>
             <Button
               type="button"
               variant="ghost"

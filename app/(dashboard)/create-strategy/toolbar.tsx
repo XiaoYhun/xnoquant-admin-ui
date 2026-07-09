@@ -370,7 +370,7 @@ export function Toolbar({
         </button>
       </div>
 
-      <SimulateModal open={simulateOpen} onOpenChange={setSimulateOpen} strategyName={name} />
+      <SimulateModal open={simulateOpen} onOpenChange={setSimulateOpen} strategyName={name} strategyId={id} />
     </div>
   );
 }

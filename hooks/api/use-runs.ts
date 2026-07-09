@@ -2,6 +2,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPost } from "@/lib/api-client";
 import { HFT_API_URL, USE_MOCK } from "@/lib/constant";
 import type { EquityPoint, Run, RunSummary } from "@/types/domain";
+import type { components } from "@/types/api/hft";
+
+// Request body for `POST /api/runs` (simulate-modal's launch form).
+// `otp_passcode` (DNSE live runs — see `POST /api/accounts/{id}/dnse/send-otp`) isn't in the
+// generated schema yet — extended locally until the OpenAPI spec catches up.
+export type LaunchRequest = components["schemas"]["LaunchRequest"] & { otp_passcode?: string };
 
 // Shared HFT `runs` fetchers used to compose useLiveRuns/usePaperRuns rows (Run + RunSummary +
 // EquityPoint[] → LiveRunRow/PaperRunRow via lib/transform/runs.ts — see
@@ -38,18 +44,61 @@ export function useRunEquity(id: string | undefined) {
   });
 }
 
-// GAP-7: HFT has POST /api/runs/{id}/stop but no start/resume endpoint — "Start Bot" stays a
-// no-op (live-runs-table.tsx already has no onClick for it). "Stop Bot" in the same table also
-// has no onClick yet (UI file — out of this phase's scope); this mutation is ready for that
-// wiring to call.
+// GAP-7: HFT has POST /api/runs/{id}/stop but no start/resume endpoint — "Start Bot" in
+// live-runs-table.tsx stays disabled. "Stop Bot" calls this mutation via a confirm dialog.
 export function useStopRun() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string): Promise<void> => {
-      if (USE_MOCK) return; // no mock run store to mutate, and no UI wires this yet — inert fallback
+      if (USE_MOCK) return; // no mock run store to mutate — inert fallback so the confirm dialog still resolves
       await apiPost<Run>(`${HFT_API_URL}/api/runs/${id}/stop`, undefined);
     },
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["live-runs"] });
+      qc.invalidateQueries({ queryKey: ["paper-runs"] });
+    },
+  });
+}
+
+// simulate-modal's launch form — binds a strategy to an account + symbols and starts a
+// paper/live run. No mock run store exists yet, so the mock branch resolves a minimally-shaped
+// stub `Run` (mirrors useCreateHftStrategy's mock stub) instead of persisting anything.
+export function useLaunchRun() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (req: LaunchRequest): Promise<Run> => {
+      if (USE_MOCK) {
+        const now = new Date().toISOString();
+        return {
+          id: crypto.randomUUID(),
+          account_id: req.account_id,
+          strategy_id: req.strategy_id,
+          mode: req.mode,
+          status: "running",
+          created_at: now,
+          updated_at: now,
+          started_at: now,
+          stopped_at: null,
+          error: null,
+          manifest: {
+            account: {
+              id: req.account_id,
+              name: "",
+              venue_id: "",
+              venue_name: "",
+              venue_type: "binance_spot",
+              account_type: "spot",
+            },
+            strategy: { id: req.strategy_id, name: "", code: "", strategy_type: "taker" },
+            symbols: [],
+            mode: req.mode,
+          },
+        };
+      }
+      return apiPost<Run>(`${HFT_API_URL}/api/runs`, req);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["runs"] });
       qc.invalidateQueries({ queryKey: ["live-runs"] });
       qc.invalidateQueries({ queryKey: ["paper-runs"] });
     },

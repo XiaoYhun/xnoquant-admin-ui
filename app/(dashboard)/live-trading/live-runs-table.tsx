@@ -1,5 +1,5 @@
 "use client";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Pause, Play } from "@solar-icons/react";
 import {
   Table,
@@ -9,9 +9,20 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { Sparkline } from "@/components/charts/sparkline";
 import { FlashValue } from "@/components/ui/flash-value";
 import { cn, formatPercent } from "@/lib/utils";
+import { useStopRun } from "@/hooks/api/use-runs";
 import type { RunStatus } from "@/types/domain";
 import type { LiveRunRow } from "@/lib/mock/live-runs";
 
@@ -70,94 +81,144 @@ const COLS = [
 ] as const;
 
 export function LiveRunsTable({ rows }: { rows: LiveRunRow[] }) {
+  const stopRun = useStopRun();
+  const [pendingStop, setPendingStop] = useState<LiveRunRow | null>(null);
+
   return (
-    <Table className="table-fixed">
-      <TableHeader>
-        <TableRow>
-          {COLS.map((c) => (
-            <TableHead key={c.key} style={{ width: c.w }} className={c.align === "right" ? "text-right" : undefined}>
-              {c.label}
-            </TableHead>
-          ))}
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {rows.map((r) => {
-          const s = STATUS_META[r.status];
-          return (
-            <TableRow key={r.id}>
-              <TableCell>
-                <span
-                  className="inline-flex items-center gap-2 rounded-[20px] px-2 py-1 text-xs"
-                  style={{ backgroundColor: s.bg }}
-                >
-                  <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: s.dot }} />
-                  <span className={s.text}>{s.label}</span>
-                </span>
-              </TableCell>
-              <TableCell className="truncate text-sm text-white">{r.id}</TableCell>
-              <TableCell className="truncate text-sm font-semibold text-white" title={r.strategyName}>
-                {r.strategyName}
-              </TableCell>
-              <TableCell>
-                <span className={`text-xs ${GRAD_YELLOW}`}>{r.alphaStatus}</span>
-              </TableCell>
-              <TableCell className="p-0 align-middle">
-                <MiniRows items={r.accounts.map((a) => <span key={a} className={PILL}>{a}</span>)} />
-              </TableCell>
-              <TableCell className="p-0 align-middle">
-                <MiniRows
-                  items={r.symbols.map((sym) => (
-                    <span key={sym.symbol} className="flex items-center gap-2 whitespace-nowrap text-xs">
-                      <span className="text-white">{sym.symbol}</span>
-                      <span className="text-[#9db2ce]">|</span>
-                      <span className={GRAD_GREEN}>{sym.market}</span>
-                    </span>
-                  ))}
-                />
-              </TableCell>
-              <TableCell>
-                <span className={PILL}>{r.timeframe}</span>
-              </TableCell>
-              <TableCell>
-                <Sparkline data={r.pnlSeries} className="h-9 w-full" />
-              </TableCell>
-              <TableCell className="text-right text-xs">
-                <FlashValue value={r.returnPct}>
-                  <span className={r.returnPct >= 0 ? GRAD_GREEN : GRAD_RED}>{formatPercent(r.returnPct)}</span>
-                </FlashValue>
-              </TableCell>
-              <TableCell className="text-right text-xs text-white">
-                <FlashValue value={r.sharpe}>{r.sharpe.toFixed(2)}</FlashValue>
-              </TableCell>
-              <TableCell className="text-right text-xs">
-                <FlashValue value={r.maxDrawdownPct}>
-                  <span className={GRAD_RED}>{formatPercent(r.maxDrawdownPct)}</span>
-                </FlashValue>
-              </TableCell>
-              <TableCell className="text-right">
-                {r.status === "running" ? (
-                  <button
-                    type="button"
-                    className="inline-flex cursor-pointer items-center gap-1 rounded-[20px] border border-[#1d2939] bg-[#151a24] px-2 py-1 text-xs text-[#9db2ce] transition-colors hover:text-white"
+    <>
+      <Table className="table-fixed">
+        <TableHeader>
+          <TableRow>
+            {COLS.map((c) => (
+              <TableHead key={c.key} style={{ width: c.w }} className={c.align === "right" ? "text-right" : undefined}>
+                {c.label}
+              </TableHead>
+            ))}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((r) => {
+            const s = STATUS_META[r.status];
+            return (
+              <TableRow key={r.id}>
+                <TableCell>
+                  <span
+                    className="inline-flex items-center gap-2 rounded-[20px] px-2 py-1 text-xs"
+                    style={{ backgroundColor: s.bg }}
                   >
-                    <Pause weight="Bold" className="size-4" />
-                    Stop Bot
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="inline-flex cursor-pointer items-center gap-1 rounded-[20px] border border-[#1d2939] bg-[#151a24] px-2 py-1 text-xs text-primary transition-[filter] hover:brightness-110"
-                  >
-                    <Play weight="Bold" className="size-4" />
-                    Start Bot
-                  </button>
-                )}
-              </TableCell>
-            </TableRow>
-          );
-        })}
-      </TableBody>
-    </Table>
+                    <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: s.dot }} />
+                    <span className={s.text}>{s.label}</span>
+                  </span>
+                </TableCell>
+                <TableCell className="truncate text-sm text-white">{r.id}</TableCell>
+                <TableCell className="truncate text-sm font-semibold text-white" title={r.strategyName}>
+                  {r.strategyName}
+                </TableCell>
+                <TableCell>
+                  <span className={`text-xs ${GRAD_YELLOW}`}>{r.alphaStatus}</span>
+                </TableCell>
+                <TableCell className="p-0 align-middle">
+                  <MiniRows items={r.accounts.map((a) => <span key={a} className={PILL}>{a}</span>)} />
+                </TableCell>
+                <TableCell className="p-0 align-middle">
+                  <MiniRows
+                    items={r.symbols.map((sym) => (
+                      <span key={sym.symbol} className="flex items-center gap-2 whitespace-nowrap text-xs">
+                        <span className="text-white">{sym.symbol}</span>
+                        <span className="text-[#9db2ce]">|</span>
+                        <span className={GRAD_GREEN}>{sym.market}</span>
+                      </span>
+                    ))}
+                  />
+                </TableCell>
+                <TableCell>
+                  <span className={PILL}>{r.timeframe}</span>
+                </TableCell>
+                <TableCell>
+                  <Sparkline data={r.pnlSeries} className="h-9 w-full" />
+                </TableCell>
+                <TableCell className="text-right text-xs">
+                  <FlashValue value={r.returnPct}>
+                    <span className={r.returnPct >= 0 ? GRAD_GREEN : GRAD_RED}>{formatPercent(r.returnPct)}</span>
+                  </FlashValue>
+                </TableCell>
+                <TableCell className="text-right text-xs text-white">
+                  <FlashValue value={r.sharpe}>{r.sharpe.toFixed(2)}</FlashValue>
+                </TableCell>
+                <TableCell className="text-right text-xs">
+                  <FlashValue value={r.maxDrawdownPct}>
+                    <span className={GRAD_RED}>{formatPercent(r.maxDrawdownPct)}</span>
+                  </FlashValue>
+                </TableCell>
+                <TableCell className="text-right">
+                  {r.status === "running" ? (
+                    <button
+                      type="button"
+                      onClick={() => setPendingStop(r)}
+                      className="inline-flex cursor-pointer items-center gap-1 rounded-[20px] border border-[#1d2939] bg-[#151a24] px-2 py-1 text-xs text-[#9db2ce] transition-colors hover:text-white"
+                    >
+                      <Pause weight="Bold" className="size-4" />
+                      Stop Bot
+                    </button>
+                  ) : (
+                    // GAP-7: HFT has no start/resume endpoint (only POST /api/runs/{id}/stop) — see
+                    // hooks/api/use-runs.ts. Disabled until the backend adds one.
+                    <button
+                      type="button"
+                      disabled
+                      title="Start/resume isn't supported by the backend yet"
+                      className="inline-flex cursor-not-allowed items-center gap-1 rounded-[20px] border border-[#1d2939] bg-[#151a24] px-2 py-1 text-xs text-primary opacity-50"
+                    >
+                      <Play weight="Bold" className="size-4" />
+                      Start Bot
+                    </button>
+                  )}
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+
+      <Dialog
+        open={!!pendingStop}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingStop(null);
+            stopRun.reset();
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Stop bot</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to stop &ldquo;{pendingStop?.strategyName}&rdquo; ({pendingStop?.id})? This will
+              halt live trading for this run.
+            </DialogDescription>
+          </DialogHeader>
+          {stopRun.isError && (
+            <p className="text-xs text-destructive">Couldn&rsquo;t stop the bot. Please try again.</p>
+          )}
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Cancel</Button>
+            </DialogClose>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={stopRun.isPending}
+              onClick={() => {
+                if (pendingStop) {
+                  stopRun.mutate(pendingStop.id, { onSuccess: () => setPendingStop(null) });
+                }
+              }}
+            >
+              {stopRun.isPending ? "Stopping…" : "Stop Bot"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

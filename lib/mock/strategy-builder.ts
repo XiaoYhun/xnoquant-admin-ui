@@ -40,7 +40,16 @@ class CryptoScalping(StockAlgorithm):
 // The open-editor tabs (would come from an API in production).
 // `strategy_ids` (from XALPHA `StrategyEditorInfo`) resolves which strategy's Results tab to show.
 // `type` distinguishes MFT (XALPHA editors) from HFT (HFT strategies) tabs.
-export type EditorTab = { id: string; name: string; code: string; strategy_ids?: string[]; type: "mft" | "hft" };
+export type EditorTab = {
+  id: string;
+  name: string;
+  code: string;
+  strategy_ids?: string[];
+  type: "mft" | "hft";
+  market?: string;
+  universe?: string;
+  train_ratio?: number;
+};
 export const INITIAL_EDITORS: EditorTab[] = [
   { id: "ed-1", name: "Test bot AI", code: SAMPLE_CODE, type: "mft" },
   { id: "ed-2", name: "Crypto Scalping", code: SAMPLE_CODE_2, type: "mft" },

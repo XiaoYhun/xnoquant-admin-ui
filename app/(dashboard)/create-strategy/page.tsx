@@ -122,6 +122,10 @@ function StrategyBuilder({ initialEditors }: { initialEditors: EditorTab[] }) {
   // "Use template" (Samples tab) loads a sample's code into the active editor.
   const setActiveCode = (code: string) =>
     setEditors((prev) => prev.map((e) => (e.id === activeId ? { ...e, code } : e)));
+  // Settings popover (MFT Market/Universe/Train ratio) persists via the toolbar; reflect the
+  // saved values into local editor state so the cog shows the change without a reload.
+  const handleSettingsSaved = (changes: { market?: string; universe?: string; train_ratio?: number }) =>
+    setEditors((prev) => prev.map((e) => (e.id === activeId ? { ...e, ...changes } : e)));
 
   const left = (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-surface">
@@ -129,8 +133,12 @@ function StrategyBuilder({ initialEditors }: { initialEditors: EditorTab[] }) {
         name={active?.name ?? ""}
         type={active?.type ?? "mft"}
         id={active?.id ?? ""}
+        market={active?.market}
+        universe={active?.universe}
+        trainRatio={active?.train_ratio}
         onToggleConsole={() => setConsoleOpen((v) => !v)}
         onSimulate={handleSimulate}
+        onSettingsSaved={handleSettingsSaved}
       />
       <CodeEditor code={active?.code ?? ""} />
       <ConsolePanel open={consoleOpen} onOpenChange={setConsoleOpen} />

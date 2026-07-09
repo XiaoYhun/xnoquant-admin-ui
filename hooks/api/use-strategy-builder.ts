@@ -287,6 +287,9 @@ export async function fetchEditors(): Promise<EditorTab[]> {
       code: e.code ?? "",
       strategy_ids: e.strategy_ids,
       type: "mft" as const,
+      market: e.market,
+      universe: e.universe,
+      train_ratio: e.train_ratio,
     }));
     // Never leave the builder with zero tabs (the UI derives the active editor from index 0).
     return tabs.length > 0 ? tabs : INITIAL_EDITORS;
@@ -307,12 +310,24 @@ export function useSimulateEditor() {
   });
 }
 
-// Persist the editor's current code (PUT /v2/editors/{id}/update) — xno-builder saves then
-// simulates so the run uses the on-screen code, not the stale server copy (empty for a new editor).
+// Persist editor fields (PUT /v2/editors/{id}/update) — xno-builder saves then simulates so the
+// run uses the on-screen code, not the stale server copy (empty for a new editor). Also used by
+// the MFT Settings popover (toolbar.tsx) to persist market/universe/train_ratio.
 export function useUpdateEditor() {
   return useMutation({
-    mutationFn: ({ id, code }: { id: string; code: string }) =>
-      apiPutData<StrategyEditorInfo>(`${XALPHA_API_URL_V2}/editors/${id}/update`, { code }),
+    mutationFn: ({
+      id,
+      code,
+      market,
+      universe,
+      train_ratio,
+    }: { id: string; code?: string; market?: string; universe?: string; train_ratio?: number }) =>
+      apiPutData<StrategyEditorInfo>(`${XALPHA_API_URL_V2}/editors/${id}/update`, {
+        code,
+        market,
+        universe,
+        train_ratio,
+      }),
   });
 }
 

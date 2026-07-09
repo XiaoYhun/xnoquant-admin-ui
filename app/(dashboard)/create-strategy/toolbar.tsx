@@ -1,12 +1,16 @@
 "use client";
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Settings, SidebarCode, Copy, MenuDots, SkipNext } from "@solar-icons/react";
 import type { ComponentType } from "react";
 import type { IconProps } from "@solar-icons/react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import { SimulateModal } from "./simulate-modal";
 import { USE_MOCK } from "@/lib/constant";
+import { useMarkets } from "@/hooks/api/use-markets";
+import { useUpdateEditor } from "@/hooks/api/use-strategy-builder";
 
 // Toolbar row above the code editor — Figma node 13964:52172 (inside 13964:50200).
 // Self-contained: strategy name is local state, all buttons are no-ops (page-level
@@ -62,9 +66,129 @@ function SettingField({
   );
 }
 
-function SettingsMenu() {
+// MFT Settings body (xno-builder parity) — Market -> Universe cascade + Train ratio, saved via
+// `useUpdateEditor`. Keyed by `id` from the parent so switching editors remounts with fresh
+// defaults instead of carrying over another editor's in-progress edits.
+function MftSettingsFields({
+  id,
+  market,
+  universe,
+  trainRatio,
+  onSaved,
+  onClose,
+}: {
+  id: string;
+  market?: string;
+  universe?: string;
+  trainRatio?: number;
+  onSaved?: (changes: { market?: string; universe?: string; train_ratio?: number }) => void;
+  onClose: () => void;
+}) {
+  const { data: markets } = useMarkets();
+  const updateEditor = useUpdateEditor();
+  const qc = useQueryClient();
+
+  const [draftMarket, setDraftMarket] = useState(market ?? markets?.[0]?.name);
+  const [draftUniverse, setDraftUniverse] = useState(universe ?? "VN30");
+  const [draftTrainRatio, setDraftTrainRatio] = useState(trainRatio ?? 0.7);
+
+  const universeOptions = markets?.find((m) => m.name === draftMarket)?.universes ?? [];
+  const hasChanges = draftMarket !== market || draftUniverse !== universe || draftTrainRatio !== trainRatio;
+
+  const handleMarketChange = (value: string) => {
+    const firstUniverse = markets?.find((m) => m.name === value)?.universes[0]?.name;
+    setDraftMarket(value);
+    if (firstUniverse) setDraftUniverse(firstUniverse);
+  };
+
+  const handleSave = async () => {
+    if (!hasChanges || !id || updateEditor.isPending) return;
+    await updateEditor.mutateAsync({ id, market: draftMarket, universe: draftUniverse, train_ratio: draftTrainRatio });
+    await qc.invalidateQueries({ queryKey: ["strategy-builder", "editors"] });
+    onSaved?.({ market: draftMarket, universe: draftUniverse, train_ratio: draftTrainRatio });
+    onClose();
+  };
+
   return (
-    <Popover>
+    <div className="flex flex-col gap-2">
+      <p className="text-sm font-semibold text-white">Settings</p>
+      <div className="flex gap-2">
+        <div className="flex flex-1 flex-col gap-1">
+          <span className="text-[10px] font-medium text-white">Market</span>
+          <Select value={draftMarket} onValueChange={handleMarketChange}>
+            <SelectTrigger className="h-8 w-full rounded-full border-border bg-background! px-3 text-xs text-white">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-background!">
+              {(markets ?? []).map((m) => (
+                <SelectItem key={m.name} value={m.name} className="text-xs">
+                  {m.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-1 flex-col gap-1">
+          <span className="text-[10px] font-medium text-white">Universe</span>
+          <Select value={draftUniverse} onValueChange={setDraftUniverse}>
+            <SelectTrigger className="h-8 w-full rounded-full border-border bg-background! px-3 text-xs text-white">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-background!">
+              {universeOptions.map((u) => (
+                <SelectItem key={u.name} value={u.name} className="text-xs">
+                  {u.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="flex flex-col gap-1">
+        <span className="text-[10px] font-medium text-white">Train ratio</span>
+        <Input
+          type="number"
+          min={0}
+          max={1}
+          step={0.05}
+          value={draftTrainRatio}
+          onChange={(e) => setDraftTrainRatio(Number(e.target.value))}
+          className="h-8 rounded-full border-border bg-background! px-3 text-xs text-white"
+        />
+      </div>
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={!hasChanges || updateEditor.isPending}
+          className="cursor-pointer rounded-full bg-[linear-gradient(171deg,#cff8ea_0%,#67e1c1_100%)] px-3 py-1.5 text-xs font-medium text-[#0d0d0d] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {updateEditor.isPending ? "Saving…" : "Save"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SettingsMenu({
+  type,
+  id,
+  market,
+  universe,
+  trainRatio,
+  onSettingsSaved,
+}: {
+  type: "mft" | "hft";
+  id: string;
+  market?: string;
+  universe?: string;
+  trainRatio?: number;
+  onSettingsSaved?: (changes: { market?: string; universe?: string; train_ratio?: number }) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
           type="button"
@@ -75,26 +199,38 @@ function SettingsMenu() {
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" sideOffset={8} className="w-[240px] rounded-lg border-border bg-surface p-4">
-        <div className="flex flex-col gap-2">
-          <p className="text-sm font-semibold text-white">Settings</p>
-          <SettingField
-            label="Market"
-            defaultValue="tick-l2"
-            options={[
-              ["tick-l2", "Tick / L2"],
-              ["bar-ohlc", "Bar / OHLC"],
-            ]}
+        {type === "mft" ? (
+          <MftSettingsFields
+            key={id}
+            id={id}
+            market={market}
+            universe={universe}
+            trainRatio={trainRatio}
+            onSaved={onSettingsSaved}
+            onClose={() => setOpen(false)}
           />
-          <SettingField
-            label="Type"
-            defaultValue="taker"
-            options={[
-              ["taker", "Taker"],
-              ["maker", "Maker"],
-              ["arbitrage", "Arbitrage"],
-            ]}
-          />
-        </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <p className="text-sm font-semibold text-white">Settings</p>
+            <SettingField
+              label="Market"
+              defaultValue="tick-l2"
+              options={[
+                ["tick-l2", "Tick / L2"],
+                ["bar-ohlc", "Bar / OHLC"],
+              ]}
+            />
+            <SettingField
+              label="Type"
+              defaultValue="taker"
+              options={[
+                ["taker", "Taker"],
+                ["maker", "Maker"],
+                ["arbitrage", "Arbitrage"],
+              ]}
+            />
+          </div>
+        )}
       </PopoverContent>
     </Popover>
   );
@@ -104,14 +240,22 @@ export function Toolbar({
   name,
   type,
   id,
+  market,
+  universe,
+  trainRatio,
   onToggleConsole,
   onSimulate,
+  onSettingsSaved,
 }: {
   name: string;
   type: "mft" | "hft";
   id: string;
+  market?: string;
+  universe?: string;
+  trainRatio?: number;
   onToggleConsole?: () => void;
   onSimulate?: (editorId: string) => Promise<void>;
+  onSettingsSaved?: (changes: { market?: string; universe?: string; train_ratio?: number }) => void;
 }) {
   const [simulateOpen, setSimulateOpen] = useState(false);
   const [mftSimStatus, setMftSimStatus] = useState<"idle" | "running" | "done" | "error">("idle");
@@ -149,10 +293,21 @@ export function Toolbar({
           {name}
         </span>
         <span className="flex shrink-0 items-center gap-1">
-          <span className="size-2 shrink-0 rounded-full bg-[#7b61ff] shadow-[0_0_6px_1px_rgba(123,97,255,0.5)]" />
+          <span
+            className={
+              type === "hft"
+                ? "size-2 shrink-0 rounded-full bg-[#67e1c1] shadow-[0_0_6px_1px_rgba(103,225,193,0.5)]"
+                : "size-2 shrink-0 rounded-full bg-[#7b61ff] shadow-[0_0_6px_1px_rgba(123,97,255,0.5)]"
+            }
+          />
           <span
             className="bg-clip-text text-xs font-medium text-transparent"
-            style={{ backgroundImage: "linear-gradient(148deg, #e9e8ff 0%, #b7b1ff 148%)" }}
+            style={{
+              backgroundImage:
+                type === "hft"
+                  ? "linear-gradient(148deg, #cff8ea 0%, #67e1c1 148%)"
+                  : "linear-gradient(148deg, #e9e8ff 0%, #b7b1ff 148%)",
+            }}
           >
             {type.toUpperCase()}
           </span>
@@ -185,7 +340,14 @@ export function Toolbar({
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
-        <SettingsMenu />
+        <SettingsMenu
+          type={type}
+          id={id}
+          market={market}
+          universe={universe}
+          trainRatio={trainRatio}
+          onSettingsSaved={onSettingsSaved}
+        />
         <IconButton icon={SidebarCode} label="Toggle console" onClick={onToggleConsole} />
         <IconButton icon={Copy} label="Duplicate" />
         <button

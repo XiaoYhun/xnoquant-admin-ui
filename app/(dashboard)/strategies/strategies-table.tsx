@@ -12,6 +12,7 @@ import {
 import { formatPercent } from "@/lib/utils";
 import type { StrategyRow, StrategyStatus } from "@/lib/mock/strategies";
 import { StartPaperTradingDialog } from "./start-paper-trading-dialog";
+import { StrategyDetailPanel } from "./strategy-detail-panel";
 
 // Gradient text tokens from the Figma design — the design colours every status/value this way.
 const GRAD_GREEN = "bg-[linear-gradient(162deg,#cff8ea_0%,#67e1c1_100%)] bg-clip-text text-transparent";
@@ -38,6 +39,8 @@ const COLS = [
 
 export function StrategiesTable({ rows }: { rows: StrategyRow[] }) {
   const [sendTo, setSendTo] = useState<StrategyRow | null>(null);
+  const [selected, setSelected] = useState<StrategyRow | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
 
   return (
     <>
@@ -55,7 +58,14 @@ export function StrategiesTable({ rows }: { rows: StrategyRow[] }) {
           {rows.map((r) => {
             const s = STATUS_META[r.status];
             return (
-              <TableRow key={r.id}>
+              <TableRow
+                key={r.id}
+                className="cursor-pointer"
+                onClick={() => {
+                  setSelected(r);
+                  setDetailOpen(true);
+                }}
+              >
                 <TableCell className="truncate text-sm font-semibold text-white" title={r.name}>
                   {r.name}
                 </TableCell>
@@ -86,7 +96,10 @@ export function StrategiesTable({ rows }: { rows: StrategyRow[] }) {
                 <TableCell className="text-right">
                   <button
                     type="button"
-                    onClick={() => setSendTo(r)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSendTo(r);
+                    }}
                     aria-label={`Send ${r.name} to paper trading`}
                     className="inline-flex cursor-pointer items-center justify-center rounded-lg bg-[#151a24] p-2 text-primary transition-colors hover:bg-secondary"
                   >
@@ -99,6 +112,7 @@ export function StrategiesTable({ rows }: { rows: StrategyRow[] }) {
         </TableBody>
       </Table>
       <StartPaperTradingDialog strategy={sendTo} onOpenChange={(open) => !open && setSendTo(null)} />
+      <StrategyDetailPanel open={detailOpen} onOpenChange={setDetailOpen} strategy={selected} />
     </>
   );
 }

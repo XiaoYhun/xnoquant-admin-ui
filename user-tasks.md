@@ -3,22 +3,18 @@
 I will write down tasks here, you do them whenever you have free time or got blocked, bring in subagents to help. Have another md file to track progress.
 
 ## Tasks
-
-- In Create Strategy page, the top tabs, is get from xalpha editors list, update that.
-- On HFT strategy Simulate click, open this modal @https://www.figma.com/design/B7Hh2GpERHUPyy3Zdv35sY/XNO-QUANT-AI?node-id=14197-30033&m=dev
-- On click Samples View source, open this modal @https://www.figma.com/design/B7Hh2GpERHUPyy3Zdv35sY/XNO-QUANT-AI?node-id=13964-53280&m=dev
-- Add animation on open a Sample Item
-- On Use template click, replace current strategy code with sample code. Can check xno-builder how it works
-- The second button beside setting cog button, in create strategy page, it use for toggle console tab below.
-- Make Market Allocation pie chart thicker a bit
-- In Strategy List - On MFT strategy row click, open this side panel, animation slide in, dark backdrop. Code here cannot edit. Results tab is similar to Results tab in Create Str Page @https://www.figma.com/design/B7Hh2GpERHUPyy3Zdv35sY/XNO-QUANT-AI?node-id=13964-132139&m=dev
-- Actually On click Create Strategy on left nav, open the page, not the HFT MFT modal, this modal only open when user click Plus button on Editors list
-- Make sure editors list can horizontal scroll, reduce the scroll bar size of this project, make a prettier scrollbar design.
+- On click use template, open a confirmation modal
+- The Results tab, they should have 2 versions: 
+    - MFT: this design @https://www.figma.com/design/B7Hh2GpERHUPyy3Zdv35sY/XNO-QUANT-AI?node-id=13964-56918&m=dev
+        - It is completely same with Results tab in xno-builder page
+    - HFT: which is current implementation, leave it for now
+- On user click Plus button with HFT selected: call this api POST https://hft-dev.xnoquant.io/api/strategies
+- Try to run call GET https://hft-dev.xnoquant.io/api/strategies and merge to the Editors list. Let me know if it works or any difficult
+- On user click Plus button with MFT selected: call the API create editor and revalidate editors list after done 
+- For MFT strategy, copy the Simulate flow from xno-builder
+- Add a API call auth/me and put it somewhere so I can check it in browser. As we will need to use user roles later 
 
 ## Bugs
-
-- Portfolio Performance chart look weird, too many vertical lines, too many x axis label
-- Strategy List should 10 items per page
-- Portfolio Performance x label should format as date only, also with Strategy Pipeline
-- Increase width of View source modal 
-- The Strategy name in Toolbar, should be get from current selected editor, and it not editable yet 
+- Expanded Sample description did not show full
+- Only open Simulate modal for HFT strategies, which is no any right now but keep the logic, MFT just show nothing and call direct to api to submit. 
+- Update styling of scrollbar from xno-builder

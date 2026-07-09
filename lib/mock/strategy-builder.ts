@@ -38,10 +38,12 @@ class CryptoScalping(StockAlgorithm):
 `;
 
 // The open-editor tabs (would come from an API in production).
-export type EditorTab = { id: string; name: string; code: string };
+// `strategy_ids` (from XALPHA `StrategyEditorInfo`) resolves which strategy's Results tab to show.
+// `type` distinguishes MFT (XALPHA editors) from HFT (HFT strategies) tabs.
+export type EditorTab = { id: string; name: string; code: string; strategy_ids?: string[]; type: "mft" | "hft" };
 export const INITIAL_EDITORS: EditorTab[] = [
-  { id: "ed-1", name: "Test bot AI", code: SAMPLE_CODE },
-  { id: "ed-2", name: "Crypto Scalping", code: SAMPLE_CODE_2 },
+  { id: "ed-1", name: "Test bot AI", code: SAMPLE_CODE, type: "mft" },
+  { id: "ed-2", name: "Crypto Scalping", code: SAMPLE_CODE_2, type: "mft" },
 ];
 
 export const OPERATORS: { name: string; desc: string }[] = [
@@ -53,16 +55,6 @@ export const OPERATORS: { name: string; desc: string }[] = [
   { name: "crossunder(a, b)", desc: "a crosses below b" },
   { name: "abs(x)", desc: "Absolute value" },
   { name: "min(a, b) · max(a, b)", desc: "Minimum / maximum" },
-];
-
-export type Metric = { label: string; value: string; positive?: boolean };
-export const RESULT_METRICS: Metric[] = [
-  { label: "Sharpe", value: "1.56" },
-  { label: "Turnover", value: "2.58%" },
-  { label: "Fitness", value: "0.88" },
-  { label: "Returns", value: "4.85%", positive: true },
-  { label: "Drawdown", value: "-12.5%", positive: false },
-  { label: "Margin", value: "15.28%" },
 ];
 
 export type YearRow = { year: string; sharpe: number; cagr: string; maxDd: string; profitFactor: number; calmar: number };

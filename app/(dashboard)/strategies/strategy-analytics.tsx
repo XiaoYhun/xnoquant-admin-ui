@@ -20,6 +20,15 @@ const DONUT_COLORS = ["#ffab91", "#6db3f2", "#f5c451", "#c3b1e1", "#67e1c1"];
 const AXIS_LABEL = { color: "#475467", fontSize: 10 } as const;
 const SPLIT_LINE = { show: true, lineStyle: { color: "#1d2939", type: "dashed" } } as const;
 
+// B3 — chart x-axis values are epoch (sec/ms) or ISO strings; render a plain date (no time).
+function dateLabel(value: string): string {
+  const n = Number(value);
+  const d = !Number.isNaN(n) && n > 1e9 ? new Date(n < 1e12 ? n * 1000 : n) : new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  const p = (x: number) => String(x).padStart(2, "0");
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${String(d.getFullYear()).slice(2)}`;
+}
+
 export function StrategyAnalyticsHeader() {
   const { data, isLoading } = useStrategyAnalytics();
 
@@ -44,15 +53,7 @@ export function StrategyAnalyticsHeader() {
         ...AXIS_LABEL,
         interval: Math.max(0, Math.ceil(data.portfolioPerformance.categories.length / 6) - 1),
         hideOverlap: true,
-        // XALPHA `stats/performance` times are epoch (sec or ms) — render as M/YY, not raw digits.
-        formatter: (value: string) => {
-          const n = Number(value);
-          if (!Number.isNaN(n) && n > 1e9) {
-            const d = new Date(n < 1e12 ? n * 1000 : n);
-            return `${d.getMonth() + 1}/${String(d.getFullYear()).slice(2)}`;
-          }
-          return value;
-        },
+        formatter: dateLabel,
       },
       axisTick: { show: false },
       // No per-category vertical grid lines (was cluttered on dense date data) — keep only
@@ -76,7 +77,17 @@ export function StrategyAnalyticsHeader() {
     legend: { top: 0, right: 0, itemWidth: 8, itemHeight: 8, icon: "roundRect", textStyle: { color: "#9db2ce", fontSize: 11 } },
     tooltip: { trigger: "axis" },
     grid: { left: 4, right: 4, top: 28, bottom: 4, containLabel: true },
-    xAxis: { type: "category", data: data.strategyPipeline.categories, axisLabel: { ...AXIS_LABEL, interval: 4 }, axisTick: { show: false } },
+    xAxis: {
+      type: "category",
+      data: data.strategyPipeline.categories,
+      axisLabel: {
+        ...AXIS_LABEL,
+        interval: Math.max(0, Math.ceil(data.strategyPipeline.categories.length / 6) - 1),
+        hideOverlap: true,
+        formatter: dateLabel,
+      },
+      axisTick: { show: false },
+    },
     yAxis: { type: "value", axisLabel: AXIS_LABEL, splitLine: SPLIT_LINE },
     series: [
       { name: "Total", type: "bar", stack: "pipeline", data: data.strategyPipeline.total, itemStyle: { color: "#cdbfe8" }, barMaxWidth: 12 },

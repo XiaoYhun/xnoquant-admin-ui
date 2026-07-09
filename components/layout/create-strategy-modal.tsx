@@ -1,14 +1,13 @@
 "use client";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { Bolt, ClockCircle } from "@solar-icons/react";
 import type { ComponentType } from "react";
 import type { IconProps } from "@solar-icons/react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
-// Figma node 14135:29458 — "Select Strategy Type" popup: pick MFT or HFT, then Create strategy
-// routes into the builder. HFT is the default selection (matches the design).
+// Figma node 14135:29458 — "Select Strategy Type" popup: pick MFT or HFT, then confirm.
+// Opened from the Editors "+" button to add a new editor. HFT is the default selection.
 type StrategyType = "mft" | "hft";
 
 const OPTIONS: { id: StrategyType; label: string; icon: ComponentType<IconProps> }[] = [
@@ -19,20 +18,64 @@ const OPTIONS: { id: StrategyType; label: string; icon: ComponentType<IconProps>
 export function CreateStrategyModal({
   open,
   onOpenChange,
+  onConfirm,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onConfirm?: (type: StrategyType, name: string) => Promise<void> | void;
 }) {
-  const router = useRouter();
   const [selected, setSelected] = useState<StrategyType>("hft");
+  const [name, setName] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const reset = () => {
+    setName("");
+    setError(null);
+    setSubmitting(false);
+  };
+  const handleOpenChange = (next: boolean) => {
+    if (!next) reset();
+    onOpenChange(next);
+  };
+  const handleCreate = async () => {
+    if (!name.trim() || submitting) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await onConfirm?.(selected, name.trim());
+      reset();
+      onOpenChange(false);
+    } catch {
+      setError("Couldn't create — a strategy with this name may already exist.");
+      setSubmitting(false);
+    }
+  };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
         showCloseButton={false}
         className="max-w-[420px] gap-5 rounded-[40px] border-8 border-[rgba(103,225,193,0.2)] bg-[#0a0e14] px-6 py-7"
       >
         <DialogTitle className="text-center text-xl font-semibold text-white">Select Strategy Type</DialogTitle>
+
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="strategy-name" className="text-xs font-medium text-muted-foreground">
+            Strategy name
+          </label>
+          <input
+            id="strategy-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleCreate();
+            }}
+            placeholder="Enter a name"
+            autoFocus
+            className="h-10 w-full rounded-xl border border-border bg-surface px-3 text-sm text-white placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+          />
+        </div>
 
         <div className="flex flex-col gap-2">
           {OPTIONS.map(({ id, label, icon: Icon }) => {
@@ -77,23 +120,23 @@ export function CreateStrategyModal({
           })}
         </div>
 
+        {error && <p className="text-center text-xs text-destructive">{error}</p>}
+
         <div className="flex justify-center gap-3">
           <button
             type="button"
-            onClick={() => onOpenChange(false)}
+            onClick={() => handleOpenChange(false)}
             className="h-10 w-[118px] cursor-pointer rounded-full bg-secondary text-xs font-medium text-white transition-opacity hover:opacity-90"
           >
             Cancel
           </button>
           <button
             type="button"
-            onClick={() => {
-              onOpenChange(false);
-              router.push(`/create-strategy?type=${selected}`);
-            }}
-            className="h-10 w-[118px] cursor-pointer rounded-full bg-[linear-gradient(161deg,#cff8ea_0%,var(--primary)_100%)] text-xs font-medium text-black transition-opacity hover:opacity-90"
+            disabled={!name.trim() || submitting}
+            onClick={handleCreate}
+            className="h-10 w-[118px] cursor-pointer rounded-full bg-[linear-gradient(161deg,#cff8ea_0%,var(--primary)_100%)] text-xs font-medium text-black transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Create strategy
+            {submitting ? "Creating…" : "Create strategy"}
           </button>
         </div>
       </DialogContent>

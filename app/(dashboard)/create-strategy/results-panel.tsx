@@ -12,7 +12,15 @@ import { OperatorsTab } from "./operators-tab";
 const TABS = ["Samples", "Results", "Data", "Features", "Operators"] as const;
 type Tab = (typeof TABS)[number];
 
-export function ResultsPanel({ onUseTemplate }: { onUseTemplate?: (code: string) => void }) {
+export function ResultsPanel({
+  onUseTemplate,
+  variant = "hft",
+  strategyId,
+}: {
+  onUseTemplate?: (code: string) => void;
+  variant?: "mft" | "hft";
+  strategyId?: string;
+}) {
   const [tab, setTab] = useState<Tab>("Results");
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
@@ -41,7 +49,7 @@ export function ResultsPanel({ onUseTemplate }: { onUseTemplate?: (code: string)
       </div>
       <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto [scrollbar-gutter:stable]">
         {tab === "Samples" && <SamplesTab onUseTemplate={onUseTemplate} />}
-        {tab === "Results" && <ResultsTab />}
+        {tab === "Results" && <ResultsTab variant={variant} strategyId={strategyId} />}
         {tab === "Data" && <DataTab />}
         {tab === "Features" && <FeaturesTab />}
         {tab === "Operators" && <OperatorsTab />}

@@ -7,13 +7,22 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { OverviewView } from "./overview-view";
 import { PerformanceView } from "./performance-view";
 import { RiskView } from "./risk-view";
+import { MftResultsView } from "./mft-results-view";
 
 const PERIODS = ["Train", "Test", "Simulate", "Paper Trade"] as const;
 const VIEWS = ["Overview", "Performance", "Risk"] as const;
 
-export function ResultsTab() {
+export function ResultsTab({
+  variant = "hft",
+  strategyId,
+}: {
+  variant?: "mft" | "hft";
+  strategyId?: string;
+}) {
   const [period, setPeriod] = useState<string>("Train");
   const [view, setView] = useState<string>("Overview");
+
+  if (variant === "mft") return <MftResultsView strategyId={strategyId} />;
 
   return (
     <div className="flex min-w-0 flex-col gap-4 p-4">

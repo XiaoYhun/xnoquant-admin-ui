@@ -4,6 +4,7 @@ import { onIdTokenChanged } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { exchangeToken } from "@/lib/auth-api";
 import { useAuthStore } from "@/store/auth-store";
+import { useMe } from "@/hooks/api/use-me";
 
 /**
  * Re-derives our session from the live Firebase session on mount and whenever
@@ -32,6 +33,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     return () => unsubscribe();
   }, []);
+
+  // T19 — fetch GET /auth/v1/me and surface it for browser inspection (Network tab + console log +
+  // `window.__me`). The user carries `roles` we'll gate features on later.
+  const { data: me } = useMe();
+  useEffect(() => {
+    if (!me) return;
+    console.log("[auth/me]", me);
+    (window as unknown as Record<string, unknown>).__me = me;
+  }, [me]);
 
   return <>{children}</>;
 }

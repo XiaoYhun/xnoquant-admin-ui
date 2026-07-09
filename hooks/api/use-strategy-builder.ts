@@ -1,5 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
-import { apiGetData } from "@/lib/api-client";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiGetData, apiPostData } from "@/lib/api-client";
 import { USE_MOCK, XALPHA_API_URL, XALPHA_API_URL_V2 } from "@/lib/constant";
 import { FEATURES, OPERATORS, INITIAL_EDITORS, type EditorTab } from "@/lib/mock/strategy-builder";
 import type { components } from "@/types/api/xalpha";
@@ -290,6 +290,8 @@ export function useEditors() {
           id: e.id ?? "",
           name: e.name ?? "Untitled",
           code: e.code ?? "",
+          strategy_ids: e.strategy_ids,
+          type: "mft" as const,
         }));
         // Never leave the builder with zero tabs (the UI derives the active editor from index 0).
         return tabs.length > 0 ? tabs : INITIAL_EDITORS;
@@ -298,5 +300,31 @@ export function useEditors() {
         return INITIAL_EDITORS;
       }
     },
+  });
+}
+
+// T17 — Editors "+" with MFT selected creates a real editor (POST /v2/editors) and revalidates
+// the editors list. Mirrors useCreateHftStrategy; the modal collects no fields, so the server
+// applies its defaults for a minimally-named editor.
+export function useCreateEditor() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (name: string): Promise<EditorTab> => {
+      if (USE_MOCK) {
+        return { id: crypto.randomUUID(), name, code: "", type: "mft" };
+      }
+      const editor = await apiPostData<StrategyEditorInfo>(`${XALPHA_API_URL_V2}/editors`, {
+        name,
+        code: "",
+      });
+      return {
+        id: editor.id ?? crypto.randomUUID(),
+        name: editor.name ?? name,
+        code: editor.code ?? "",
+        strategy_ids: editor.strategy_ids,
+        type: "mft",
+      };
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["strategy-builder", "editors"] }),
   });
 }

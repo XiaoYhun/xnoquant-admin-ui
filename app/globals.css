@@ -90,3 +90,27 @@ button {
     background-color: transparent;
   }
 }
+
+/* T10/B8 — scrollbars matched to xno-builder: 6px, transparent track, translucent rounded thumb.
+   Native scrollbars only (Monaco/ECharts render their own). Firefox uses scrollbar-width/color. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #696b7450 transparent;
+}
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+*::-webkit-scrollbar-track {
+  background-color: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: #696b7450;
+  border-radius: 10px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #60626850;
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}

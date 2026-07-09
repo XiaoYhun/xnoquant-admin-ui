@@ -6,7 +6,6 @@ import { Logout, AltArrowDown, DoubleAltArrowLeft, DoubleAltArrowRight } from "@
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { NAV_GROUPS, type NavItem } from "./nav-config";
-import { CreateStrategyModal } from "./create-strategy-modal";
 
 // Active nav item = green gradient pill with near-black text (from Figma).
 const ACTIVE_GRADIENT = "linear-gradient(168deg, #CFF8EA 0%, #67E1C0 100%)";
@@ -19,7 +18,6 @@ export function Sidebar() {
   const pathname = usePathname();
   const { logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
-  const [createOpen, setCreateOpen] = useState(false);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>(() => {
     const init: Record<string, boolean> = {};
     for (const g of NAV_GROUPS) if (g.heading) init[g.heading] = true;
@@ -79,13 +77,7 @@ export function Sidebar() {
             return (
               <Fragment key={`group-${i}`}>
                 {group.items.map((item) => (
-                  <NavRow
-                    key={item.href}
-                    item={item}
-                    active={isActive(item.href)}
-                    collapsed={collapsed}
-                    onClick={item.href === "/create-strategy" ? () => setCreateOpen(true) : undefined}
-                  />
+                  <NavRow key={item.href} item={item} active={isActive(item.href)} collapsed={collapsed} />
                 ))}
               </Fragment>
             );
@@ -133,8 +125,6 @@ export function Sidebar() {
           </span>
         </button>
       </div>
-
-      <CreateStrategyModal open={createOpen} onOpenChange={setCreateOpen} />
     </aside>
   );
 }

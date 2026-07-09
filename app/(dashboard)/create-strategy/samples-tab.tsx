@@ -7,7 +7,16 @@ import { AltArrowDown, CheckCircle, Code, Database, MinimalisticMagnifer } from 
 import { CloseIcon } from "@/components/icons/close";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useCodeSamples, type Sample } from "@/hooks/api/use-strategy-builder";
 
@@ -18,6 +27,7 @@ export function SamplesTab({ onUseTemplate }: { onUseTemplate?: (code: string) =
   const categories = data ?? [];
   const [search, setSearch] = useState("");
   const [viewSource, setViewSource] = useState<Sample | null>(null);
+  const [pendingTemplate, setPendingTemplate] = useState<Sample | null>(null);
   const [category, setCategory] = useState<string>(ALL_CATEGORIES);
   // Data loads async, so the first category/sample isn't known up front — `null` means "not
   // customized by the user yet" and falls back to expand-all / first-sample lazily below,
@@ -133,36 +143,45 @@ export function SamplesTab({ onUseTemplate }: { onUseTemplate?: (code: string) =
                           >
                             {s.name}
                           </span>
-                          <span
-                            className={cn(
-                              "mt-0.5 block text-xs text-muted-foreground",
-                              !isSelected && "truncate",
-                            )}
-                          >
-                            {s.description}
-                          </span>
+                          {!isSelected && (
+                            <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                              {s.description}
+                            </span>
+                          )}
                         </span>
                       </button>
-                      {isSelected && (
-                        <div className="flex justify-end gap-2 pt-3 duration-200 animate-in fade-in slide-in-from-top-1">
-                          <button
-                            type="button"
-                            onClick={() => setViewSource(s)}
-                            className="inline-flex h-8 cursor-pointer items-center gap-1 rounded-full border border-border bg-black px-3 text-xs text-white"
-                          >
-                            <Code weight="Bold" className="size-4" />
-                            View source
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => onUseTemplate?.(s.code)}
-                            className="inline-flex h-8 cursor-pointer items-center gap-1 rounded-full bg-[linear-gradient(164deg,#cff8ea_0%,var(--primary)_100%)] px-3 text-xs text-black"
-                          >
-                            <CheckCircle weight="Outline" className="size-4" />
-                            Use template
-                          </button>
+                      {/* T4 + B6 — the card grows in height (grid-rows 0fr→1fr) revealing the FULL
+                          description and the actions. */}
+                      <div
+                        className={cn(
+                          "grid transition-[grid-template-rows] duration-300 ease-out",
+                          isSelected ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+                        )}
+                      >
+                        <div className="overflow-hidden">
+                          <p className="pt-2 pl-10 text-xs text-muted-foreground">{s.description}</p>
+                          <div className="flex justify-end gap-2 pt-3">
+                            <button
+                              type="button"
+                              tabIndex={isSelected ? 0 : -1}
+                              onClick={() => setViewSource(s)}
+                              className="inline-flex h-8 cursor-pointer items-center gap-1 rounded-full border border-border bg-black px-3 text-xs text-white"
+                            >
+                              <Code weight="Bold" className="size-4" />
+                              View source
+                            </button>
+                            <button
+                              type="button"
+                              tabIndex={isSelected ? 0 : -1}
+                              onClick={() => setPendingTemplate(s)}
+                              className="inline-flex h-8 cursor-pointer items-center gap-1 rounded-full bg-[linear-gradient(164deg,#cff8ea_0%,var(--primary)_100%)] px-3 text-xs text-black"
+                            >
+                              <CheckCircle weight="Outline" className="size-4" />
+                              Use template
+                            </button>
+                          </div>
                         </div>
-                      )}
+                      </div>
                     </div>
                   );
                 })}
@@ -176,7 +195,7 @@ export function SamplesTab({ onUseTemplate }: { onUseTemplate?: (code: string) =
       <Dialog open={!!viewSource} onOpenChange={(o) => !o && setViewSource(null)}>
         <DialogContent
           showCloseButton={false}
-          className="max-w-[760px] gap-0 overflow-hidden rounded-2xl border-border bg-background p-0"
+          className="max-w-[min(920px,92vw)] gap-0 overflow-hidden rounded-2xl border-border bg-background p-0"
         >
           <DialogTitle className="border-b border-border bg-surface px-4 py-2.5 text-left text-sm font-semibold text-white">
             {viewSource?.name}
@@ -195,16 +214,40 @@ export function SamplesTab({ onUseTemplate }: { onUseTemplate?: (code: string) =
             </button>
             <button
               type="button"
-              onClick={() => {
-                onUseTemplate?.(viewSource?.code ?? "");
-                setViewSource(null);
-              }}
+              onClick={() => setPendingTemplate(viewSource)}
               className="inline-flex h-8 cursor-pointer items-center gap-1 rounded-full bg-[linear-gradient(165deg,#cff8ea_0%,var(--primary)_100%)] px-3 text-xs text-black"
             >
               <CheckCircle weight="Outline" className="size-4" />
               Use template
             </button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* T13 — confirm before replacing the editor code with a template. */}
+      <Dialog open={!!pendingTemplate} onOpenChange={(o) => !o && setPendingTemplate(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Use template</DialogTitle>
+            <DialogDescription>
+              Replace the current editor code with &ldquo;{pendingTemplate?.name}&rdquo;? Your current code
+              will be lost.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Cancel</Button>
+            </DialogClose>
+            <Button
+              onClick={() => {
+                if (pendingTemplate) onUseTemplate?.(pendingTemplate.code);
+                setPendingTemplate(null);
+                setViewSource(null);
+              }}
+            >
+              Use template
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

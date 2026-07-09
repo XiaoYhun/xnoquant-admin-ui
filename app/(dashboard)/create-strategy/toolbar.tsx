@@ -6,6 +6,8 @@ import type { IconProps } from "@solar-icons/react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SimulateModal } from "./simulate-modal";
+import { apiPostData } from "@/lib/api-client";
+import { USE_MOCK, XALPHA_API_URL_V2 } from "@/lib/constant";
 
 // Toolbar row above the code editor — Figma node 13964:52172 (inside 13964:50200).
 // Self-contained: strategy name is local state, all buttons are no-ops (page-level
@@ -99,27 +101,62 @@ function SettingsMenu() {
   );
 }
 
-export function Toolbar({ onToggleConsole }: { onToggleConsole?: () => void }) {
-  const [name, setName] = useState("Test bot AI");
+// B5 — the strategy name reflects the currently-selected editor and is not editable yet.
+// B7 — `type`/`id` (the active editor's) drive the MFT/HFT badge and the Simulate button: HFT
+// opens the existing SimulateModal; MFT calls the XALPHA simulate endpoint directly, no modal.
+export function Toolbar({
+  name,
+  type,
+  id,
+  onToggleConsole,
+}: {
+  name: string;
+  type: "mft" | "hft";
+  id: string;
+  onToggleConsole?: () => void;
+}) {
   const [simulateOpen, setSimulateOpen] = useState(false);
+  const [mftSimStatus, setMftSimStatus] = useState<"idle" | "running" | "done" | "error">("idle");
+
+  const handleSimulateClick = async () => {
+    if (type === "hft") {
+      setSimulateOpen(true);
+      return;
+    }
+    // MFT: no modal — simulate the editor directly (`POST /v2/editors/{id}/simulate`, no body).
+    if (USE_MOCK) {
+      console.log(`Simulate "${name}" (mock, editor ${id})`);
+      return;
+    }
+    setMftSimStatus("running");
+    try {
+      await apiPostData(`${XALPHA_API_URL_V2}/editors/${id}/simulate`, {});
+      console.log(`Simulate started for "${name}"`);
+      setMftSimStatus("done");
+    } catch (err) {
+      console.error(`Simulate failed for "${name}"`, err);
+      setMftSimStatus("error");
+    } finally {
+      setTimeout(() => setMftSimStatus("idle"), 2000);
+    }
+  };
+
+  const simulateLabel =
+    mftSimStatus === "running" ? "Simulating…" : mftSimStatus === "done" ? "Simulated" : mftSimStatus === "error" ? "Failed" : "Simulate";
 
   return (
     <div className="flex h-12 shrink-0 items-center justify-between gap-4 border-b border-border px-4 bg-surface">
       <div className="flex min-w-0 flex-1 items-center gap-3">
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          aria-label="Strategy name"
-          size={Math.max(name.length, 4)}
-          className="-mx-1 min-w-0 shrink-0 rounded px-1 text-xl font-semibold text-white outline-none hover:bg-white/5 focus:bg-white/5"
-        />
+        <span className="min-w-0 shrink truncate text-xl font-semibold text-white" title={name}>
+          {name}
+        </span>
         <span className="flex shrink-0 items-center gap-1">
           <span className="size-2 shrink-0 rounded-full bg-[#7b61ff] shadow-[0_0_6px_1px_rgba(123,97,255,0.5)]" />
           <span
             className="bg-clip-text text-xs font-medium text-transparent"
             style={{ backgroundImage: "linear-gradient(148deg, #e9e8ff 0%, #b7b1ff 148%)" }}
           >
-            MFT
+            {type.toUpperCase()}
           </span>
         </span>
         <button
@@ -155,11 +192,12 @@ export function Toolbar({ onToggleConsole }: { onToggleConsole?: () => void }) {
         <IconButton icon={Copy} label="Duplicate" />
         <button
           type="button"
-          onClick={() => setSimulateOpen(true)}
-          className="inline-flex h-[34px] shrink-0 cursor-pointer items-center gap-1 rounded-full bg-[linear-gradient(164deg,#cff8ea_0%,var(--primary)_100%)] px-3 text-xs font-medium text-black transition-opacity hover:opacity-90"
+          onClick={handleSimulateClick}
+          disabled={mftSimStatus === "running"}
+          className="inline-flex h-[34px] shrink-0 cursor-pointer items-center gap-1 rounded-full bg-[linear-gradient(164deg,#cff8ea_0%,var(--primary)_100%)] px-3 text-xs font-medium text-black transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <SkipNext weight="Outline" className="size-3.5" />
-          Simulate
+          {simulateLabel}
         </button>
       </div>
 

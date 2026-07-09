@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { AltArrowDown, AltArrowUp, TrashBinTrash } from "@solar-icons/react";
 import { CloseIcon } from "@/components/icons/close";
 import { cn } from "@/lib/utils";
@@ -38,11 +38,45 @@ const CONSOLE_LOGS: LogLine[] = [
 export function ConsolePanel({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const [expanded, setExpanded] = useState(false);
   const [logs, setLogs] = useState(CONSOLE_LOGS);
+  const [bodyHeight, setBodyHeight] = useState(180);
+  const drag = useRef<{ startY: number; startH: number } | null>(null);
+
+  // T12 — drag the top edge to resize the console body height.
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!drag.current) return;
+      const next = drag.current.startH + (drag.current.startY - e.clientY);
+      setBodyHeight(Math.min(500, Math.max(96, next)));
+    };
+    const stop = () => {
+      drag.current = null;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", stop);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", stop);
+    };
+  }, []);
 
   if (!open) return null;
 
+  const startDrag = (e: ReactMouseEvent) => {
+    if (!expanded) setExpanded(true);
+    drag.current = { startY: e.clientY, startH: expanded ? bodyHeight : 180 };
+    document.body.style.cursor = "row-resize";
+    document.body.style.userSelect = "none";
+  };
+
   return (
     <div className="shrink-0 border-t border-border bg-background">
+      <div
+        onMouseDown={startDrag}
+        aria-label="Resize console"
+        className="h-1.5 shrink-0 cursor-row-resize bg-border/40 transition-colors hover:bg-primary/40"
+      />
       <div className="flex items-center justify-between border-b border-border px-4 py-2">
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold text-white">Console</span>
@@ -82,7 +116,7 @@ export function ConsolePanel({ open, onOpenChange }: { open: boolean; onOpenChan
         </div>
       </div>
       {expanded && (
-        <div className="h-[180px] overflow-y-auto px-4 py-2 font-mono text-xs">
+        <div style={{ height: bodyHeight }} className="overflow-y-auto px-4 py-2 font-mono text-xs">
           {logs.length === 0 ? (
             <p className="py-2 text-muted-foreground">Console cleared.</p>
           ) : (

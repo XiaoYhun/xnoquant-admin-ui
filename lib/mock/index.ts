@@ -33,6 +33,46 @@ export const mockApi = {
     // Fresh copy — see listVenues comment above.
     return [...MOCK_ACCOUNTS];
   },
+  async createAccount(input: {
+    name: string;
+    venue_id: string;
+    account_type: Account["account_type"];
+    api_key: string;
+    secret_key: string;
+  }): Promise<Account> {
+    await delay();
+    const now = new Date().toISOString();
+    const account: Account = {
+      id: crypto.randomUUID(),
+      name: input.name,
+      venue_id: input.venue_id,
+      account_type: input.account_type,
+      fee: { type: "rate", maker_rate: 0.001, taker_rate: 0.001 },
+      risk: { type: "none" },
+      created_at: now,
+      updated_at: now,
+    };
+    MOCK_ACCOUNTS.push(account);
+    return account;
+  },
+  async updateAccount(
+    id: string,
+    input: { name: string; venue_id: string; account_type: Account["account_type"] },
+  ): Promise<Account> {
+    await delay();
+    const account = MOCK_ACCOUNTS.find((a) => a.id === id);
+    if (!account) throw new Error("Account not found");
+    account.name = input.name;
+    account.venue_id = input.venue_id;
+    account.account_type = input.account_type;
+    account.updated_at = new Date().toISOString();
+    return account;
+  },
+  async deleteAccount(id: string): Promise<void> {
+    await delay();
+    const idx = MOCK_ACCOUNTS.findIndex((a) => a.id === id);
+    if (idx !== -1) MOCK_ACCOUNTS.splice(idx, 1);
+  },
   async listPortfolios(): Promise<Portfolio[]> {
     await delay();
     // Fresh copy — see listVenues comment above.

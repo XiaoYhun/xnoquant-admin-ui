@@ -11,6 +11,7 @@ import { SimulateModal } from "./simulate-modal";
 import { USE_MOCK } from "@/lib/constant";
 import { useMarkets } from "@/hooks/api/use-markets";
 import { useUpdateEditor } from "@/hooks/api/use-strategy-builder";
+import { useConsoleLog } from "@/store/console-log-store";
 
 // Toolbar row above the code editor — Figma node 13964:52172 (inside 13964:50200).
 // Self-contained: strategy name is local state, all buttons are no-ops (page-level
@@ -87,6 +88,7 @@ function MftSettingsFields({
   const { data: markets } = useMarkets();
   const updateEditor = useUpdateEditor();
   const qc = useQueryClient();
+  const addLog = useConsoleLog((s) => s.addLog);
 
   const [draftMarket, setDraftMarket] = useState(market ?? markets?.[0]?.name);
   const [draftUniverse, setDraftUniverse] = useState(universe ?? "VN30");
@@ -103,17 +105,22 @@ function MftSettingsFields({
 
   const handleSave = async () => {
     if (!hasChanges || !id || updateEditor.isPending) return;
-    await updateEditor.mutateAsync({ id, market: draftMarket, universe: draftUniverse, train_ratio: draftTrainRatio });
-    await qc.invalidateQueries({ queryKey: ["strategy-builder", "editors"] });
-    onSaved?.({ market: draftMarket, universe: draftUniverse, train_ratio: draftTrainRatio });
-    onClose();
+    try {
+      await updateEditor.mutateAsync({ id, market: draftMarket, universe: draftUniverse, train_ratio: draftTrainRatio });
+      await qc.invalidateQueries({ queryKey: ["strategy-builder", "editors"] });
+      onSaved?.({ market: draftMarket, universe: draftUniverse, train_ratio: draftTrainRatio });
+      addLog("success", "Editor settings saved");
+      onClose();
+    } catch (err) {
+      addLog("error", `Failed to save settings: ${err instanceof Error ? err.message : "unknown error"}`);
+    }
   };
 
   return (
     <div className="flex flex-col gap-2">
       <p className="text-sm font-semibold text-white">Settings</p>
       <div className="flex gap-2">
-        <div className="flex flex-1 flex-col gap-1">
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
           <span className="text-[10px] font-medium text-white">Market</span>
           <Select value={draftMarket} onValueChange={handleMarketChange}>
             <SelectTrigger className="h-8 w-full rounded-full border-border bg-background! px-3 text-xs text-white">
@@ -128,7 +135,7 @@ function MftSettingsFields({
             </SelectContent>
           </Select>
         </div>
-        <div className="flex flex-1 flex-col gap-1">
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
           <span className="text-[10px] font-medium text-white">Universe</span>
           <Select value={draftUniverse} onValueChange={setDraftUniverse}>
             <SelectTrigger className="h-8 w-full rounded-full border-border bg-background! px-3 text-xs text-white">
@@ -198,7 +205,7 @@ function SettingsMenu({
           <Settings className="size-5" />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="end" sideOffset={8} className="w-[240px] rounded-lg border-border bg-surface p-4">
+      <PopoverContent align="end" sideOffset={8} className="w-[300px] rounded-lg border-border bg-surface p-4">
         {type === "mft" ? (
           <MftSettingsFields
             key={id}
@@ -259,6 +266,7 @@ export function Toolbar({
 }) {
   const [simulateOpen, setSimulateOpen] = useState(false);
   const [mftSimStatus, setMftSimStatus] = useState<"idle" | "running" | "done" | "error">("idle");
+  const addLog = useConsoleLog((s) => s.addLog);
 
   const handleSimulateClick = async () => {
     if (type === "hft") {
@@ -267,16 +275,17 @@ export function Toolbar({
     }
     // MFT: no modal — simulate the editor directly (`POST /v2/editors/{id}/simulate`, no body).
     if (USE_MOCK) {
-      console.log(`Simulate "${name}" (mock, editor ${id})`);
+      addLog("info", `Simulating "${name}" (mock)`);
       return;
     }
     setMftSimStatus("running");
+    addLog("info", `Simulating "${name}"…`);
     try {
       await onSimulate?.(id);
-      console.log(`Simulate started for "${name}"`);
+      addLog("success", `Simulation submitted for "${name}"`);
       setMftSimStatus("done");
     } catch (err) {
-      console.error(`Simulate failed for "${name}"`, err);
+      addLog("error", `Simulate failed: ${err instanceof Error ? err.message : "unknown error"}`);
       setMftSimStatus("error");
     } finally {
       setTimeout(() => setMftSimStatus("idle"), 2000);

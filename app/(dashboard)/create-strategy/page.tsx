@@ -10,6 +10,7 @@ import { type EditorTab } from "@/lib/mock/strategy-builder";
 import { useEditors, useCreateEditor, useSimulateEditor, useUpdateEditor, useDeleteEditor, fetchEditors } from "@/hooks/api/use-strategy-builder";
 import { useHftStrategies, useCreateHftStrategy } from "@/hooks/api/use-hft-strategies";
 import { CreateStrategyModal } from "@/components/layout/create-strategy-modal";
+import { useConsoleLog } from "@/store/console-log-store";
 import { cn } from "@/lib/utils";
 
 // Draggable two-pane split (editor | results). Left width is a % clamped to [30, 70].
@@ -87,6 +88,7 @@ function StrategyBuilder({ initialEditors }: { initialEditors: EditorTab[] }) {
   const updateEditor = useUpdateEditor();
   const deleteEditor = useDeleteEditor();
   const qc = useQueryClient();
+  const addLog = useConsoleLog((s) => s.addLog);
 
   const addEditor = async (type: "mft" | "hft", name: string) => {
     // Errors propagate to CreateStrategyModal so it can stay open + surface the failure (e.g. 409).
@@ -120,8 +122,10 @@ function StrategyBuilder({ initialEditors }: { initialEditors: EditorTab[] }) {
     });
   };
   // "Use template" (Samples tab) loads a sample's code into the active editor.
-  const setActiveCode = (code: string) =>
+  const setActiveCode = (code: string) => {
     setEditors((prev) => prev.map((e) => (e.id === activeId ? { ...e, code } : e)));
+    addLog("info", "Loaded sample code into the editor");
+  };
   // Settings popover (MFT Market/Universe/Train ratio) persists via the toolbar; reflect the
   // saved values into local editor state so the cog shows the change without a reload.
   const handleSettingsSaved = (changes: { market?: string; universe?: string; train_ratio?: number }) =>

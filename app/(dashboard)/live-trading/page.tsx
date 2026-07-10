@@ -19,6 +19,7 @@ import {
 import { useLiveRuns } from "@/hooks/api/use-live-runs";
 import { useLiveTicks } from "@/hooks/use-live-ticks";
 import { LiveRunsTable } from "./live-runs-table";
+import { LiveRunDetailPanel } from "./live-run-detail-panel";
 import type { LiveRunRow } from "@/lib/mock/live-runs";
 
 const PAGE_SIZE = 9;
@@ -37,6 +38,8 @@ export default function Page() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [page, setPage] = useState(1);
+  const [selectedRun, setSelectedRun] = useState<LiveRunRow | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -94,7 +97,13 @@ export default function Page() {
           ) : pageRows.length === 0 ? (
             <p className="p-4 text-sm text-muted-foreground">No live strategies found.</p>
           ) : (
-            <LiveRunsTable rows={pageRows} />
+            <LiveRunsTable
+              rows={pageRows}
+              onOpenDetail={(run) => {
+                setSelectedRun(run);
+                setDetailOpen(true);
+              }}
+            />
           )}
         </div>
         {pageCount > 1 && (
@@ -138,6 +147,8 @@ export default function Page() {
           </div>
         )}
       </section>
+
+      <LiveRunDetailPanel open={detailOpen} onOpenChange={setDetailOpen} run={selectedRun} />
     </main>
   );
 }

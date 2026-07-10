@@ -31,35 +31,37 @@ export function EditorsBar({
 }) {
   const [pendingClose, setPendingClose] = useState<EditorTab | null>(null);
   return (
-    <div className="flex h-14 shrink-0 items-stretch overflow-x-auto border-b border-border bg-background overflow-y-hidden">
-      {editors.map((e) => {
-        const active = e.id === activeId;
-        return (
-          <div
-            key={e.id}
-            role="tab"
-            aria-selected={active}
-            onClick={() => onSelect(e.id)}
-            className={cn(
-              "group relative flex h-[56px] shrink-0 cursor-pointer items-center gap-2 border-r border-border px-5 text-xs whitespace-nowrap",
-              active ? "text-primary bg-surface" : "text-muted-foreground hover:text-white bg-background border-b",
-            )}
-          >
-            <span>{e.name}</span>
-            <button
-              type="button"
-              aria-label={`Close ${e.name}`}
-              onClick={(ev) => {
-                ev.stopPropagation();
-                setPendingClose(e);
-              }}
-              className="flex size-4 items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-white cursor-pointer -mr-2"
+    <div className="flex h-14 shrink-0 items-stretch border-b border-border bg-background overflow-y-hidden">
+      <div className="flex min-w-0 items-stretch overflow-x-auto overflow-y-hidden">
+        {editors.map((e) => {
+          const active = e.id === activeId;
+          return (
+            <div
+              key={e.id}
+              role="tab"
+              aria-selected={active}
+              onClick={() => onSelect(e.id)}
+              className={cn(
+                "group relative flex h-[56px] shrink-0 cursor-pointer items-center gap-2 border-r border-border px-5 text-xs whitespace-nowrap",
+                active ? "text-primary bg-surface" : "text-muted-foreground hover:text-white bg-background border-b",
+              )}
             >
-              <CloseIcon className="size-3.5" />
-            </button>
-          </div>
-        );
-      })}
+              <span>{e.name}</span>
+              <button
+                type="button"
+                aria-label={`Close ${e.name}`}
+                onClick={(ev) => {
+                  ev.stopPropagation();
+                  setPendingClose(e);
+                }}
+                className="flex size-4 items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-white cursor-pointer -mr-2"
+              >
+                <CloseIcon className="size-3.5" />
+              </button>
+            </div>
+          );
+        })}
+      </div>
       <button
         type="button"
         aria-label="New editor"

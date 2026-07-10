@@ -15,6 +15,10 @@ echarts.registerTheme(THEME_NAME, {
     borderWidth: 1,
     textStyle: { color: "#f1f8f3", fontSize: 12 },
     extraCssText: "border-radius:8px;padding:6px 12px;box-shadow:0 4px 16px rgba(0,0,0,0.35);",
+    // Cap tooltip numbers at 2 decimals with thousands separators — raw floats like
+    // 12663.957034653504 read as junk. Charts that set their own tooltip formatter override this.
+    valueFormatter: (value: unknown) =>
+      typeof value === "number" ? value.toLocaleString("en-US", { maximumFractionDigits: 2 }) : String(value ?? ""),
   },
   grid: { left: 8, right: 8, top: 16, bottom: 8, containLabel: true },
   categoryAxis: {

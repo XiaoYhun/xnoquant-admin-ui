@@ -163,7 +163,28 @@ function buildMultiStageOption(data: StrategyChartData, stage: string): EChartsO
   const te = stages.test;
 
   const shared = {
-    tooltip: { trigger: "axis" as const },
+    tooltip: {
+      trigger: "axis" as const,
+      // Title = the hovered date (the category is a raw unix-seconds string); values capped at 2dp.
+      formatter: (params: unknown) => {
+        const arr = (Array.isArray(params) ? params : [params]) as Array<{
+          axisValue?: string;
+          marker?: string;
+          seriesName?: string;
+          value?: unknown;
+        }>;
+        if (!arr.length) return "";
+        const title = formatTimestamp(Number(arr[0].axisValue));
+        const rows = arr
+          .map((p) => {
+            const raw = Array.isArray(p.value) ? p.value[1] : p.value;
+            const val = typeof raw === "number" ? raw.toLocaleString("en-US", { maximumFractionDigits: 2 }) : String(raw ?? "");
+            return `${p.marker ?? ""} ${p.seriesName ?? ""}: ${val}`;
+          })
+          .join("<br/>");
+        return `${title}<br/>${rows}`;
+      },
+    },
     grid: { left: 8, right: 8, top: 16, bottom: 8, containLabel: true },
     yAxis: { type: "value" as const },
   };

@@ -160,14 +160,14 @@ export function SimulateModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] max-w-[460px] gap-0 overflow-y-auto rounded-[20px] border-border bg-background p-0">
-        <div className="bg-surface px-4 py-2.5">
+      <DialogContent className="flex max-h-[85vh] max-w-[460px] flex-col gap-0 overflow-hidden rounded-[20px] border-border bg-background p-0">
+        <div className="shrink-0 bg-surface px-4 py-2.5">
           <DialogTitle className="bg-[linear-gradient(177deg,#cff8ea_0%,#67e1c1_100%)] bg-clip-text text-lg font-semibold text-transparent">
             Simulate &quot;{strategyName}&quot;
           </DialogTitle>
         </div>
 
-        <div className="flex flex-col gap-3 p-4">
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
           <p className="text-sm text-muted-foreground">
             Bind this strategy to an account and one more symbols, then launch in paper or live mode.
           </p>
@@ -424,7 +424,7 @@ export function SimulateModal({
           )}
         </div>
 
-        <div className="flex justify-end gap-3 border-t border-border px-4 py-3">
+        <div className="flex shrink-0 justify-end gap-3 border-t border-border px-4 py-3">
           <button
             type="button"
             onClick={() => onOpenChange(false)}

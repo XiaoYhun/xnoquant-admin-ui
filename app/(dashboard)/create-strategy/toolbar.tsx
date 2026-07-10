@@ -336,16 +336,22 @@ export function Toolbar({
           <span className="text-xs text-muted-foreground">In sample</span>
         </span>
 
-        <span className="inline-flex shrink-0 items-center gap-3 rounded-3xl border border-white/50 bg-gradient-to-b from-[rgba(123,97,255,0.8)] to-[rgba(123,97,255,0.2)] py-1 pl-2 pr-2 text-xs text-white backdrop-blur-[2px]">
-          <span className="inline-flex items-center gap-1.5">
-            <span className="size-1.5 shrink-0 rounded-full bg-white" />
-            Crypto
+        {(market || universe) && (
+          <span className="inline-flex shrink-0 items-center gap-3 rounded-3xl border border-white/50 bg-gradient-to-b from-[rgba(123,97,255,0.8)] to-[rgba(123,97,255,0.2)] py-1 pl-2 pr-2 text-xs text-white backdrop-blur-[2px]">
+            {market && (
+              <span className="inline-flex items-center gap-1.5">
+                <span className="size-1.5 shrink-0 rounded-full bg-white" />
+                {market}
+              </span>
+            )}
+            {universe && (
+              <span className="inline-flex items-center gap-1.5">
+                <span className="size-1.5 shrink-0 rounded-full bg-white" />
+                {universe}
+              </span>
+            )}
           </span>
-          <span className="inline-flex items-center gap-1.5">
-            <span className="size-1.5 shrink-0 rounded-full bg-white" />
-            BTC
-          </span>
-        </span>
+        )}
       </div>
 
       <div className="flex shrink-0 items-center gap-2">

@@ -80,7 +80,13 @@ const COLS = [
   { key: "action", label: "Action", w: "10%", align: "right" },
 ] as const;
 
-export function LiveRunsTable({ rows }: { rows: LiveRunRow[] }) {
+export function LiveRunsTable({
+  rows,
+  onOpenDetail,
+}: {
+  rows: LiveRunRow[];
+  onOpenDetail: (run: LiveRunRow) => void;
+}) {
   const stopRun = useStopRun();
   const [pendingStop, setPendingStop] = useState<LiveRunRow | null>(null);
 
@@ -100,7 +106,7 @@ export function LiveRunsTable({ rows }: { rows: LiveRunRow[] }) {
           {rows.map((r) => {
             const s = STATUS_META[r.status];
             return (
-              <TableRow key={r.id}>
+              <TableRow key={r.id} className="cursor-pointer" onClick={() => onOpenDetail(r)}>
                 <TableCell>
                   <span
                     className="inline-flex items-center gap-2 rounded-[20px] px-2 py-1 text-xs"
@@ -154,7 +160,10 @@ export function LiveRunsTable({ rows }: { rows: LiveRunRow[] }) {
                   {r.status === "running" ? (
                     <button
                       type="button"
-                      onClick={() => setPendingStop(r)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setPendingStop(r);
+                      }}
                       className="inline-flex cursor-pointer items-center gap-1 rounded-[20px] border border-[#1d2939] bg-[#151a24] px-2 py-1 text-xs text-[#9db2ce] transition-colors hover:text-white"
                     >
                       <Pause weight="Bold" className="size-4" />

@@ -69,10 +69,17 @@ function ResizableSplit({ left, right }: { left: ReactNode; right: ReactNode }) 
 export default function Page() {
   const { data: mftEditors } = useEditors();
   const { data: hftEditors } = useHftStrategies();
-  if (!mftEditors || mftEditors.length === 0) {
+  // StrategyBuilder snapshots `initialEditors` into state once at mount, so BOTH lists must be
+  // settled first — otherwise the HFT list (a separate, slower query to another host) resolves
+  // after mount and gets silently dropped from the editors bar. `hftEditors` becomes `[]` (not
+  // undefined) even on failure, so this never blocks the builder on a down HFT backend.
+  if (!mftEditors || mftEditors.length === 0 || hftEditors === undefined) {
     return <div className="min-h-0 flex-1 bg-surface p-3" />;
   }
-  return <StrategyBuilder initialEditors={[...mftEditors, ...(hftEditors ?? [])]} />;
+  // Interleave both sources chronologically (oldest first) instead of grouping MFT then HFT.
+  const createdAt = (e: EditorTab) => (e.created_at ? new Date(e.created_at).getTime() : 0);
+  const initialEditors = [...mftEditors, ...hftEditors].sort((a, b) => createdAt(a) - createdAt(b));
+  return <StrategyBuilder initialEditors={initialEditors} />;
 }
 
 function StrategyBuilder({ initialEditors }: { initialEditors: EditorTab[] }) {

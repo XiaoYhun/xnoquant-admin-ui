@@ -49,6 +49,8 @@ export type EditorTab = {
   market?: string;
   universe?: string;
   train_ratio?: number;
+  /** ISO timestamp from the source API; used to sort the merged MFT+HFT editor list. */
+  created_at?: string;
 };
 export const INITIAL_EDITORS: EditorTab[] = [
   { id: "ed-1", name: "Test bot AI", code: SAMPLE_CODE, type: "mft" },

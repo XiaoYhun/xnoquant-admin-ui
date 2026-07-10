@@ -290,6 +290,7 @@ export async function fetchEditors(): Promise<EditorTab[]> {
       market: e.market,
       universe: e.universe,
       train_ratio: e.train_ratio,
+      created_at: e.created_at,
     }));
     // Never leave the builder with zero tabs (the UI derives the active editor from index 0).
     return tabs.length > 0 ? tabs : INITIAL_EDITORS;

@@ -194,7 +194,10 @@ const RANGES = ["All", "1M", "3M", "1W"] as const;
 // ---- mini card charts: flat static line/area/bars with NO end-dot. The card sparklines
 // in Figma (node 14175:90204 chart) are plain SVG lines/areas — the shared `Sparkline`'s
 // pulsing effectScatter dot is wrong here, so these are built directly on BaseChart. ----
-const MINI_GRID = { left: 2, right: 2, top: 4, bottom: 4 } as const;
+// `containLabel: false` is required: the shared BaseChart theme sets `containLabel: true`, which
+// merges in and reserves ~28px on the left/bottom for the (hidden) axis labels — squeezing the
+// sparkline into a corner of the card. Pin it off so the line fills the whole box.
+const MINI_GRID = { left: 2, right: 2, top: 4, bottom: 4, containLabel: false } as const;
 
 function LineMini({ data, color }: { data: number[]; color: string }) {
   const option: EChartsOption = {

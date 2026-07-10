@@ -11,6 +11,7 @@ import { SimulateModal } from "./simulate-modal";
 import { USE_MOCK } from "@/lib/constant";
 import { useMarkets } from "@/hooks/api/use-markets";
 import { useUpdateEditor } from "@/hooks/api/use-strategy-builder";
+import { useHftStrategy, useUpdateHftStrategy, type HftStrategyType } from "@/hooks/api/use-hft-strategies";
 import { useConsoleLog } from "@/store/console-log-store";
 
 // Toolbar row above the code editor — Figma node 13964:52172 (inside 13964:50200).
@@ -38,31 +39,73 @@ function IconButton({
   );
 }
 
-// Figma node 14256:148355 — the cog opens this Settings popover (Market + Type dropdowns).
-function SettingField({
-  label,
-  defaultValue,
-  options,
-}: {
-  label: string;
-  defaultValue: string;
-  options: [string, string][];
-}) {
+// Figma node 14256:148355 — the cog opens this Settings popover. For HFT, Market (Tick/L2 vs
+// Bar/OHLC) is display-only (no strategy field maps to it — it's a run-time data_kind), while Type
+// (strategy_type) is saved via `useUpdateHftStrategy` (PUT /api/strategies/{id}). Keyed by `id` so
+// switching editors remounts with the new strategy's values.
+function HftSettingsFields({ id, onClose }: { id: string; onClose: () => void }) {
+  const { data: strategy } = useHftStrategy(id);
+  const updateStrategy = useUpdateHftStrategy();
+  const addLog = useConsoleLog((s) => s.addLog);
+
+  const [draftMarket, setDraftMarket] = useState("tick-l2");
+  // Derive Type from the fetched strategy until the user overrides it (avoids seeding via an
+  // effect — the strategy loads async, so `typeOverride ?? loaded ?? default`). Market has no
+  // backend field to seed from.
+  const [typeOverride, setTypeOverride] = useState<HftStrategyType | null>(null);
+  const draftType: HftStrategyType = typeOverride ?? strategy?.strategy_type ?? "taker";
+
+  const hasChanges = !!strategy && draftType !== strategy.strategy_type;
+
+  const handleSave = async () => {
+    if (!hasChanges || !id || updateStrategy.isPending) return;
+    try {
+      await updateStrategy.mutateAsync({ id, strategyType: draftType });
+      addLog("success", "Strategy settings saved");
+      onClose();
+    } catch (err) {
+      addLog("error", `Failed to save settings: ${err instanceof Error ? err.message : "unknown error"}`);
+    }
+  };
+
   return (
-    <div className="flex flex-col gap-1">
-      <span className="text-[10px] font-medium text-white">{label}</span>
-      <Select defaultValue={defaultValue}>
-        <SelectTrigger className="h-8 w-full rounded-full border-border bg-background! px-3 text-xs text-white">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent className="bg-background!">
-          {options.map(([value, text]) => (
-            <SelectItem key={value} value={value} className="text-xs">
-              {text}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+    <div className="flex flex-col gap-2">
+      <p className="text-sm font-semibold text-white">Settings</p>
+      <div className="flex flex-col gap-1">
+        <span className="text-[10px] font-medium text-white">Market</span>
+        <Select value={draftMarket} onValueChange={setDraftMarket}>
+          <SelectTrigger className="h-8 w-full rounded-full border-border bg-background! px-3 text-xs text-white">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className="bg-background!">
+            <SelectItem value="tick-l2" className="text-xs">Tick / L2</SelectItem>
+            <SelectItem value="bar-ohlc" className="text-xs">Bar / OHLC</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="flex flex-col gap-1">
+        <span className="text-[10px] font-medium text-white">Type</span>
+        <Select value={draftType} onValueChange={(v) => v && setTypeOverride(v as HftStrategyType)}>
+          <SelectTrigger className="h-8 w-full rounded-full border-border bg-background! px-3 text-xs text-white">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className="bg-background!">
+            <SelectItem value="taker" className="text-xs">Taker</SelectItem>
+            <SelectItem value="maker" className="text-xs">Maker</SelectItem>
+            <SelectItem value="arbitrage" className="text-xs">Arbitrage</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={!hasChanges || updateStrategy.isPending}
+          className="cursor-pointer rounded-full bg-[linear-gradient(171deg,#cff8ea_0%,#67e1c1_100%)] px-3 py-1.5 text-xs font-medium text-[#0d0d0d] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {updateStrategy.isPending ? "Saving…" : "Save"}
+        </button>
+      </div>
     </div>
   );
 }
@@ -217,26 +260,7 @@ function SettingsMenu({
             onClose={() => setOpen(false)}
           />
         ) : (
-          <div className="flex flex-col gap-2">
-            <p className="text-sm font-semibold text-white">Settings</p>
-            <SettingField
-              label="Market"
-              defaultValue="tick-l2"
-              options={[
-                ["tick-l2", "Tick / L2"],
-                ["bar-ohlc", "Bar / OHLC"],
-              ]}
-            />
-            <SettingField
-              label="Type"
-              defaultValue="taker"
-              options={[
-                ["taker", "Taker"],
-                ["maker", "Maker"],
-                ["arbitrage", "Arbitrage"],
-              ]}
-            />
-          </div>
+          <HftSettingsFields key={id} id={id} onClose={() => setOpen(false)} />
         )}
       </PopoverContent>
     </Popover>

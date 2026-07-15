@@ -252,7 +252,15 @@ export function SimulateModal({
                     <AltArrowDown weight="Outline" className="size-4 shrink-0 text-muted-foreground" />
                   </button>
                 </PopoverTrigger>
-                <PopoverContent align="start" className="max-h-56 w-[380px] overflow-y-auto p-1.5">
+                <PopoverContent
+                  align="start"
+                  className="max-h-56 w-[380px] overflow-y-auto p-1.5"
+                  // The parent Dialog's scroll-lock (RemoveScroll) blocks native wheel scrolling on
+                  // this portaled popover — scroll it programmatically instead.
+                  onWheel={(e) => {
+                    e.currentTarget.scrollTop += e.deltaY;
+                  }}
+                >
                   {(symbols ?? []).length === 0 ? (
                     <p className="px-2 py-2 text-xs text-muted-foreground">No symbols for this venue.</p>
                   ) : (

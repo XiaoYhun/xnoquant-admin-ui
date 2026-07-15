@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Settings, SidebarCode, Copy, MenuDots, SkipNext } from "@solar-icons/react";
+import { Settings, SidebarCode, Copy, SkipNext } from "@solar-icons/react";
 import type { ComponentType } from "react";
 import type { IconProps } from "@solar-icons/react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -373,14 +373,6 @@ export function Toolbar({
             {type.toUpperCase()}
           </span>
         </span>
-        <button
-          type="button"
-          aria-label="More options"
-          className="shrink-0 cursor-pointer text-muted-foreground transition-colors hover:text-white"
-        >
-          <MenuDots weight="Bold" className="size-5" />
-        </button>
-
         <div className="h-5 w-px shrink-0 bg-[#344054]" />
 
         <span className="inline-flex shrink-0 items-center gap-2 rounded-full border border-border bg-surface px-2 py-1">

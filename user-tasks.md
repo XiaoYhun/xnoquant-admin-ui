@@ -5,19 +5,17 @@ Sync tasks-progress.md ↔ user-tasks.md; remove tasks the user removes. Do NOT 
 Before do any task, make sure tasks-progress.md synced up
 
 ## Tasks
-- For MFT Charts, when select Stage Test, Simulate or Live, chart should have multiple stage show on chart, with different color, you can check how it works in xno-builder.
-- There is incorrect design Performance tab, and Analysis tab for MFT only, bring them from xno-builder. For current implement, leave them as HFT related
-- The Live stage select button has a disable condition in xno-builder, bring them in
+- Big task: for now refactor this project, to have a global switch between HFT and MFT like this design @https://www.figma.com/design/B7Hh2GpERHUPyy3Zdv35sY/XNO-QUANT-AI?node-id=13964-56847&m=dev
 
-- Help me check if Paper Trading exist in xno-buider, or in xalpha API? write down answer in tasks-progress
-- Help me read project hft-platform and understand how hft apis work, and start implement them on all HFT related features
+So each page: Create Strategy, Strategy List, will depend on what selected, and render the version of it accordingly. @https://www.figma.com/design/B7Hh2GpERHUPyy3Zdv35sY/XNO-QUANT-AI?node-id=13964-56847&m=dev for new menu design
 
-- On click Start Live Trading, update the modal to this design, wire API if have, try to understand the logic here, if select Arbitrage, There 2 fields Account 1 and 2, if no, only 1 field Account
-@https://www.figma.com/design/B7Hh2GpERHUPyy3Zdv35sY/XNO-QUANT-AI?node-id=13982-130240&m=dev
-- Make the Live Trading right panel after click Action button, similar UI and animation with one in Strategy List when click a strategy row.
-- In Create Strategy page, the Plus btn should stick at right side if the Editor list too long, only let the list scroll, but the + button is stick on right side, in other case, the + button should place stick to the last editor 
+For HFT Create Strategy, it should get only HFT strategy list, and also with MFT. 
+Changed design of HFT Create Strategy, only have 3 right tabs, Samples, Features, and Results 
+Design of Samples: @https://www.figma.com/design/B7Hh2GpERHUPyy3Zdv35sY/XNO-QUANT-AI?node-id=14562-20367&m=dev
+Design of Feature: @https://www.figma.com/design/B7Hh2GpERHUPyy3Zdv35sY/XNO-QUANT-AI?node-id=14567-26137&m=dev
+Figure out which API to get the data and render in 2 new tabs.
+
+- UI for features tab is not completed match @https://www.figma.com/design/B7Hh2GpERHUPyy3Zdv35sY/XNO-QUANT-AI?node-id=14567-26137&m=dev
+- For features tab:  when user click Add on any primitive, if they are focusing on a Feature variable iput, add the primitive there, if no, create new feature and add the primitive.
 
 ## Bugs
-- All charts hover tooltip number format weird, check it out
-- The tag (Crypto - BTC) in Toolbar got fixed, it should show current Setting of the strategy.
-- Fix Simulate HFT modal header and buttons, only middle scrollable

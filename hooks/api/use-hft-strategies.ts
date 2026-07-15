@@ -2,16 +2,18 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/api-client";
 import { USE_MOCK, HFT_API_URL } from "@/lib/constant";
 import type { EditorTab } from "@/lib/mock/strategy-builder";
+import { HFT_SAMPLES } from "@/lib/mock/hft-strategy-samples";
 import type { components } from "@/types/api/hft";
 
 // HFT strategies (`GET/POST /api/strategies`, raw — no envelope) surfaced as editor tabs
 // alongside the XALPHA/MFT editors (see use-strategy-builder.ts's useEditors).
-// NOTE: save-code editing and validate/feature-catalog (`POST /api/strategies/validate(-features)`,
-// `GET /api/strategies/feature-catalog`) are not wired yet — the HFT code editor is read-only. The
-// Settings save below DOES use `PUT /api/strategies/{id}` but only for `strategy_type`, re-sending
-// the current code/features unchanged.
+// NOTE: `validate` (whole-code) is not wired yet. `validate-features`/`feature-catalog` are wired
+// in use-hft-features.ts (used by the Features tab). The Settings save below uses
+// `PUT /api/strategies/{id}` and independently updates `strategy_type`/`code`/`features`, re-sending
+// the current value of whichever field isn't passed in so it isn't wiped.
 type Strategy = components["schemas"]["Strategy"];
 export type HftStrategyType = components["schemas"]["StrategyType"];
+export type FeatureDef = components["schemas"]["FeatureDef"];
 
 function toEditorTab(s: Strategy): EditorTab {
   return { id: s.id, name: s.name, code: s.code, type: "hft", created_at: s.created_at };
@@ -38,13 +40,15 @@ export function useCreateHftStrategy() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ name, strategyType }: { name: string; strategyType: HftStrategyType }): Promise<EditorTab> => {
+      // Seed a new HFT strategy with the first sample template matching its type.
+      const code = HFT_SAMPLES[strategyType]?.[0]?.code ?? "";
       if (USE_MOCK) {
-        return { id: crypto.randomUUID(), name, code: "", type: "hft" };
+        return { id: crypto.randomUUID(), name, code, type: "hft" };
       }
       const strategy = await apiPost<Strategy>(`${HFT_API_URL}/api/strategies`, {
         name,
         strategy_type: strategyType,
-        code: "",
+        code,
       });
       return toEditorTab(strategy);
     },
@@ -62,21 +66,32 @@ export function useHftStrategy(id?: string) {
   });
 }
 
-// Save the HFT Settings — only `strategy_type` is editable in the UI. We GET the current strategy
-// first and PUT the full object with just the type changed, so code/features/name aren't wiped
-// (the PUT body is a full `StrategyInput`, not a partial patch).
+// Save the HFT Settings/Features — `strategy_type`, `code`, and `features` are each independently
+// optional. We GET the current strategy first and PUT the full object with just the given fields
+// changed, so anything not passed in isn't wiped (the PUT body is a full `StrategyInput`, not a
+// partial patch).
 export function useUpdateHftStrategy() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, strategyType }: { id: string; strategyType: HftStrategyType }): Promise<void> => {
+    mutationFn: async ({
+      id,
+      strategyType,
+      code,
+      features,
+    }: {
+      id: string;
+      strategyType?: HftStrategyType;
+      code?: string;
+      features?: FeatureDef[];
+    }): Promise<void> => {
       if (USE_MOCK) return;
       const current = await apiGet<Strategy>(`${HFT_API_URL}/api/strategies/${id}`);
       await apiPut<Strategy>(`${HFT_API_URL}/api/strategies/${id}`, {
         name: current.name,
         description: current.description ?? undefined,
-        strategy_type: strategyType,
-        code: current.code,
-        features: current.features,
+        strategy_type: strategyType ?? current.strategy_type,
+        code: code ?? current.code,
+        features: features ?? current.features,
       });
     },
     onSuccess: (_data, { id }) => {

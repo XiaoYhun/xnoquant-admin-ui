@@ -53,10 +53,7 @@ export function StartLiveTradingDialog({ run }: { run: PaperRunRow }) {
   const [open, setOpen] = useState(false);
   const { data: accounts } = useAccounts();
 
-  // DATA GAP: PaperRunRow carries no field for the strategy's HFT execution style
-  // (taker/maker/arbitrage) — `strategyType` is a different concept ("MFT"/"HFT" data
-  // granularity). Falls back to "taker" per spec until that's threaded through.
-  const [executionType, setExecutionType] = useState<StrategyType>("taker");
+  const [executionType, setExecutionType] = useState<StrategyType>(run.executionType);
   const isArbitrage = executionType === "arbitrage";
 
   const [account1, setAccount1] = useState<string>();
@@ -70,13 +67,8 @@ export function StartLiveTradingDialog({ run }: { run: PaperRunRow }) {
 
   const launchRun = useLaunchRun();
 
-  // DATA GAP: PaperRunRow (lib/mock/paper-runs.ts) is a denormalized UI row built for display
-  // (strategyName/symbols labels) — it carries no strategy_id or symbol ids, which the real
-  // `POST /api/runs` LaunchRequest requires. Those only exist on the raw `Run.strategy_id` /
-  // `Run.manifest.symbols[].id` (see lib/transform/runs.ts), and nothing threads the raw Run
-  // into this dialog today. Left null/empty (not fabricated) until that's wired — see report.
-  const strategyId: string | null = null;
-  const symbolIds: string[] = [];
+  const strategyId = run.strategyId;
+  const symbolIds = run.symbolIds;
 
   const accountsReady = isArbitrage ? !!account1 && !!account2 : !!account1;
   const canSubmit = accountsReady && !!strategyId && symbolIds.length > 0 && !launchRun.isPending;
@@ -172,12 +164,6 @@ export function StartLiveTradingDialog({ run }: { run: PaperRunRow }) {
               before proceeding.
             </p>
           </div>
-
-          {!strategyId && (
-            <p className="text-xs text-muted-foreground">
-              Live launch isn&apos;t wired for this run yet — strategy and symbol data aren&apos;t available here.
-            </p>
-          )}
 
           {launchRun.isError && (
             <p className="text-xs text-destructive">

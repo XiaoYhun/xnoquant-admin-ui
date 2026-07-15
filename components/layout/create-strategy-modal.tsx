@@ -27,12 +27,15 @@ export function CreateStrategyModal({
   open,
   onOpenChange,
   onConfirm,
+  mode,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm?: (type: StrategyType, name: string, hftStrategyType?: HftStrategyType) => Promise<void> | void;
+  // When set, the strategy type is fixed to the active lab mode and the MFT/HFT picker is hidden.
+  mode?: StrategyType;
 }) {
-  const [selected, setSelected] = useState<StrategyType>("hft");
+  const [selected, setSelected] = useState<StrategyType>(mode ?? "hft");
   const [hftType, setHftType] = useState<HftStrategyType>("taker");
   const [name, setName] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -86,6 +89,7 @@ export function CreateStrategyModal({
           />
         </div>
 
+        {!mode && (
         <div className="flex flex-col gap-2">
           {OPTIONS.map(({ id, label, icon: Icon }) => {
             const on = selected === id;
@@ -128,6 +132,7 @@ export function CreateStrategyModal({
             );
           })}
         </div>
+        )}
 
         {selected === "hft" && (
           <div className="flex flex-col gap-1.5">

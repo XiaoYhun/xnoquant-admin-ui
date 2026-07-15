@@ -6,11 +6,14 @@ import { SamplesTab } from "./samples-tab";
 import { FeaturesTab } from "./features-tab";
 import { DataTab } from "./data-tab";
 import { OperatorsTab } from "./operators-tab";
+import { HftSamplesTab } from "./hft-samples-tab";
+import { HftFeaturesTab } from "./hft-features-tab";
 
-// Right-panel underline tabs (Figma 14180:15378). Each tab's content lives in its own
-// component file (owned by a subagent).
-const TABS = ["Samples", "Results", "Data", "Features", "Operators"] as const;
-export type ResultsPanelTab = (typeof TABS)[number];
+// Right-panel underline tabs (Figma 14180:15378). The HFT lab shows a reduced set with its own
+// Samples/Features designs (Figma 14562-20367 / 14567-26137); MFT keeps the full catalog set.
+const MFT_TABS = ["Samples", "Results", "Data", "Features", "Operators"] as const;
+const HFT_TABS = ["Samples", "Features", "Results"] as const;
+export type ResultsPanelTab = (typeof MFT_TABS)[number];
 
 export function ResultsPanel({
   onUseTemplate,
@@ -28,10 +31,11 @@ export function ResultsPanel({
   const [internalTab, setInternalTab] = useState<ResultsPanelTab>("Results");
   const tab = controlledTab ?? internalTab;
   const setTab = onTabChange ?? setInternalTab;
+  const tabs: readonly ResultsPanelTab[] = variant === "hft" ? HFT_TABS : MFT_TABS;
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
       <div className="flex h-11 shrink-0 items-stretch overflow-x-auto border-b border-border">
-        {TABS.map((t) => {
+        {tabs.map((t) => {
           const on = tab === t;
           return (
             <button
@@ -54,11 +58,12 @@ export function ResultsPanel({
         })}
       </div>
       <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto [scrollbar-gutter:stable]">
-        {tab === "Samples" && <SamplesTab onUseTemplate={onUseTemplate} />}
+        {tab === "Samples" &&
+          (variant === "hft" ? <HftSamplesTab onUseTemplate={onUseTemplate} /> : <SamplesTab onUseTemplate={onUseTemplate} />)}
         {tab === "Results" && <ResultsTab variant={variant} strategyId={strategyId} />}
-        {tab === "Data" && <DataTab />}
-        {tab === "Features" && <FeaturesTab />}
-        {tab === "Operators" && <OperatorsTab />}
+        {tab === "Features" && (variant === "hft" ? <HftFeaturesTab strategyId={strategyId} /> : <FeaturesTab />)}
+        {tab === "Data" && variant === "mft" && <DataTab />}
+        {tab === "Operators" && variant === "mft" && <OperatorsTab />}
       </div>
     </div>
   );

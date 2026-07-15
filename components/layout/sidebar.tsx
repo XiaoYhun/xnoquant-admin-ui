@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { Logout, AltArrowDown, DoubleAltArrowLeft, DoubleAltArrowRight } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
+import { useModeStore, type Mode } from "@/store/mode-store";
 import { NAV_GROUPS, type NavItem } from "./nav-config";
 
 // Active nav item = green gradient pill with near-black text (from Figma).
@@ -17,6 +18,8 @@ const LABEL = cn("overflow-hidden whitespace-nowrap", TRANSITION);
 export function Sidebar() {
   const pathname = usePathname();
   const { logout } = useAuth();
+  const mode = useModeStore((s) => s.mode);
+  const setMode = useModeStore((s) => s.setMode);
   const [collapsed, setCollapsed] = useState(false);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>(() => {
     const init: Record<string, boolean> = {};
@@ -70,13 +73,21 @@ export function Sidebar() {
         </button>
       </div>
 
+      {/* HFT/MFT lab toggle (Figma 13964-56847) */}
+      <div className="shrink-0 px-3 pt-4">
+        <ModeToggle mode={mode} onChange={setMode} collapsed={collapsed} />
+      </div>
+
       {/* Menu */}
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-x-hidden overflow-y-auto border-b border-border px-3 py-4">
         {NAV_GROUPS.map((group, i) => {
+          // Filter items by the current lab mode; drop groups that become empty.
+          const items = group.items.filter((item) => !item.modes || item.modes.includes(mode));
+          if (items.length === 0) return null;
           if (!group.heading) {
             return (
               <Fragment key={`group-${i}`}>
-                {group.items.map((item) => (
+                {items.map((item) => (
                   <NavRow key={item.href} item={item} active={isActive(item.href)} collapsed={collapsed} />
                 ))}
               </Fragment>
@@ -91,7 +102,7 @@ export function Sidebar() {
               onToggle={() => toggleSection(heading)}
               collapsed={collapsed}
             >
-              {group.items.map((item) => (
+              {items.map((item) => (
                 <NavRow key={item.href} item={item} active={isActive(item.href)} collapsed={collapsed} />
               ))}
             </Section>
@@ -126,6 +137,50 @@ export function Sidebar() {
         </button>
       </div>
     </aside>
+  );
+}
+
+const MODES: { value: Mode; label: string }[] = [
+  { value: "hft", label: "HFT LAB" },
+  { value: "mft", label: "MFT LAB" },
+];
+
+// Segmented HFT/MFT toggle (Figma 13964-56847). Collapsed: a single pill showing the current
+// mode that flips to the other on click.
+function ModeToggle({ mode, onChange, collapsed }: { mode: Mode; onChange: (m: Mode) => void; collapsed: boolean }) {
+  if (collapsed) {
+    const other: Mode = mode === "hft" ? "mft" : "hft";
+    return (
+      <button
+        type="button"
+        onClick={() => onChange(other)}
+        aria-label={`Switch to ${other.toUpperCase()} lab`}
+        title={`${mode.toUpperCase()} lab — click to switch`}
+        className="flex h-8 w-full cursor-pointer items-center justify-center rounded-full bg-secondary text-[11px] font-semibold text-white shadow-sm"
+      >
+        {mode.toUpperCase()}
+      </button>
+    );
+  }
+  return (
+    <div className="flex items-center gap-1 rounded-full border border-border bg-background p-1">
+      {MODES.map((m) => {
+        const on = mode === m.value;
+        return (
+          <button
+            key={m.value}
+            type="button"
+            onClick={() => onChange(m.value)}
+            className={cn(
+              "flex-1 cursor-pointer rounded-full px-2 py-1.5 text-center text-xs font-semibold transition-colors whitespace-nowrap overflow-hidden",
+              on ? "bg-secondary text-white shadow-sm" : "text-muted-foreground hover:text-white",
+            )}
+          >
+            {m.label}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 

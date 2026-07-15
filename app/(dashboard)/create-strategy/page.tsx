@@ -8,9 +8,10 @@ import { ConsolePanel } from "./console-panel";
 import { ResultsPanel, type ResultsPanelTab } from "./results-panel";
 import { type EditorTab } from "@/lib/mock/strategy-builder";
 import { useEditors, useCreateEditor, useSimulateEditor, useUpdateEditor, useDeleteEditor, fetchEditors } from "@/hooks/api/use-strategy-builder";
-import { useHftStrategies, useCreateHftStrategy, useDeleteHftStrategy, type HftStrategyType } from "@/hooks/api/use-hft-strategies";
+import { useHftStrategies, useCreateHftStrategy, useUpdateHftStrategy, useDeleteHftStrategy, type HftStrategyType } from "@/hooks/api/use-hft-strategies";
 import { CreateStrategyModal } from "@/components/layout/create-strategy-modal";
 import { useConsoleLog } from "@/store/console-log-store";
+import { useMode, type Mode } from "@/store/mode-store";
 import { cn } from "@/lib/utils";
 
 // Draggable two-pane split (editor | results). Left width is a % clamped to [30, 70].
@@ -67,24 +68,25 @@ function ResizableSplit({ left, right }: { left: ReactNode; right: ReactNode }) 
 }
 
 export default function Page() {
+  const mode = useMode();
   const { data: mftEditors } = useEditors();
   const { data: hftEditors } = useHftStrategies();
-  // StrategyBuilder snapshots `initialEditors` into state once at mount, so BOTH lists must be
-  // settled first — otherwise the HFT list (a separate, slower query to another host) resolves
-  // after mount and gets silently dropped from the editors bar. `hftEditors` becomes `[]` (not
-  // undefined) even on failure, so this never blocks the builder on a down HFT backend.
-  if (!mftEditors || mftEditors.length === 0 || hftEditors === undefined) {
+  // Editors are scoped to the active lab mode: HFT lab shows only HFT strategies, MFT lab only
+  // MFT editors (Figma 13964-56847). Wait for the active mode's list to settle. `hftEditors`
+  // becomes `[]` (not undefined) even on failure, so a down HFT backend never blocks the page.
+  const list = mode === "hft" ? hftEditors : mftEditors;
+  if (list === undefined) {
     return <div className="min-h-0 flex-1 bg-surface p-3" />;
   }
-  // Interleave both sources chronologically (oldest first) instead of grouping MFT then HFT.
   const createdAt = (e: EditorTab) => (e.created_at ? new Date(e.created_at).getTime() : 0);
-  const initialEditors = [...mftEditors, ...hftEditors].sort((a, b) => createdAt(a) - createdAt(b));
-  return <StrategyBuilder initialEditors={initialEditors} />;
+  const editorsForMode = [...list].sort((a, b) => createdAt(a) - createdAt(b));
+  // Remount per mode so each lab is its own workspace (fresh active tab + local editor state).
+  return <StrategyBuilder key={mode} mode={mode} initialEditors={editorsForMode} />;
 }
 
-function StrategyBuilder({ initialEditors }: { initialEditors: EditorTab[] }) {
+function StrategyBuilder({ mode, initialEditors }: { mode: Mode; initialEditors: EditorTab[] }) {
   const [editors, setEditors] = useState<EditorTab[]>(initialEditors);
-  const [activeId, setActiveId] = useState(initialEditors[0].id);
+  const [activeId, setActiveId] = useState(initialEditors[0]?.id ?? "");
   const active = editors.find((e) => e.id === activeId) ?? editors[0];
   const [consoleOpen, setConsoleOpen] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
@@ -93,6 +95,7 @@ function StrategyBuilder({ initialEditors }: { initialEditors: EditorTab[] }) {
   const createEditor = useCreateEditor();
   const simulateEditor = useSimulateEditor();
   const updateEditor = useUpdateEditor();
+  const updateHftStrategy = useUpdateHftStrategy();
   const deleteEditor = useDeleteEditor();
   const deleteHftStrategy = useDeleteHftStrategy();
   const qc = useQueryClient();
@@ -113,6 +116,12 @@ function StrategyBuilder({ initialEditors }: { initialEditors: EditorTab[] }) {
     // Save the on-screen code first (like xno-builder): otherwise the run uses the stale server
     // copy, which for a freshly-created editor is empty and fails the simulation.
     const editor = editors.find((e) => e.id === editorId);
+    if (editor?.type === "hft") {
+      // HFT simulation is deferred/mock — just persist the edited code and stop.
+      await updateHftStrategy.mutateAsync({ id: editorId, code: editor.code });
+      addLog("info", "HFT code saved (simulation not available yet)");
+      return;
+    }
     await updateEditor.mutateAsync({ id: editorId, code: editor?.code ?? "" });
     await simulateEditor.mutateAsync(editorId);
     await qc.invalidateQueries({ queryKey: ["strategy-builder", "editors"] });
@@ -139,6 +148,8 @@ function StrategyBuilder({ initialEditors }: { initialEditors: EditorTab[] }) {
     setEditors((prev) => prev.map((e) => (e.id === activeId ? { ...e, code } : e)));
     addLog("info", "Loaded sample code into the editor");
   };
+  // Monaco keystrokes -> active editor's code, no logging.
+  const handleCodeChange = (code: string) => setEditors((prev) => prev.map((e) => (e.id === activeId ? { ...e, code } : e)));
   // Settings popover (MFT Market/Universe/Train ratio) persists via the toolbar; reflect the
   // saved values into local editor state so the cog shows the change without a reload.
   const handleSettingsSaved = (changes: { market?: string; universe?: string; train_ratio?: number }) =>
@@ -157,29 +168,35 @@ function StrategyBuilder({ initialEditors }: { initialEditors: EditorTab[] }) {
         onSimulate={handleSimulate}
         onSettingsSaved={handleSettingsSaved}
       />
-      <CodeEditor code={active?.code ?? ""} />
+      <CodeEditor code={active?.code ?? ""} onChange={handleCodeChange} language={active?.type === "hft" ? "rust" : "python"} />
       <ConsolePanel open={consoleOpen} onOpenChange={setConsoleOpen} />
     </div>
   );
 
-  const resultsStrategyId = active.type === "hft" ? active.id : active.strategy_ids?.at(-1);
+  const resultsStrategyId = active ? (active.type === "hft" ? active.id : active.strategy_ids?.at(-1)) : undefined;
 
   return (
     <div className="p-3 bg-surface flex-1 min-h-0">
       <main className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-surface rounded-[16px] border">
         <EditorsBar editors={editors} activeId={activeId} onSelect={setActiveId} onClose={closeEditor} onAdd={() => setCreateOpen(true)} />
-        <div className="flex min-h-0 min-w-0 flex-1">
-          <ResizableSplit
-            left={left}
-            right={
-              <div className="h-full min-h-0 overflow-hidden bg-background">
-                <ResultsPanel onUseTemplate={setActiveCode} variant={active.type} strategyId={resultsStrategyId} tab={resultsTab} onTabChange={setResultsTab} />
-              </div>
-            }
-          />
-        </div>
+        {active ? (
+          <div className="flex min-h-0 min-w-0 flex-1">
+            <ResizableSplit
+              left={left}
+              right={
+                <div className="h-full min-h-0 overflow-hidden bg-background">
+                  <ResultsPanel onUseTemplate={setActiveCode} variant={active.type} strategyId={resultsStrategyId} tab={resultsTab} onTabChange={setResultsTab} />
+                </div>
+              }
+            />
+          </div>
+        ) : (
+          <div className="flex flex-1 items-center justify-center p-6 text-center text-sm text-muted-foreground">
+            No {mode.toUpperCase()} strategies yet — click the + above to create one.
+          </div>
+        )}
       </main>
-      <CreateStrategyModal open={createOpen} onOpenChange={setCreateOpen} onConfirm={addEditor} />
+      <CreateStrategyModal open={createOpen} onOpenChange={setCreateOpen} onConfirm={addEditor} mode={mode} />
     </div>
   );
 }

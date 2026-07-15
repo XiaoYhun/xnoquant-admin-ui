@@ -1,7 +1,6 @@
 "use client";
 import { useMemo, useState } from "react";
 import { MinimalisticMagnifer } from "@solar-icons/react";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Pagination,
   PaginationContent,
@@ -11,21 +10,28 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { useStrategies } from "@/hooks/api/use-strategies";
+import { useMode } from "@/store/mode-store";
 import { StrategyAnalyticsHeader } from "./strategy-analytics";
 import { StrategiesTable } from "./strategies-table";
-import type { StrategyGroup } from "@/lib/mock/strategies";
 
 const PAGE_SIZE = 10;
-const GROUP_TABS: { value: StrategyGroup; label: string }[] = [
-  { value: "MFT", label: "MFT Strategies" },
-  { value: "HFT", label: "HFT Strategies" },
-];
 
 export default function Page() {
   const { data: strategies = [], isLoading } = useStrategies();
+  const mode = useMode();
+  // The MFT/HFT split is driven by the global lab mode (Figma 13964-56847) — the old
+  // in-header toggle was removed. StrategyRow.group is "MFT"/"HFT" (uppercase).
+  const group = mode === "hft" ? "HFT" : "MFT";
   const [search, setSearch] = useState("");
-  const [group, setGroup] = useState<StrategyGroup>("MFT");
   const [page, setPage] = useState(1);
+
+  // Reset to the first page whenever the mode switches (row set changes) — React's
+  // adjust-state-during-render pattern, avoiding a setState-in-effect.
+  const [prevMode, setPrevMode] = useState(mode);
+  if (prevMode !== mode) {
+    setPrevMode(mode);
+    setPage(1);
+  }
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -57,21 +63,6 @@ export default function Page() {
           />
           <MinimalisticMagnifer size={20} weight="Outline" className="shrink-0 text-muted-foreground" />
         </div>
-        <Tabs
-          value={group}
-          onValueChange={(v) => {
-            setGroup((v as StrategyGroup) ?? "MFT");
-            setPage(1);
-          }}
-        >
-          <TabsList>
-            {GROUP_TABS.map((t) => (
-              <TabsTrigger key={t.value} value={t.value}>
-                {t.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
       </div>
 
       <section className="flex flex-col overflow-hidden rounded-xl border border-border bg-background">

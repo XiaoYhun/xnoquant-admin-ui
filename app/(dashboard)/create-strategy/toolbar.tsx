@@ -18,6 +18,10 @@ import { useConsoleLog } from "@/store/console-log-store";
 // Self-contained: strategy name is local state, all buttons are no-ops (page-level
 // wiring lands with the shell owner).
 
+// HFT market (run-time data_kind) is UI-only — no strategy field maps to it.
+const HFT_MARKET_LABEL: Record<string, string> = { "tick-l2": "Tick / L2", "bar-ohlc": "Bar / OHLC" };
+const HFT_TYPE_LABEL: Record<HftStrategyType, string> = { taker: "Taker", maker: "Maker", arbitrage: "Arbitrage" };
+
 function IconButton({
   icon: Icon,
   label,
@@ -43,12 +47,21 @@ function IconButton({
 // Bar/OHLC) is display-only (no strategy field maps to it — it's a run-time data_kind), while Type
 // (strategy_type) is saved via `useUpdateHftStrategy` (PUT /api/strategies/{id}). Keyed by `id` so
 // switching editors remounts with the new strategy's values.
-function HftSettingsFields({ id, onClose }: { id: string; onClose: () => void }) {
+function HftSettingsFields({
+  id,
+  market,
+  onMarketChange,
+  onClose,
+}: {
+  id: string;
+  market: string;
+  onMarketChange: (market: string) => void;
+  onClose: () => void;
+}) {
   const { data: strategy } = useHftStrategy(id);
   const updateStrategy = useUpdateHftStrategy();
   const addLog = useConsoleLog((s) => s.addLog);
 
-  const [draftMarket, setDraftMarket] = useState("tick-l2");
   // Derive Type from the fetched strategy until the user overrides it (avoids seeding via an
   // effect — the strategy loads async, so `typeOverride ?? loaded ?? default`). Market has no
   // backend field to seed from.
@@ -73,7 +86,7 @@ function HftSettingsFields({ id, onClose }: { id: string; onClose: () => void })
       <p className="text-sm font-semibold text-white">Settings</p>
       <div className="flex flex-col gap-1">
         <span className="text-[10px] font-medium text-white">Market</span>
-        <Select value={draftMarket} onValueChange={setDraftMarket}>
+        <Select value={market} onValueChange={onMarketChange}>
           <SelectTrigger className="h-8 w-full rounded-full border-border bg-background! px-3 text-xs text-white">
             <SelectValue />
           </SelectTrigger>
@@ -226,6 +239,8 @@ function SettingsMenu({
   market,
   universe,
   trainRatio,
+  hftMarket,
+  onHftMarketChange,
   onSettingsSaved,
 }: {
   type: "mft" | "hft";
@@ -233,6 +248,8 @@ function SettingsMenu({
   market?: string;
   universe?: string;
   trainRatio?: number;
+  hftMarket: string;
+  onHftMarketChange: (market: string) => void;
   onSettingsSaved?: (changes: { market?: string; universe?: string; train_ratio?: number }) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -260,7 +277,13 @@ function SettingsMenu({
             onClose={() => setOpen(false)}
           />
         ) : (
-          <HftSettingsFields key={id} id={id} onClose={() => setOpen(false)} />
+          <HftSettingsFields
+            key={id}
+            id={id}
+            market={hftMarket}
+            onMarketChange={onHftMarketChange}
+            onClose={() => setOpen(false)}
+          />
         )}
       </PopoverContent>
     </Popover>
@@ -291,6 +314,11 @@ export function Toolbar({
   const [simulateOpen, setSimulateOpen] = useState(false);
   const [mftSimStatus, setMftSimStatus] = useState<"idle" | "running" | "done" | "error">("idle");
   const addLog = useConsoleLog((s) => s.addLog);
+  // HFT Market/Type pill: Market is UI-only (default tick/L2, shared with the Settings popover);
+  // Type comes from the strategy's `strategy_type`.
+  const [hftMarket, setHftMarket] = useState("tick-l2");
+  const { data: hftStrategy } = useHftStrategy(type === "hft" ? id : undefined);
+  const hftType = hftStrategy?.strategy_type;
 
   const handleSimulateClick = async () => {
     if (type === "hft") {
@@ -360,7 +388,7 @@ export function Toolbar({
           <span className="text-xs text-muted-foreground">In sample</span>
         </span>
 
-        {(market || universe) && (
+        {type === "mft" && (market || universe) && (
           <span className="inline-flex shrink-0 items-center gap-3 rounded-3xl border border-white/50 bg-gradient-to-b from-[rgba(123,97,255,0.8)] to-[rgba(123,97,255,0.2)] py-1 pl-2 pr-2 text-xs text-white backdrop-blur-[2px]">
             {market && (
               <span className="inline-flex items-center gap-1.5">
@@ -376,6 +404,21 @@ export function Toolbar({
             )}
           </span>
         )}
+
+        {type === "hft" && (
+          <span className="inline-flex shrink-0 items-center gap-3 rounded-3xl border border-white/50 bg-gradient-to-b from-[rgba(103,225,193,0.8)] to-[rgba(103,225,193,0.2)] py-1 pr-2 pl-2 text-xs text-white backdrop-blur-[2px]">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="size-1.5 shrink-0 rounded-full bg-white" />
+              {HFT_MARKET_LABEL[hftMarket] ?? hftMarket}
+            </span>
+            {hftType && (
+              <span className="inline-flex items-center gap-1.5">
+                <span className="size-1.5 shrink-0 rounded-full bg-white" />
+                {HFT_TYPE_LABEL[hftType]}
+              </span>
+            )}
+          </span>
+        )}
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
@@ -385,6 +428,8 @@ export function Toolbar({
           market={market}
           universe={universe}
           trainRatio={trainRatio}
+          hftMarket={hftMarket}
+          onHftMarketChange={setHftMarket}
           onSettingsSaved={onSettingsSaved}
         />
         <IconButton icon={SidebarCode} label="Toggle console" onClick={onToggleConsole} />

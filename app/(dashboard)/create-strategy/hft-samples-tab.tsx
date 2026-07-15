@@ -15,6 +15,7 @@ export function HftSamplesTab({ onUseTemplate }: { onUseTemplate?: (code: string
   const [type, setType] = useState<StrategyType>("taker");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const samples: HftSample[] = HFT_SAMPLES[type];
+  const ref = HFT_SCRIPT_API_REFERENCE[type];
 
   return (
     <div className="flex flex-col gap-4 p-4">
@@ -84,18 +85,15 @@ export function HftSamplesTab({ onUseTemplate }: { onUseTemplate?: (code: string
           <NotebookBookmark weight="Outline" className="size-5 text-muted-foreground" />
           <h3 className="text-sm font-medium text-white">Script API Reference</h3>
         </div>
-        <div className="rounded-xl border border-border bg-surface p-3 text-xs leading-relaxed text-muted-foreground">
-          <p>
-            Runs once per tick. Call return target_pos_intent(...) to act this tick; falling through holds (no
-            order).
-          </p>
+        <div className="rounded-xl border border-border p-3 text-xs leading-relaxed text-muted-foreground">
+          <p>{ref.intro}</p>
 
           <p className="mt-3 font-semibold text-white">Function</p>
-          <p className="mt-2 font-mono text-xs font-semibold text-white">{HFT_SCRIPT_API_REFERENCE[0].name}</p>
-          <p className="mt-0.5">{HFT_SCRIPT_API_REFERENCE[0].doc}</p>
+          <p className="mt-2 font-mono text-xs font-semibold text-white">{ref.functionSig}</p>
+          <p className="mt-0.5">{ref.functionDoc}</p>
 
           <p className="mt-3 font-semibold text-white">Scope</p>
-          {HFT_SCRIPT_API_REFERENCE.slice(1).map((entry) => (
+          {ref.scope.map((entry) => (
             <div key={entry.name} className="mt-2">
               <p className="font-mono text-xs font-semibold text-white">{entry.name}</p>
               <p className="mt-0.5">{entry.doc}</p>

@@ -106,27 +106,60 @@ let fee_rate = arb_ctx.taker_fee_leg1 + arb_ctx.maker_fee_leg2;
   ],
 };
 
-// Script API Reference (Figma 14562:20713) — static Rhai API doc text.
-// index 0 documents the `target_pos_intent` function; indices 1-4 document scope variables.
-export const HFT_SCRIPT_API_REFERENCE: { name: string; doc: string }[] = [
-  {
-    name: "target_pos_intent(symbol: int, qty: float, style: string)",
-    doc: 'symbol = engine SymbolId (pass the symbol variable below). qty = signed target position: positive long, negative short, 0.0 flattens. style = "market" (sweep now), "cross" (marketable at touch), or "mid" (passive at mid).',
+// Script API Reference (Figma 14562:20713) — static Rhai API doc text, per strategy type.
+// Taker/Maker share the `target_pos_intent` API; Arbitrage uses `arbitrage_intent` + `arb_ctx`.
+export type ScriptApiReference = {
+  intro: string;
+  functionSig: string;
+  functionDoc: string;
+  scope: { name: string; doc: string }[];
+};
+
+const TARGET_POS_INTENT_REFERENCE: ScriptApiReference = {
+  intro: "Runs once per tick. Call return target_pos_intent(...) to act this tick; falling through holds (no order).",
+  functionSig: "target_pos_intent(symbol: int, qty: float, style: string)",
+  functionDoc:
+    'symbol = engine SymbolId (pass the symbol variable below). qty = signed target position: positive long, negative short, 0.0 flattens. style = "market" (sweep now), "cross" (marketable at touch), or "mid" (passive at mid).',
+  scope: [
+    {
+      name: "features",
+      doc: "this strategy's feature values, in the order defined above — features[0], features[1], … NaN until that feature's window warms up.",
+    },
+    { name: "symbol", doc: "this run's SymbolId — pass straight to target_pos_intent." },
+    { name: "positions", doc: "signed position per symbol, indexed by SymbolId." },
+    {
+      name: "asset_features",
+      doc: "features[] per symbol — cross-sectional access via asset_features[sym_id][feature_idx].",
+    },
+  ],
+};
+
+export const HFT_SCRIPT_API_REFERENCE: Record<"taker" | "maker" | "arbitrage", ScriptApiReference> = {
+  taker: TARGET_POS_INTENT_REFERENCE,
+  maker: TARGET_POS_INTENT_REFERENCE,
+  arbitrage: {
+    intro:
+      "Runs once per tick when both legs' order books are fresh. Call return arbitrage_intent(...) to act this tick; falling through holds (no order).",
+    functionSig: "arbitrage_intent(qty: float, buy_leg1: bool, price_leg2: float)",
+    functionDoc:
+      "qty = leg1 base-asset amount for this clip. buy_leg1 = true buys leg1/sells leg2, false sells leg1/buys leg2. price_leg2 = limit price to post on leg2.",
+    scope: [
+      {
+        name: "arb_ctx.ask_vwap_leg1 / arb_ctx.bid_vwap_leg1",
+        doc: "leg1 VWAP-sweep price at the configured order size.",
+      },
+      { name: "arb_ctx.best_bid_leg2 / arb_ctx.best_ask_leg2", doc: "leg2 L1 quote." },
+      { name: "arb_ctx.taker_fee_leg1 / arb_ctx.maker_fee_leg2", doc: "fee rates for the net-edge calc." },
+      { name: "arb_ctx.pos_leg1 / arb_ctx.pos_leg2", doc: "current signed positions on each leg." },
+      { name: "arb_ctx.symbol_id_leg1 / arb_ctx.symbol_id_leg2", doc: "leg symbol ids." },
+      {
+        name: "arb_ctx.locked_prices_a / arb_ctx.locked_prices_b",
+        doc: "leg2 prices already locked by an in-flight intent — check .contains(price) to avoid duplicates.",
+      },
+      {
+        name: "<param name>",
+        doc: "strategy params (defined at launch) are pushed as plain top-level variables, e.g. threshold, order_size_value, max_position.",
+      },
+    ],
   },
-  {
-    name: "features",
-    doc: "this strategy's feature values, in the order defined above — features[0], features[1], … NaN until that feature's window warms up.",
-  },
-  {
-    name: "symbol",
-    doc: "this run's SymbolId — pass straight to target_pos_intent.",
-  },
-  {
-    name: "positions",
-    doc: "signed position per symbol, indexed by SymbolId.",
-  },
-  {
-    name: "asset_features",
-    doc: "features[] per symbol — cross-sectional access via asset_features[sym_id][feature_idx].",
-  },
-];
+};

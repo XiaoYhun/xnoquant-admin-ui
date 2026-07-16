@@ -47,7 +47,7 @@ export function FeaturesTab() {
                     variant="outline"
                     className="shrink-0 rounded-lg border-primary/20 bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary"
                   >
-                    Returns: {f.returns}
+                    {f.returns}
                   </Badge>
                 </div>
                 <p className="truncate font-mono text-sm text-[#66d9ef]">{f.signature}</p>

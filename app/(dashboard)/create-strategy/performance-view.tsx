@@ -52,7 +52,7 @@ function SummaryMetricCell({ metric }: { metric: SummaryMetric }) {
     <div className="flex min-w-0 flex-col gap-1">
       <span className="truncate text-xs text-muted-foreground">{label}</span>
       <span className="flex flex-wrap items-end gap-1">
-        <span className={cn("text-base font-semibold leading-5", valueText)}>{value}</span>
+        <span className={cn("text-[14px] font-semibold leading-5", valueText)}>{value}</span>
         {unit && <span className="text-[10px] leading-[14px] text-muted-foreground">{unit}</span>}
       </span>
       {delta && (

@@ -11,6 +11,7 @@ import { useAccounts } from "@/hooks/api/use-accounts";
 import { useVenues } from "@/hooks/api/use-venues";
 import { useSymbols } from "@/hooks/api/use-symbols";
 import { useLaunchRun, type LaunchRequest } from "@/hooks/api/use-runs";
+import type { HftStrategyType } from "@/hooks/api/use-hft-strategies";
 import type { RunMode } from "@/types/domain";
 
 // Figma node 14197:30033 — "Simulate" configuration modal opened from the toolbar's Simulate
@@ -18,6 +19,26 @@ import type { RunMode } from "@/types/domain";
 
 type BalanceRow = { currency: string; amount: number };
 const DEFAULT_BALANCES: BalanceRow[] = [{ currency: "USDT", amount: 100000 }];
+
+// Bar `interval` vocabulary is Binance's kline naming, which the DNSE fetcher maps onto its own
+// resolutions. Limited to the set both venues support — DNSE has no 4h, so offering Binance's
+// full list would 422 on a DNSE account.
+export const INTERVALS = ["1m", "5m", "15m", "1h", "1d"];
+
+// Launch-time market, chosen in the toolbar's Settings popover. Lives here (not in toolbar.tsx) so
+// both the toolbar pill and this modal read one definition — toolbar already imports from here, so
+// the other direction would be an import cycle.
+export const HFT_MARKET_LABEL: Record<string, string> = { "tick-l2": "Tick / L2 (HFT)", "bar-ohlc": "Bar / OHLC (MFT)" };
+
+// `strategy_type` — the API-backed field, edited in the toolbar's Settings popover and shown
+// read-only here. Lives alongside HFT_MARKET_LABEL for the same import-direction reason.
+export const HFT_TYPE_LABEL: Record<HftStrategyType, string> = { taker: "Taker", maker: "Maker", arbitrage: "Arbitrage" };
+
+// Shared by the Market/Interval pills so the two rows keep the same size and alignment.
+const PILL_TRIGGER =
+  "h-auto w-auto gap-1.5 rounded-full border-border bg-background! px-2.5 py-1 text-xs font-medium text-white shadow-xs";
+
+const todayISO = () => new Date().toISOString().slice(0, 10);
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -52,18 +73,34 @@ export function SimulateModal({
   onOpenChange,
   strategyName,
   strategyId,
+  hftType,
+  hftMarket,
+  onHftMarketChange,
+  hftInterval,
+  onHftIntervalChange,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   strategyName: string;
   strategyId: string;
+  /** `strategy_type` from the API — read-only here; the Settings popover is where it's edited. */
+  hftType?: HftStrategyType;
+  // Market/interval are launch-time only (no strategy field maps to them) and are picked here.
+  // The toolbar owns the state so its pill reflects the choice without a second source of truth.
+  /** `tick-l2` | `bar-ohlc` — drives `data_kind`. */
+  hftMarket: string;
+  onHftMarketChange: (market: string) => void;
+  /** Bar size for `bar-ohlc` runs. */
+  hftInterval: string;
+  onHftIntervalChange: (interval: string) => void;
 }) {
   const { data: accounts } = useAccounts();
   const [accountId, setAccountId] = useState<string>();
   const account = accounts?.find((a) => a.id === accountId);
 
   const { data: venues } = useVenues();
-  const isDnseAccount = venues?.find((v) => v.id === account?.venue_id)?.venue_type === "dnse";
+  const venueType = venues?.find((v) => v.id === account?.venue_id)?.venue_type;
+  const isDnseAccount = venueType === "dnse";
   const [otpPasscode, setOtpPasscode] = useState("");
 
   const { data: symbols } = useSymbols(account?.venue_id);
@@ -96,6 +133,13 @@ export function SimulateModal({
   const [mode, setMode] = useState<RunMode>("paper");
   const [liveConfirmed, setLiveConfirmed] = useState(false);
 
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+
+  // Market alone decides the run's `data_kind`: Bar / OHLC (MFT) carries an interval, Tick / L2
+  // (HFT) has no bar size to pick.
+  const isBar = hftMarket === "bar-ohlc";
+
   const launchRun = useLaunchRun();
 
   const handleAccountChange = (value: string) => {
@@ -105,12 +149,27 @@ export function SimulateModal({
   };
 
   const handleModeChange = (value: string) => {
-    if (value !== "paper" && value !== "live") return;
+    if (value !== "paper" && value !== "live" && value !== "backtest") return;
     setMode(value);
     if (value !== "live") setLiveConfirmed(false);
   };
 
-  const canSubmit = !!accountId && symbolIds.length > 0 && (mode !== "live" || liveConfirmed) && !launchRun.isPending;
+  // Mirrors the server's own checks so a bad range is caught before the POST rather than as a 422.
+  const rangeError =
+    mode !== "backtest" || !startDate || !endDate
+      ? undefined
+      : startDate > endDate
+        ? "Start date must be on or before end date."
+        : endDate > todayISO()
+          ? "End date cannot be in the future."
+          : undefined;
+
+  const canSubmit =
+    !!accountId &&
+    symbolIds.length > 0 &&
+    (mode !== "live" || liveConfirmed) &&
+    (mode !== "backtest" || (!!startDate && !!endDate && !rangeError)) &&
+    !launchRun.isPending;
 
   const handleSubmit = () => {
     if (!canSubmit || !accountId) return;
@@ -119,14 +178,15 @@ export function SimulateModal({
       account_id: accountId,
       symbol_ids: symbolIds,
       mode,
-      data_kind: { kind: "tick" },
+      data_kind: isBar ? { kind: "bar", interval: hftInterval } : { kind: "tick" },
+      ...(mode === "backtest" ? { backtest_range: { start_date: startDate, end_date: endDate } } : {}),
       execution: {
         max_slice_size: maxSliceSize,
         twap_interval_ms: twapIntervalMs,
         chase_threshold_ticks: chaseThresholdTicks,
         // cancel_ratio/latency are simulation-only (ignored by the live gateway) — only send them
-        // for paper, matching the schema note that live falls back to harmless defaults.
-        ...(mode === "paper"
+        // for paper/backtest, matching the schema note that live falls back to harmless defaults.
+        ...(mode !== "live"
           ? {
               cancel_ratio: cancelRatio,
               latency:
@@ -169,7 +229,7 @@ export function SimulateModal({
 
         <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
           <p className="text-sm text-muted-foreground">
-            Bind this strategy to an account and one more symbols, then launch in paper or live mode.
+            Bind this strategy to an account and one more symbols, then launch in paper, backtest or live mode.
           </p>
 
           <div className="flex flex-col gap-2 rounded-xl border border-border bg-surface px-4 py-3">
@@ -178,17 +238,47 @@ export function SimulateModal({
               <span className="text-sm font-medium text-white">{strategyName}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">Timeframe</span>
-              <span className="text-sm font-medium text-white">5min</span>
+              <span className="text-xs text-muted-foreground">Type</span>
+              <span className="text-sm font-medium text-white">{hftType ? HFT_TYPE_LABEL[hftType] : "—"}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-xs text-muted-foreground">Market</span>
-              <span className="text-sm font-medium text-white">Crypto</span>
+              <Select value={hftMarket} onValueChange={(v) => v && onHftMarketChange(v)}>
+                <SelectTrigger className={PILL_TRIGGER}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-background!">
+                  {Object.entries(HFT_MARKET_LABEL).map(([value, label]) => (
+                    <SelectItem key={value} value={value} className="text-xs">
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
+            {/* Bar / OHLC (MFT) only — Tick / L2 (HFT) has no interval. */}
+            {isBar && (
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Interval</span>
+                <Select value={hftInterval} onValueChange={(v) => v && onHftIntervalChange(v)}>
+                  <SelectTrigger className={PILL_TRIGGER}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-background!">
+                    {INTERVALS.map((i) => (
+                      <SelectItem key={i} value={i} className="text-xs">
+                        {i}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="flex items-center justify-between">
               <span className="text-xs text-muted-foreground">Mode</span>
               <Tabs value={mode} onValueChange={handleModeChange}>
                 <TabsList>
+                  <TabsTrigger value="backtest">Backtest</TabsTrigger>
                   <TabsTrigger value="paper">Paper</TabsTrigger>
                   <TabsTrigger value="live">Live</TabsTrigger>
                 </TabsList>
@@ -282,6 +372,31 @@ export function SimulateModal({
               </Popover>
             </Field>
 
+            {mode === "backtest" && (
+              <>
+                <div className="flex gap-2">
+                  <Field label="Date from">
+                    <PillInput
+                      type="date"
+                      value={startDate}
+                      max={endDate || todayISO()}
+                      onChange={(e) => setStartDate(e.target.value)}
+                    />
+                  </Field>
+                  <Field label="Date to">
+                    <PillInput
+                      type="date"
+                      value={endDate}
+                      min={startDate || undefined}
+                      max={todayISO()}
+                      onChange={(e) => setEndDate(e.target.value)}
+                    />
+                  </Field>
+                </div>
+                {rangeError && <p className="text-xs text-destructive">{rangeError}</p>}
+              </>
+            )}
+
             <Field label="Balances">
               {balances.map((row, i) => (
                 <div key={i} className="flex items-center gap-2">
@@ -346,11 +461,11 @@ export function SimulateModal({
             {/* cancel_ratio/latency and the virtual-channel cost model are simulation-only
                 (paper/backtest) — hidden for live, matching the schema note that the live gateway
                 ignores them and falls back to harmless defaults. */}
-            {mode === "paper" && (
+            {mode !== "live" && (
               <>
                 <div className="h-px bg-border" />
 
-                <span className="text-sm text-[#d0d5dd]">Simulation only (paper)</span>
+                <span className="text-sm text-[#d0d5dd]">Simulation only (paper / backtest)</span>
                 <div className="flex gap-2">
                   <Field label="Cancel ratio">
                     <PillInput
@@ -446,7 +561,13 @@ export function SimulateModal({
             disabled={!canSubmit}
             className="flex-1 cursor-pointer rounded-full bg-[linear-gradient(171deg,#cff8ea_0%,#67e1c1_100%)] px-3 py-2 text-xs font-medium text-[#0d0d0d] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {launchRun.isPending ? "Starting…" : mode === "live" ? "Start live run" : "Start paper run"}
+            {launchRun.isPending
+              ? "Starting…"
+              : mode === "live"
+                ? "Start live run"
+                : mode === "backtest"
+                  ? "Start backtest"
+                  : "Start paper run"}
           </button>
         </div>
       </DialogContent>

@@ -7,7 +7,17 @@ import type { components } from "@/types/api/hft";
 // Request body for `POST /api/runs` (simulate-modal's launch form).
 // `otp_passcode` (DNSE live runs — see `POST /api/accounts/{id}/dnse/send-otp`) isn't in the
 // generated schema yet — extended locally until the OpenAPI spec catches up.
-export type LaunchRequest = components["schemas"]["LaunchRequest"] & { otp_passcode?: string };
+//
+// `backtest_range` likewise: the deployed spec declares the field but `$ref`s a
+// `BacktestDateRange` schema it never defines (utoipa doesn't register the component), so
+// `gen:types` can't emit it. Shape mirrors the server's `BacktestDateRange` — two `NaiveDate`s,
+// which serde reads as "YYYY-MM-DD". Required for a bar-mode backtest and ignored otherwise;
+// the server rejects start > end and any end in the future.
+export type BacktestDateRange = { start_date: string; end_date: string };
+export type LaunchRequest = components["schemas"]["LaunchRequest"] & {
+  otp_passcode?: string;
+  backtest_range?: BacktestDateRange;
+};
 
 // Shared HFT `runs` fetchers used to compose useLiveRuns/usePaperRuns rows (Run + RunSummary +
 // EquityPoint[] → LiveRunRow/PaperRunRow via lib/transform/runs.ts — see

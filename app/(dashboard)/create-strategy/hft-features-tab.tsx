@@ -267,23 +267,22 @@ export function HftFeaturesTab({ strategyId }: { strategyId?: string }) {
                   <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                     <div className="flex items-center gap-3">
                       <p className="min-w-0 flex-1 truncate text-sm font-medium text-white">{c.name}</p>
-                      <button
-                        type="button"
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => addPrimitive(c)}
-                        className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-lg border border-[#344054] bg-secondary py-0.5 pr-2 pl-1.5 text-xs text-[#d0d5dd] transition-colors hover:brightness-125"
-                      >
-                        <PlusIcon className="size-[18px]" />
-                        Add
-                      </button>
                     </div>
                     <span className="inline-flex w-fit items-center gap-1 rounded-lg border border-border bg-[#0d0d0d] px-2 py-0.5 text-[11px]">
-                      <span className="text-muted-foreground">Returns:</span>
                       <span className="bg-[linear-gradient(133deg,#cff8ea_0%,#67e1c1_100%)] bg-clip-text font-semibold text-transparent">
                         {c.returns}
                       </span>
                     </span>
                   </div>
+                  <button
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => addPrimitive(c)}
+                    className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-lg border border-[#344054] bg-secondary py-0.5 pr-2 pl-1.5 text-xs text-[#d0d5dd] transition-colors hover:brightness-125"
+                  >
+                    <PlusIcon className="size-[18px]" />
+                    Add
+                  </button>
                 </div>
               ))}
               {filteredCatalog.length === 0 && (

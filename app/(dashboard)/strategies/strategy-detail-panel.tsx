@@ -108,7 +108,7 @@ export function StrategyDetailPanel({
                 type="button"
                 onClick={() => setTab(t)}
                 className={cn(
-                  "relative flex flex-[1_0_auto] cursor-pointer items-center justify-center px-3 text-sm whitespace-nowrap transition-colors",
+                  "relative flex cursor-pointer items-center justify-center px-6 text-sm whitespace-nowrap transition-colors",
                   on ? "font-semibold" : "text-muted-foreground hover:text-foreground",
                 )}
               >

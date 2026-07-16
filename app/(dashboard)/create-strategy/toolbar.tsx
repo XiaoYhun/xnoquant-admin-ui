@@ -7,7 +7,7 @@ import type { IconProps } from "@solar-icons/react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { SimulateModal } from "./simulate-modal";
+import { SimulateModal, HFT_MARKET_LABEL, HFT_TYPE_LABEL } from "./simulate-modal";
 import { USE_MOCK } from "@/lib/constant";
 import { useMarkets } from "@/hooks/api/use-markets";
 import { useUpdateEditor } from "@/hooks/api/use-strategy-builder";
@@ -18,9 +18,10 @@ import { useConsoleLog } from "@/store/console-log-store";
 // Self-contained: strategy name is local state, all buttons are no-ops (page-level
 // wiring lands with the shell owner).
 
-// HFT market (run-time data_kind) is UI-only — no strategy field maps to it.
-const HFT_MARKET_LABEL: Record<string, string> = { "tick-l2": "Tick / L2", "bar-ohlc": "Bar / OHLC" };
-const HFT_TYPE_LABEL: Record<HftStrategyType, string> = { taker: "Taker", maker: "Maker", arbitrage: "Arbitrage" };
+// HFT market — no strategy field maps to it; it's a launch-time choice passed to SimulateModal,
+// which turns it into the run's `data_kind` (tick-l2 -> tick, bar-ohlc -> bar + interval).
+// `HFT_MARKET_LABEL`/`HFT_TYPE_LABEL` are defined in ./simulate-modal so both sides share one
+// definition.
 
 function IconButton({
   icon: Icon,
@@ -43,19 +44,16 @@ function IconButton({
   );
 }
 
-// Figma node 14256:148355 — the cog opens this Settings popover. For HFT, Market (Tick/L2 vs
-// Bar/OHLC) is display-only (no strategy field maps to it — it's a run-time data_kind), while Type
-// (strategy_type) is saved via `useUpdateHftStrategy` (PUT /api/strategies/{id}). Keyed by `id` so
-// switching editors remounts with the new strategy's values.
+// Figma node 14256:148355 — the cog opens this Settings popover. For HFT it holds only Type
+// (`strategy_type`), saved via `useUpdateHftStrategy` (PUT /api/strategies/{id}) — the one field
+// backed by the API. Market/interval are launch-time choices with no strategy field behind them,
+// so they live in SimulateModal instead. Keyed by `id` so switching editors remounts with the new
+// strategy's values.
 function HftSettingsFields({
   id,
-  market,
-  onMarketChange,
   onClose,
 }: {
   id: string;
-  market: string;
-  onMarketChange: (market: string) => void;
   onClose: () => void;
 }) {
   const { data: strategy } = useHftStrategy(id);
@@ -63,8 +61,7 @@ function HftSettingsFields({
   const addLog = useConsoleLog((s) => s.addLog);
 
   // Derive Type from the fetched strategy until the user overrides it (avoids seeding via an
-  // effect — the strategy loads async, so `typeOverride ?? loaded ?? default`). Market has no
-  // backend field to seed from.
+  // effect — the strategy loads async, so `typeOverride ?? loaded ?? default`).
   const [typeOverride, setTypeOverride] = useState<HftStrategyType | null>(null);
   const draftType: HftStrategyType = typeOverride ?? strategy?.strategy_type ?? "taker";
 
@@ -84,18 +81,6 @@ function HftSettingsFields({
   return (
     <div className="flex flex-col gap-2">
       <p className="text-sm font-semibold text-white">Settings</p>
-      <div className="flex flex-col gap-1">
-        <span className="text-[10px] font-medium text-white">Market</span>
-        <Select value={market} onValueChange={onMarketChange}>
-          <SelectTrigger className="h-8 w-full rounded-full border-border bg-background! px-3 text-xs text-white">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent className="bg-background!">
-            <SelectItem value="tick-l2" className="text-xs">Tick / L2</SelectItem>
-            <SelectItem value="bar-ohlc" className="text-xs">Bar / OHLC</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
       <div className="flex flex-col gap-1">
         <span className="text-[10px] font-medium text-white">Type</span>
         <Select value={draftType} onValueChange={(v) => v && setTypeOverride(v as HftStrategyType)}>
@@ -239,8 +224,6 @@ function SettingsMenu({
   market,
   universe,
   trainRatio,
-  hftMarket,
-  onHftMarketChange,
   onSettingsSaved,
 }: {
   type: "mft" | "hft";
@@ -248,8 +231,6 @@ function SettingsMenu({
   market?: string;
   universe?: string;
   trainRatio?: number;
-  hftMarket: string;
-  onHftMarketChange: (market: string) => void;
   onSettingsSaved?: (changes: { market?: string; universe?: string; train_ratio?: number }) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -277,13 +258,7 @@ function SettingsMenu({
             onClose={() => setOpen(false)}
           />
         ) : (
-          <HftSettingsFields
-            key={id}
-            id={id}
-            market={hftMarket}
-            onMarketChange={onHftMarketChange}
-            onClose={() => setOpen(false)}
-          />
+          <HftSettingsFields key={id} id={id} onClose={() => setOpen(false)} />
         )}
       </PopoverContent>
     </Popover>
@@ -317,6 +292,9 @@ export function Toolbar({
   // HFT Market/Type pill: Market is UI-only (default tick/L2, shared with the Settings popover);
   // Type comes from the strategy's `strategy_type`.
   const [hftMarket, setHftMarket] = useState("tick-l2");
+  // Bar size for bar-ohlc runs. Owned here (not in SimulateModal) so the Settings popover and the
+  // modal's Timeframe row edit one value rather than drifting apart.
+  const [hftInterval, setHftInterval] = useState("5m");
   const { data: hftStrategy } = useHftStrategy(type === "hft" ? id : undefined);
   const hftType = hftStrategy?.strategy_type;
 
@@ -381,7 +359,7 @@ export function Toolbar({
         </span>
 
         {type === "mft" && (market || universe) && (
-          <span className="inline-flex shrink-0 items-center gap-3 rounded-3xl border border-white/50 bg-gradient-to-b from-[rgba(123,97,255,0.8)] to-[rgba(123,97,255,0.2)] py-1 pl-2 pr-2 text-xs text-white backdrop-blur-[2px]">
+          <span className="inline-flex shrink-0 items-center gap-3 rounded-3xl border border-white/20 bg-gradient-to-b from-[rgba(123,97,255,0.8)] to-[rgba(123,97,255,0.2)] py-1 pl-2 pr-2 text-xs text-white backdrop-blur-[2px]">
             {market && (
               <span className="inline-flex items-center gap-1.5">
                 <span className="size-1.5 shrink-0 rounded-full bg-white" />
@@ -398,7 +376,7 @@ export function Toolbar({
         )}
 
         {type === "hft" && (
-          <span className="inline-flex shrink-0 items-center gap-3 rounded-3xl border border-white/50 bg-gradient-to-b from-[rgba(103,225,193,0.8)] to-[rgba(103,225,193,0.2)] py-1 pr-2 pl-2 text-xs text-white backdrop-blur-[2px]">
+          <span className="inline-flex shrink-0 items-center gap-3 rounded-3xl border border-white/20 bg-gradient-to-b from-[rgba(103,225,193,0.8)] to-[rgba(103,225,193,0.2)] py-1 pr-2 pl-2 text-xs text-white backdrop-blur-[2px]">
             <span className="inline-flex items-center gap-1.5">
               <span className="size-1.5 shrink-0 rounded-full bg-white" />
               {HFT_MARKET_LABEL[hftMarket] ?? hftMarket}
@@ -420,8 +398,6 @@ export function Toolbar({
           market={market}
           universe={universe}
           trainRatio={trainRatio}
-          hftMarket={hftMarket}
-          onHftMarketChange={setHftMarket}
           onSettingsSaved={onSettingsSaved}
         />
         <IconButton icon={SidebarCode} label="Toggle console" onClick={onToggleConsole} />
@@ -437,7 +413,17 @@ export function Toolbar({
         </button>
       </div>
 
-      <SimulateModal open={simulateOpen} onOpenChange={setSimulateOpen} strategyName={name} strategyId={id} />
+      <SimulateModal
+        open={simulateOpen}
+        onOpenChange={setSimulateOpen}
+        strategyName={name}
+        strategyId={id}
+        hftType={hftType}
+        hftMarket={hftMarket}
+        onHftMarketChange={setHftMarket}
+        hftInterval={hftInterval}
+        onHftIntervalChange={setHftInterval}
+      />
     </div>
   );
 }

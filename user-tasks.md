@@ -18,4 +18,7 @@ Figure out which API to get the data and render in 2 new tabs.
 - UI for features tab is not completed match @https://www.figma.com/design/B7Hh2GpERHUPyy3Zdv35sY/XNO-QUANT-AI?node-id=14567-26137&m=dev
 - For features tab:  when user click Add on any primitive, if they are focusing on a Feature variable iput, add the primitive there, if no, create new feature and add the primitive.
 
+- Make the select symbol become search by input with dropdown list 
+
 ## Bugs
+

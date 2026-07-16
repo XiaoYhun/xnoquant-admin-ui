@@ -107,7 +107,7 @@ export function EditVenueModal({ venue, onClose }: { venue: Venue | null; onClos
             <p className="text-xs text-destructive">Couldn&rsquo;t update venue. Please try again.</p>
           )}
           <DialogFooter>
-            <DialogClose asChild>
+            <DialogClose asChild className="rounded-full">
               <Button type="button" variant="outline">
                 Cancel
               </Button>

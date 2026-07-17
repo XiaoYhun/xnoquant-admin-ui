@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { DangerTriangle } from "@solar-icons/react";
+import { DangerTriangle, Rocket } from "@solar-icons/react";
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -92,8 +92,9 @@ export function StartLiveTradingDialog({ run }: { run: PaperRunRow }) {
         <Button
           type="button"
           size="sm"
-          className="rounded-full bg-gradient-to-b from-[#fffbd6] to-[#f1c617] text-[#0d0d0d] hover:opacity-90"
+          className="h-[34px] gap-1.5 rounded-full bg-gradient-to-b from-[#fffbd6] to-[#f1c617] text-[#0d0d0d] hover:opacity-90"
         >
+          <Rocket weight="Bold" className="size-3.5" />
           Start live trading
         </Button>
       </DialogTrigger>

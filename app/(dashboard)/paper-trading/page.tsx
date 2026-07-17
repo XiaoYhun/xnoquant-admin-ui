@@ -178,14 +178,7 @@ export default function Page() {
         )}
       </section>
 
-      {selectedRun && (
-        <>
-          <div className="absolute inset-0 z-10 bg-black/60" onClick={() => setSelectedId(null)} />
-          <div className="absolute inset-y-0 right-0 z-20 w-full max-w-[520px] overflow-y-auto border-l border-border bg-background shadow-2xl">
-            <RunDetailPanel run={selectedRun} onClose={() => setSelectedId(null)} />
-          </div>
-        </>
-      )}
+      <RunDetailPanel open={!!selectedRun} onOpenChange={(o) => !o && setSelectedId(null)} run={selectedRun} />
     </main>
   );
 }

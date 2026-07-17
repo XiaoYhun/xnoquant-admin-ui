@@ -73,6 +73,49 @@ function symbolRows(manifest: RunManifest): { symbol: string; market: string }[]
   return manifest.symbols.map((s) => ({ symbol: s.symbol, market: marketForSymbol(s, manifest) }));
 }
 
+// Detail-view "Configuration" tab — pre-format the manifest into display strings. Fields HFT
+// doesn't surface (queue capacities, processing costs) fall back to the platform defaults the
+// design shows.
+function toRunConfig(manifest: RunManifest): PaperRunRow["config"] {
+  const exec = manifest.execution;
+  const dk = manifest.data_kind;
+  const acc = manifest.account;
+  const latency = exec?.latency;
+  return {
+    mode: manifest.mode.charAt(0).toUpperCase() + manifest.mode.slice(1),
+    data: !dk ? "—" : dk.kind === "tick" ? "Tick" : `Bar (${dk.interval})`,
+    sourceHash: manifest.strategy.source_hash ?? "—",
+    accountName: acc.name,
+    accountMeta: `${acc.venue_name ?? acc.venue_type} · ${acc.account_type}`,
+    accountRisk: "risk: No limits",
+    symbolsLabel: `${manifest.symbols.length} — ${manifest.symbols.map((s) => s.symbol).join(", ")}`,
+    maxSliceSize: (exec?.max_slice_size ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+    twapInterval: `${exec?.twap_interval_ms ?? 0} ms`,
+    chaseThreshold: `${exec?.chase_threshold_ticks ?? 0} ticks`,
+    entryOrderTtl: "0 ms",
+    takeProfit: `${exec?.take_profit_points ?? 0} pts`,
+    stopLoss: `${exec?.stop_loss_points ?? 0} pts`,
+    cancelRatio: `${((exec?.cancel_ratio ?? 0) * 100).toFixed(1)}%`,
+    simulatedLatency: typeof latency === "string" || typeof latency === "number" ? String(latency) : "None",
+    tradeProcessingCost: "0 ns",
+    l2ProcessingCost: "0 ns",
+    l2QueueCapacity: "64",
+    tradeQueueCapacity: "64",
+    features: manifest.strategy.features ?? [],
+  };
+}
+
+function toRunMetrics(summary: RunSummary | null, manifest: RunManifest): PaperRunRow["metrics"] {
+  const equity = startingEquity(manifest);
+  return {
+    netPnl: summary?.net_pnl ?? 0,
+    winRate: summary ? Number((summary.win_rate * 100).toFixed(2)) : 0,
+    trades: summary?.total_trades ?? 0,
+    costDragPct: summary && equity ? Number(((summary.total_fee / equity) * 100).toFixed(2)) : 0,
+    edgeNetBp: 0,
+  };
+}
+
 export function toLiveRunRow(run: Run, summary: RunSummary | null, equity: EquityPoint[]): LiveRunRow {
   const { manifest } = run;
   return {
@@ -122,6 +165,9 @@ export function toPaperRunRow(run: Run, summary: RunSummary | null, equity: Equi
     maxDrawdownPct: pctMaxDrawdown(summary, manifest),
     pnlChartSeries: equity.map((p) => ({ date: new Date(p.ts).toISOString(), value: p.equity })),
     returnsChartSeries: deriveReturnsSeries(equity, startingEquity(manifest)),
+    metrics: toRunMetrics(summary, manifest),
+    config: toRunConfig(manifest),
+    code: manifest.strategy.code,
   };
 }
 

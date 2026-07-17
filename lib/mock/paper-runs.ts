@@ -1,4 +1,42 @@
 import type { RunStatus, StrategyType } from "@/types/domain";
+import { SAMPLE_CODE } from "@/lib/mock/strategy-builder";
+
+// Detail-view "Charts" tab stat cards (the ones not already on the row: sharpe / returnPct /
+// maxDrawdownPct cover the rest).
+export type RunMetrics = {
+  netPnl: number; // absolute PnL
+  winRate: number; // percent
+  trades: number; // fill count
+  costDragPct: number; // percent
+  edgeNetBp: number; // basis points
+};
+
+export type FeatureDef = { name: string; expression: string };
+
+// Detail-view "Configuration" tab — a read-only snapshot of the run manifest, pre-formatted for
+// display (units baked in) so the panel stays pure presentation.
+export type RunConfig = {
+  mode: string;
+  data: string;
+  sourceHash: string;
+  accountName: string;
+  accountMeta: string;
+  accountRisk: string;
+  symbolsLabel: string;
+  maxSliceSize: string;
+  twapInterval: string;
+  chaseThreshold: string;
+  entryOrderTtl: string;
+  takeProfit: string;
+  stopLoss: string;
+  cancelRatio: string;
+  simulatedLatency: string;
+  tradeProcessingCost: string;
+  l2ProcessingCost: string;
+  l2QueueCapacity: string;
+  tradeQueueCapacity: string;
+  features: FeatureDef[];
+};
 
 // OWNED BY: Paper Trading (Slice 5).
 // UI-only denormalized row shape — mirrors `LiveRunRow`: accounts/symbols are arrays
@@ -21,7 +59,15 @@ export type PaperRunRow = {
   // Detail-view "Charts" tab data — denormalized so selecting a run needs no extra fetch.
   pnlChartSeries: { date: string; value: number }[];
   returnsChartSeries: { date: string; value: number }[];
+  // Detail-view tabs: metrics (Charts stat cards), config (Configuration), code (Code).
+  metrics: RunMetrics;
+  config: RunConfig;
+  code: string;
 };
+
+// The 16 mock literals below carry only the list-row fields; the detail-tab fields
+// (metrics/config/code) are synthesized in listPaperRuns so the literals stay compact.
+type PaperRunBase = Omit<PaperRunRow, "metrics" | "config" | "code">;
 
 // UI-only row for the detail view's "Trade history" table.
 export type TradeHistoryRow = {
@@ -93,7 +139,7 @@ function symbolIdsFor(n: number, count: number): string[] {
   return Array.from({ length: count }, (_, i) => `b1b2c3d4-1111-4111-8111-${String(n * 10 + i).padStart(12, "0")}`);
 }
 
-export const MOCK_PAPER_RUNS: PaperRunRow[] = [
+export const MOCK_PAPER_RUNS: PaperRunBase[] = [
   { id: "MFT-5lWb3Ux", strategyName: "Sample Strategy 1", strategyType: "MFT", status: "running", accounts: ["DN-002"], symbols: [{ symbol: "VN30F1M", market: "VNFuture" }], timeframe: "5min", strategyId: strategyIdFor(1), symbolIds: symbolIdsFor(1, 1), executionType: "taker", returnPct: 134.22, sharpe: 1.82, maxDrawdownPct: -14.22, pnlSeries: pnlSeries(1, 1.6), pnlChartSeries: pnlChartSeries(1, 1.6), returnsChartSeries: returnsChartSeries(1) },
   { id: "MFT-D7AxNplR", strategyName: "Momentum Booster", strategyType: "MFT", status: "running", accounts: ["DN-002"], symbols: [{ symbol: "AAPL", market: "NASDAQ" }], timeframe: "5min", strategyId: strategyIdFor(2), symbolIds: symbolIdsFor(2, 1), executionType: "maker", returnPct: 87.45, sharpe: 2.15, maxDrawdownPct: -5.87, pnlSeries: pnlSeries(2, 1.1), pnlChartSeries: pnlChartSeries(2, 1.1), returnsChartSeries: returnsChartSeries(2) },
   { id: "HFT-LqJvB9C", strategyName: "Reversal Hunter", strategyType: "HFT", status: "paused", accounts: ["DN-002"], symbols: [{ symbol: "BTCUSD", market: "Crypto" }], timeframe: "5min", strategyId: strategyIdFor(3), symbolIds: symbolIdsFor(3, 1), executionType: "taker", returnPct: 56.13, sharpe: 1.6, maxDrawdownPct: -7.34, pnlSeries: pnlSeries(3, 0.8), pnlChartSeries: pnlChartSeries(3, 0.8), returnsChartSeries: returnsChartSeries(3) },
@@ -148,6 +194,55 @@ function buildTradeHistory(runId: string, count = 24): TradeHistoryRow[] {
   return rows;
 }
 
+// Sample feature set for the Configuration tab (matches the Figma "6 variables" example).
+const SAMPLE_FEATURES: FeatureDef[] = [
+  { name: "Close", expression: "Close" },
+  { name: "sma200", expression: "sma(close, 200)" },
+  { name: "vwap_tp", expression: "vwap(high, low, close, volume)" },
+  { name: "signal", expression: "zscore(close - vwap_tp, 30)" },
+  { name: "atr14", expression: "atr(high, low, close, 14)" },
+  { name: "atr_base", expression: "sma(atr(high, low, close, 14), 100)" },
+];
+
+// Synthesize the detail-tab payload from a list row's seed — keeps the 16 literals compact
+// while giving each selected run stable, design-shaped metrics / config / code.
+function buildDetail(r: PaperRunBase): Pick<PaperRunRow, "metrics" | "config" | "code"> {
+  const seed = seedFromId(r.id);
+  const isTick = r.timeframe === "tick";
+  return {
+    metrics: {
+      netPnl: 100_000 + (seed % 90) * 1000,
+      winRate: Number((45 + (seed % 20)).toFixed(2)),
+      trades: 80 + (seed % 120),
+      costDragPct: Number((15 + (seed % 20)).toFixed(2)),
+      edgeNetBp: Number((0.4 + (seed % 12) / 10).toFixed(2)),
+    },
+    config: {
+      mode: "Paper",
+      data: isTick ? "Tick" : `Bar (${r.timeframe.replace("min", "m")})`,
+      sourceHash: seed.toString(16).padStart(12, "0"),
+      accountName: r.accounts[0] ?? "—",
+      accountMeta: "DNSE · spot",
+      accountRisk: "risk: No limits · fee: maker 0.018% / taker 0.045%",
+      symbolsLabel: `${r.symbols.length} — ${r.symbols.map((s) => s.symbol).join(", ")}`,
+      maxSliceSize: "1,000.00",
+      twapInterval: "1000 ms",
+      chaseThreshold: "100 ticks",
+      entryOrderTtl: "0 ms",
+      takeProfit: "0 pts",
+      stopLoss: "0 pts",
+      cancelRatio: "0.0%",
+      simulatedLatency: "None",
+      tradeProcessingCost: "0 ns",
+      l2ProcessingCost: "0 ns",
+      l2QueueCapacity: "64",
+      tradeQueueCapacity: "64",
+      features: SAMPLE_FEATURES,
+    },
+    code: SAMPLE_CODE,
+  };
+}
+
 const delay = (ms = 300) => new Promise((r) => setTimeout(r, ms));
 
 export const paperRunMocks = {
@@ -155,7 +250,7 @@ export const paperRunMocks = {
     await delay();
     // Fresh copy — mirrors lib/mock/index.ts's listVenues comment: React Query needs a
     // new array reference to detect changes if this dataset is ever mutated.
-    return [...MOCK_PAPER_RUNS];
+    return MOCK_PAPER_RUNS.map((r) => ({ ...r, ...buildDetail(r) }));
   },
   async getTradeHistory(id: string): Promise<TradeHistoryRow[]> {
     await delay();

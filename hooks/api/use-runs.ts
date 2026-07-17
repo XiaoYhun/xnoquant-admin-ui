@@ -14,7 +14,13 @@ import type { components } from "@/types/api/hft";
 // which serde reads as "YYYY-MM-DD". Required for a bar-mode backtest and ignored otherwise;
 // the server rejects start > end and any end in the future.
 export type BacktestDateRange = { start_date: string; end_date: string };
-export type LaunchRequest = components["schemas"]["LaunchRequest"] & {
+
+// `entry_order_ttl_ms` is on the deployed `ExecutionSettings` (universal exit/aging policy,
+// alongside take_profit_points/stop_loss_points) but the checked-in generated types predate it —
+// same lag as `backtest_range`. Override the field until `gen:types` is refreshed.
+export type ExecutionSettings = components["schemas"]["ExecutionSettings"] & { entry_order_ttl_ms?: number };
+export type LaunchRequest = Omit<components["schemas"]["LaunchRequest"], "execution"> & {
+  execution?: ExecutionSettings | null;
   otp_passcode?: string;
   backtest_range?: BacktestDateRange;
 };

@@ -1,10 +1,10 @@
 "use client";
-import { useState, type ReactNode, type ComponentProps } from "react";
+import { useRef, useState, type ReactNode, type ComponentProps } from "react";
 import { format, parseISO } from "date-fns";
-import { CloseCircle, AltArrowDown, DangerTriangle, Calendar as CalendarIcon } from "@solar-icons/react";
+import { CloseCircle, DangerTriangle, Magnifer, Calendar as CalendarIcon } from "@solar-icons/react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -40,11 +40,11 @@ export const HFT_TYPE_LABEL: Record<HftStrategyType, string> = { taker: "Taker",
 // The summary block is one pattern per row: `text-xs` muted label left, `text-xs` control/value
 // right. These keep every control in it the same size — change one, change the row.
 const PILL_TRIGGER =
-  "h-auto w-auto gap-1.5 rounded-full border-border bg-background! px-2.5 py-1 text-xs font-medium text-white shadow-xs";
+  "h-auto! w-auto gap-1.5 rounded-full border-border bg-background! px-2.5 py-1 text-xs font-medium text-white shadow-xs";
 // Trigger pill for the date picker — matches the Market/Interval select pills in the summary block.
 const PILL_DATE =
   "inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-1 text-xs font-medium shadow-xs outline-none focus-visible:border-ring";
-const ROW = "flex items-center justify-between gap-3";
+const ROW = "flex min-h-8 items-center justify-between gap-3";
 const ROW_LABEL = "text-xs text-muted-foreground";
 const ROW_VALUE = "text-xs font-medium text-white";
 
@@ -190,9 +190,9 @@ function AccountLeg({
 }) {
   const venueId = accounts?.find((a) => a.id === accountId)?.venue_id;
   return (
-    <div className="flex flex-col gap-2 rounded-xl border border-border bg-background/40 p-2.5">
+    <div className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-2.5">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold text-white">{title}</span>
+        <span className="text-sm font-semibold text-white">{title}</span>
         <span className="text-[11px] text-muted-foreground">{hint}</span>
       </div>
       <div className="flex gap-2">
@@ -225,29 +225,95 @@ function SymbolPicker({
 }) {
   const { data: symbols } = useSymbols(venueId);
   const [open, setOpen] = useState(false);
-  const labels = (symbols ?? [])
-    .filter((s) => selected.includes(s.id))
-    .map((s) => s.symbol)
-    .join(", ");
+  const [query, setQuery] = useState("");
+  const fieldRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const all = symbols ?? [];
+  const selectedSymbols = all.filter((s) => selected.includes(s.id));
+  const selectedLabel = selectedSymbols[0]?.symbol ?? "";
+  const q = query.trim().toLowerCase();
+  const filtered = q ? all.filter((s) => s.symbol.toLowerCase().includes(q)) : all;
+
+  // Multi-select (non-arbitrage) toggles and stays open so several symbols can be added; the
+  // single-select arbitrage leg replaces and closes.
   const pick = (id: string) => {
-    if (multiple) onChange(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
-    else {
+    if (multiple) {
+      onChange(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
+      setQuery("");
+      inputRef.current?.focus();
+    } else {
       onChange([id]);
       setOpen(false);
     }
   };
+  const remove = (id: string) => onChange(selected.filter((x) => x !== id));
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button type="button" disabled={disabled} className={`${FIELD_INPUT} flex items-center justify-between gap-2`}>
-          <span className={`truncate ${selected.length ? "text-white" : "text-muted-foreground"}`}>
-            {disabled ? "Select an account first" : selected.length ? labels : "Select symbols..."}
-          </span>
-          <AltArrowDown weight="Outline" className="size-4 shrink-0 text-muted-foreground" />
-        </button>
-      </PopoverTrigger>
+    <Popover open={open && !disabled} onOpenChange={setOpen}>
+      <PopoverAnchor asChild>
+        <div
+          ref={fieldRef}
+          onClick={() => !disabled && inputRef.current?.focus()}
+          className={`${FIELD_INPUT} flex min-h-9 flex-wrap items-center gap-1 ${disabled ? "cursor-not-allowed opacity-50" : "cursor-text"}`}
+        >
+          <Magnifer weight="Outline" className="size-4 shrink-0 text-muted-foreground" />
+          {multiple &&
+            selectedSymbols.map((s) => (
+              <span
+                key={s.id}
+                className="inline-flex max-w-full min-w-0 items-center gap-1 rounded-md bg-secondary px-1.5 py-0.5 text-xs text-white"
+              >
+                <span className="truncate">{s.symbol}</span>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    remove(s.id);
+                  }}
+                  className="shrink-0 text-muted-foreground hover:text-white"
+                >
+                  <CloseCircle weight="Bold" className="size-3.5" />
+                </button>
+              </span>
+            ))}
+          <input
+            ref={inputRef}
+            disabled={disabled}
+            // Multi-select keeps the field a search box (chips carry the selection). Single-select
+            // shows the picked symbol when closed and selects it on focus so typing replaces it.
+            value={multiple || open ? query : selectedLabel}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setOpen(true);
+            }}
+            onFocus={(e) => {
+              if (!multiple) {
+                setQuery(selectedLabel);
+                e.target.select();
+              }
+              setOpen(true);
+            }}
+            onKeyDown={(e) => e.key === "Escape" && setOpen(false)}
+            placeholder={
+              disabled
+                ? "Select an account first"
+                : multiple
+                  ? selected.length
+                    ? ""
+                    : "Search symbols..."
+                  : "Search symbol..."
+            }
+            className="min-w-16 flex-1 bg-transparent text-xs text-white outline-none placeholder:text-muted-foreground"
+          />
+        </div>
+      </PopoverAnchor>
       <PopoverContent
         align="start"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+        onInteractOutside={(e) => {
+          if (fieldRef.current?.contains(e.target as Node)) e.preventDefault();
+        }}
         className="max-h-56 w-[--radix-popover-trigger-width] overflow-y-auto p-1.5"
         // The parent Dialog's scroll-lock (RemoveScroll) blocks native wheel scrolling on this
         // portaled popover — scroll it programmatically instead.
@@ -255,16 +321,18 @@ function SymbolPicker({
           e.currentTarget.scrollTop += e.deltaY;
         }}
       >
-        {(symbols ?? []).length === 0 ? (
-          <p className="px-2 py-2 text-xs text-muted-foreground">No symbols for this venue.</p>
+        {filtered.length === 0 ? (
+          <p className="px-2 py-2 text-xs text-muted-foreground">
+            {all.length === 0 ? "No symbols for this venue." : "No matches."}
+          </p>
         ) : (
-          (symbols ?? []).map((s) => (
+          filtered.map((s) => (
             <div
               key={s.id}
               onClick={() => pick(s.id)}
               className="flex cursor-pointer items-center gap-2 rounded-[6px] px-2 py-2 text-xs text-white hover:bg-secondary/60"
             >
-              {(multiple || selected.includes(s.id)) && <Checkbox checked={selected.includes(s.id)} />}
+              {selected.includes(s.id) && <Checkbox checked />}
               {s.symbol}
             </div>
           ))
@@ -502,12 +570,12 @@ export function SimulateModal({
             {mode === "backtest" && (
               <>
                 <div className={ROW}>
-                  <span className={ROW_LABEL}>Date from</span>
-                  <DatePickerField value={startDate} onChange={setStartDate} max={endDate || todayISO()} />
-                </div>
-                <div className={ROW}>
-                  <span className={ROW_LABEL}>Date to</span>
-                  <DatePickerField value={endDate} onChange={setEndDate} min={startDate || undefined} max={todayISO()} />
+                  <span className={ROW_LABEL}>Date range</span>
+                  <div className="flex items-center gap-1.5">
+                    <DatePickerField value={startDate} onChange={setStartDate} max={endDate || todayISO()} />
+                    <span className="text-xs text-muted-foreground">→</span>
+                    <DatePickerField value={endDate} onChange={setEndDate} min={startDate || undefined} max={todayISO()} />
+                  </div>
                 </div>
                 {rangeError && <p className="text-xs text-destructive">{rangeError}</p>}
               </>
@@ -557,7 +625,7 @@ export function SimulateModal({
                 )}
               </>
             ) : (
-              <div className="flex gap-2">
+              <div className="flex gap-2 rounded-xl border border-border bg-surface p-2.5">
                 <Field label="Account">
                   <AccountSelect accounts={accounts} value={accountId} onChange={handleAccountChange} />
                 </Field>

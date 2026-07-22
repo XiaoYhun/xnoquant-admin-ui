@@ -110,20 +110,36 @@ export function PaperRunsTable({
               <span className={PILL}>{r.timeframe}</span>
             </TableCell>
             <TableCell>
-              <Sparkline data={r.pnlSeries} className="h-9 w-full" />
+              {r.pnlSeries.length ? (
+                <Sparkline data={r.pnlSeries} className="h-9 w-full" />
+              ) : (
+                <span className="text-xs text-muted-foreground">—</span>
+              )}
             </TableCell>
             <TableCell className="text-right text-xs">
-              <FlashValue value={r.returnPct}>
-                <span className={r.returnPct >= 0 ? GRAD_GREEN : GRAD_RED}>{formatPercent(r.returnPct)}</span>
-              </FlashValue>
+              {r.returnPct == null ? (
+                <span className="text-muted-foreground">—</span>
+              ) : (
+                <FlashValue value={r.returnPct}>
+                  <span className={r.returnPct >= 0 ? GRAD_GREEN : GRAD_RED}>{formatPercent(r.returnPct)}</span>
+                </FlashValue>
+              )}
             </TableCell>
             <TableCell className="text-right text-xs text-white">
-              <FlashValue value={r.sharpe}>{r.sharpe.toFixed(2)}</FlashValue>
+              {r.sharpe == null ? (
+                <span className="text-muted-foreground">—</span>
+              ) : (
+                <FlashValue value={r.sharpe}>{r.sharpe.toFixed(2)}</FlashValue>
+              )}
             </TableCell>
             <TableCell className="text-right text-xs">
-              <FlashValue value={r.maxDrawdownPct}>
-                <span className={GRAD_RED}>{formatPercent(r.maxDrawdownPct)}</span>
-              </FlashValue>
+              {r.maxDrawdownPct == null ? (
+                <span className="text-muted-foreground">—</span>
+              ) : (
+                <FlashValue value={r.maxDrawdownPct}>
+                  <span className={GRAD_RED}>{formatPercent(r.maxDrawdownPct)}</span>
+                </FlashValue>
+              )}
             </TableCell>
             <TableCell className="text-right">
               <button

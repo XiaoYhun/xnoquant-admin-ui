@@ -15,10 +15,7 @@ import type { components } from "@/types/api/hft";
 // the server rejects start > end and any end in the future.
 export type BacktestDateRange = { start_date: string; end_date: string };
 
-// `entry_order_ttl_ms` is on the deployed `ExecutionSettings` (universal exit/aging policy,
-// alongside take_profit_points/stop_loss_points) but the checked-in generated types predate it —
-// same lag as `backtest_range`. Override the field until `gen:types` is refreshed.
-export type ExecutionSettings = components["schemas"]["ExecutionSettings"] & { entry_order_ttl_ms?: number };
+export type ExecutionSettings = components["schemas"]["ExecutionSettings"];
 export type LaunchRequest = Omit<components["schemas"]["LaunchRequest"], "execution"> & {
   execution?: ExecutionSettings | null;
   otp_passcode?: string;
@@ -87,6 +84,7 @@ export function useLaunchRun() {
         const now = new Date().toISOString();
         return {
           id: crypto.randomUUID(),
+          owner_id: "",
           account_id: req.account_id,
           strategy_id: req.strategy_id,
           mode: req.mode,

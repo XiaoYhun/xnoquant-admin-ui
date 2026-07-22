@@ -27,8 +27,6 @@ export type RunConfig = {
   twapInterval: string;
   chaseThreshold: string;
   entryOrderTtl: string;
-  takeProfit: string;
-  stopLoss: string;
   cancelRatio: string;
   simulatedLatency: string;
   tradeProcessingCost: string;
@@ -52,10 +50,14 @@ export type PaperRunRow = {
   strategyId: string | null;
   symbolIds: string[];
   executionType: StrategyType;
+  // Manifest-derived starting equity — kept so the detail panel can compute % metrics from the
+  // lazily-fetched summary. See lib/transform/runs.ts.
+  startingEquity: number;
   pnlSeries: number[];
-  returnPct: number;
-  sharpe: number;
-  maxDrawdownPct: number;
+  // Summary/equity-derived — null/empty until the run's detail panel is opened (then fetched).
+  returnPct: number | null;
+  sharpe: number | null;
+  maxDrawdownPct: number | null;
   // Detail-view "Charts" tab data — denormalized so selecting a run needs no extra fetch.
   pnlChartSeries: { date: string; value: number }[];
   returnsChartSeries: { date: string; value: number }[];
@@ -67,7 +69,7 @@ export type PaperRunRow = {
 
 // The 16 mock literals below carry only the list-row fields; the detail-tab fields
 // (metrics/config/code) are synthesized in listPaperRuns so the literals stay compact.
-type PaperRunBase = Omit<PaperRunRow, "metrics" | "config" | "code">;
+type PaperRunBase = Omit<PaperRunRow, "metrics" | "config" | "code" | "startingEquity">;
 
 // UI-only row for the detail view's "Trade history" table.
 export type TradeHistoryRow = {
@@ -229,8 +231,6 @@ function buildDetail(r: PaperRunBase): Pick<PaperRunRow, "metrics" | "config" | 
       twapInterval: "1000 ms",
       chaseThreshold: "100 ticks",
       entryOrderTtl: "0 ms",
-      takeProfit: "0 pts",
-      stopLoss: "0 pts",
       cancelRatio: "0.0%",
       simulatedLatency: "None",
       tradeProcessingCost: "0 ns",
@@ -250,7 +250,7 @@ export const paperRunMocks = {
     await delay();
     // Fresh copy — mirrors lib/mock/index.ts's listVenues comment: React Query needs a
     // new array reference to detect changes if this dataset is ever mutated.
-    return MOCK_PAPER_RUNS.map((r) => ({ ...r, ...buildDetail(r) }));
+    return MOCK_PAPER_RUNS.map((r) => ({ ...r, ...buildDetail(r), startingEquity: 1_000_000 }));
   },
   async getTradeHistory(id: string): Promise<TradeHistoryRow[]> {
     await delay();

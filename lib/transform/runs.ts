@@ -21,16 +21,14 @@ function startingEquity(manifest: RunManifest): number {
   }, 0);
 }
 
-function pctReturn(summary: RunSummary | null, manifest: RunManifest): number {
-  if (!summary) return 0;
-  const equity = startingEquity(manifest);
-  return equity ? Number(((summary.net_pnl / equity) * 100).toFixed(2)) : 0;
+function returnPctFrom(summary: RunSummary | null, startEquity: number): number {
+  if (!summary || !startEquity) return 0;
+  return Number(((summary.net_pnl / startEquity) * 100).toFixed(2));
 }
 
-function pctMaxDrawdown(summary: RunSummary | null, manifest: RunManifest): number {
-  if (!summary) return 0;
-  const equity = startingEquity(manifest);
-  return equity ? Number((-(Math.abs(summary.max_drawdown) / equity) * 100).toFixed(2)) : 0;
+function maxDrawdownPctFrom(summary: RunSummary | null, startEquity: number): number {
+  if (!summary || !startEquity) return 0;
+  return Number((-(Math.abs(summary.max_drawdown) / startEquity) * 100).toFixed(2));
 }
 
 // `MarketDataKind.interval` is an exchange label ("1m", "5m", "15m", "1h", ...) — map to the
@@ -93,8 +91,6 @@ function toRunConfig(manifest: RunManifest): PaperRunRow["config"] {
     twapInterval: `${exec?.twap_interval_ms ?? 0} ms`,
     chaseThreshold: `${exec?.chase_threshold_ticks ?? 0} ticks`,
     entryOrderTtl: "0 ms",
-    takeProfit: `${exec?.take_profit_points ?? 0} pts`,
-    stopLoss: `${exec?.stop_loss_points ?? 0} pts`,
     cancelRatio: `${((exec?.cancel_ratio ?? 0) * 100).toFixed(1)}%`,
     simulatedLatency: typeof latency === "string" || typeof latency === "number" ? String(latency) : "None",
     tradeProcessingCost: "0 ns",
@@ -105,18 +101,44 @@ function toRunConfig(manifest: RunManifest): PaperRunRow["config"] {
   };
 }
 
-function toRunMetrics(summary: RunSummary | null, manifest: RunManifest): PaperRunRow["metrics"] {
-  const equity = startingEquity(manifest);
+function metricsFrom(summary: RunSummary | null, startEquity: number): PaperRunRow["metrics"] {
   return {
     netPnl: summary?.net_pnl ?? 0,
     winRate: summary ? Number((summary.win_rate * 100).toFixed(2)) : 0,
     trades: summary?.total_trades ?? 0,
-    costDragPct: summary && equity ? Number(((summary.total_fee / equity) * 100).toFixed(2)) : 0,
+    costDragPct: summary && startEquity ? Number(((summary.total_fee / startEquity) * 100).toFixed(2)) : 0,
     edgeNetBp: 0,
   };
 }
 
-export function toLiveRunRow(run: Run, summary: RunSummary | null, equity: EquityPoint[]): LiveRunRow {
+// Summary + equity are fetched lazily when a run's detail panel opens (not per-row on the list),
+// so the summary/equity-derived display fields are bundled here and computed on demand. The
+// starting equity comes from the run manifest, which `/api/runs` already returns — no extra call.
+export type RunDetail = {
+  returnPct: number;
+  sharpe: number;
+  maxDrawdownPct: number;
+  metrics: PaperRunRow["metrics"];
+  pnlSeries: number[];
+  pnlChartSeries: { date: string; value: number }[];
+};
+
+export function toRunDetail(summary: RunSummary | null, equity: EquityPoint[], startEquity: number): RunDetail {
+  return {
+    returnPct: returnPctFrom(summary, startEquity),
+    sharpe: summary?.sharpe ?? 0,
+    maxDrawdownPct: maxDrawdownPctFrom(summary, startEquity),
+    metrics: metricsFrom(summary, startEquity),
+    pnlSeries: equity.map((p) => p.equity),
+    pnlChartSeries: equity.map((p) => ({ date: new Date(p.ts).toISOString(), value: p.equity })),
+  };
+}
+
+// List rows carry only what `/api/runs` provides (run + manifest). The summary/equity-derived
+// metrics are deferred to panel open, so they start null/empty — the tables render "—" until a
+// run is opened. `startingEquity` is kept so the panel can compute % metrics from the lazily
+// fetched summary without re-fetching the run.
+export function toLiveRunRow(run: Run): LiveRunRow {
   const { manifest } = run;
   return {
     id: run.id,
@@ -126,27 +148,15 @@ export function toLiveRunRow(run: Run, summary: RunSummary | null, equity: Equit
     symbols: symbolRows(manifest),
     timeframe: timeframeLabel(manifest.data_kind),
     status: run.status,
-    pnlSeries: equity.map((p) => p.equity),
-    returnPct: pctReturn(summary, manifest),
-    sharpe: summary?.sharpe ?? 0,
-    maxDrawdownPct: pctMaxDrawdown(summary, manifest),
+    startingEquity: startingEquity(manifest),
+    pnlSeries: [],
+    returnPct: null,
+    sharpe: null,
+    maxDrawdownPct: null,
   };
 }
 
-// GAP-3 (returns-series): HFT has no per-point returns series — derive from equity deltas
-// (Δequity / starting equity per point). Falls back to raw Δequity (unscaled) when there's no
-// starting balance on record.
-function deriveReturnsSeries(points: EquityPoint[], startEquity: number): { date: string; value: number }[] {
-  const base = startEquity || 1;
-  let prev = 0;
-  return points.map((p) => {
-    const value = Number(((p.equity - prev) / base).toFixed(4));
-    prev = p.equity;
-    return { date: new Date(p.ts).toISOString(), value };
-  });
-}
-
-export function toPaperRunRow(run: Run, summary: RunSummary | null, equity: EquityPoint[]): PaperRunRow {
+export function toPaperRunRow(run: Run): PaperRunRow {
   const { manifest } = run;
   return {
     id: run.id,
@@ -159,13 +169,14 @@ export function toPaperRunRow(run: Run, summary: RunSummary | null, equity: Equi
     strategyId: run.strategy_id ?? manifest.strategy.id,
     symbolIds: manifest.symbols.map((s) => s.id),
     executionType: manifest.strategy.strategy_type,
-    pnlSeries: equity.map((p) => p.equity),
-    returnPct: pctReturn(summary, manifest),
-    sharpe: summary?.sharpe ?? 0,
-    maxDrawdownPct: pctMaxDrawdown(summary, manifest),
-    pnlChartSeries: equity.map((p) => ({ date: new Date(p.ts).toISOString(), value: p.equity })),
-    returnsChartSeries: deriveReturnsSeries(equity, startingEquity(manifest)),
-    metrics: toRunMetrics(summary, manifest),
+    startingEquity: startingEquity(manifest),
+    pnlSeries: [],
+    returnPct: null,
+    sharpe: null,
+    maxDrawdownPct: null,
+    pnlChartSeries: [],
+    returnsChartSeries: [],
+    metrics: metricsFrom(null, 0),
     config: toRunConfig(manifest),
     code: manifest.strategy.code,
   };

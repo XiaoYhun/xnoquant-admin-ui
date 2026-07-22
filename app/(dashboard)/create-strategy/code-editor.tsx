@@ -49,21 +49,26 @@ export function CodeEditor({
   code,
   onChange,
   language = "python",
+  readOnly = false,
 }: {
   code: string;
-  onChange: (code: string) => void;
+  onChange?: (code: string) => void;
   language?: "python" | "rust";
+  readOnly?: boolean;
 }) {
+  const file = language === "rust" ? "strategy.rs" : "strategy.py";
   return (
     <div className="min-h-0 min-w-0 flex-1 overflow-hidden bg-background">
       <Editor
         height="100%"
         language={language}
-        path={language === "rust" ? "strategy.rs" : "strategy.py"}
+        // Read-only views (e.g. a run's Code tab) get a distinct model path so they never share
+        // Monaco's model with the editable builder instance.
+        path={readOnly ? `view/${file}` : file}
         value={code}
         theme="xnoquant"
         beforeMount={defineTheme}
-        onChange={(v) => onChange(v ?? "")}
+        onChange={(v) => onChange?.(v ?? "")}
         options={{
           fontSize: 13,
           minimap: { enabled: false },
@@ -72,6 +77,7 @@ export function CodeEditor({
           padding: { top: 12 },
           renderLineHighlight: "line",
           scrollbar: { verticalScrollbarSize: 8, horizontalScrollbarSize: 8 },
+          readOnly,
         }}
       />
     </div>

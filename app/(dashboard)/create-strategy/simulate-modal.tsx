@@ -24,9 +24,9 @@ type BalanceRow = { currency: string; amount: number };
 const DEFAULT_BALANCES: BalanceRow[] = [{ currency: "USDT", amount: 100000 }];
 
 // Bar `interval` vocabulary is Binance's kline naming, which the DNSE fetcher maps onto its own
-// resolutions. Limited to the set both venues support — DNSE has no 4h, so offering Binance's
-// full list would 422 on a DNSE account.
-export const INTERVALS = ["1m", "5m", "15m", "1h", "1d"];
+// resolutions. Limited to the set both venues support — DNSE has no 4h. 10m isn't a native Binance
+// kline (its set jumps 5m → 15m); the backend aggregates it, so it's offered for every venue.
+export const INTERVALS = ["1m", "5m", "10m", "15m", "1h", "1d"];
 
 // Launch-time market, chosen in the toolbar's Settings popover. Lives here (not in toolbar.tsx) so
 // both the toolbar pill and this modal read one definition — toolbar already imports from here, so
@@ -397,8 +397,6 @@ export function SimulateModal({
   const [maxSliceSize, setMaxSliceSize] = useState(1000);
   const [twapIntervalMs, setTwapIntervalMs] = useState(1000);
   const [chaseThresholdTicks, setChaseThresholdTicks] = useState(100);
-  const [takeProfitPoints, setTakeProfitPoints] = useState(0);
-  const [stopLossPoints, setStopLossPoints] = useState(0);
   const [entryOrderTtlMs, setEntryOrderTtlMs] = useState(0);
   const [cancelRatio, setCancelRatio] = useState(0);
   const [latencyName, setLatencyName] = useState<"zero" | "fixed">("zero");
@@ -426,6 +424,15 @@ export function SimulateModal({
     setAccountId(value);
     setSymbolIds([]); // symbol list is venue-scoped — clear the stale selection
     setOtpPasscode(""); // DNSE-only field — clear the stale value when switching accounts
+    // Seed the starting balance from the account's venue: VN brokers settle in VND, crypto in USDT.
+    const venueType = venues?.find((v) => v.id === venueIdOf(value))?.venue_type;
+    if (venueType === "tcbs" || venueType === "dnse") {
+      setSettlementCurrency("VND");
+      setBalances([{ currency: "VND", amount: 1_000_000_000 }]);
+    } else {
+      setSettlementCurrency("USDT");
+      setBalances([{ currency: "USDT", amount: 100_000 }]);
+    }
   };
   const handleLeg2AccountChange = (value: string) => {
     setLeg2AccountId(value);
@@ -479,9 +486,7 @@ export function SimulateModal({
         max_slice_size: maxSliceSize,
         twap_interval_ms: twapIntervalMs,
         chase_threshold_ticks: chaseThresholdTicks,
-        // Exit/aging policy is universal (all modes).
-        take_profit_points: takeProfitPoints,
-        stop_loss_points: stopLossPoints,
+        // Entry aging is universal (all modes); `0` disables it.
         entry_order_ttl_ms: entryOrderTtlMs,
         // cancel_ratio/latency are simulation-only (ignored by the live gateway) — only send them
         // for paper/backtest, matching the schema note that live falls back to harmless defaults.
@@ -717,22 +722,8 @@ export function SimulateModal({
                 />
               </Field>
             </div>
-            {/* Exit/aging policy — universal across all modes; `0` disables each. */}
+            {/* Entry aging — cancel an unfilled entry after it rests this long; `0` disables. */}
             <div className="flex gap-2">
-              <Field label="Take-profit (pts, 0=off)">
-                <PillInput
-                  type="number"
-                  value={takeProfitPoints}
-                  onChange={(e) => setTakeProfitPoints(Number(e.target.value))}
-                />
-              </Field>
-              <Field label="Stop-loss (pts, 0=off)">
-                <PillInput
-                  type="number"
-                  value={stopLossPoints}
-                  onChange={(e) => setStopLossPoints(Number(e.target.value))}
-                />
-              </Field>
               <Field label="Entry TTL (ms, 0=off)">
                 <PillInput
                   type="number"
@@ -740,6 +731,8 @@ export function SimulateModal({
                   onChange={(e) => setEntryOrderTtlMs(Number(e.target.value))}
                 />
               </Field>
+              <div className="flex-1" />
+              <div className="flex-1" />
             </div>
 
             {/* cancel_ratio/latency and the virtual-channel cost model are simulation-only

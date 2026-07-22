@@ -4,21 +4,15 @@ import { apiGet } from "@/lib/api-client";
 import { USE_MOCK, HFT_API_URL } from "@/lib/constant";
 import type { PaperRunRow, TradeHistoryRow } from "@/lib/mock/paper-runs";
 import type { TradePage } from "@/types/domain";
-import { fetchRunEquity, fetchRunSummary, fetchRuns } from "./use-runs";
+import { fetchRuns } from "./use-runs";
 import { toPaperRunRow, toTradeHistoryRow } from "@/lib/transform/runs";
 
-// GAP-2 + N+1 compose — same approach as use-live-runs.ts, filtered to `mode==="paper"`.
+// GAP-2: `GET /api/runs` has no `mode` filter — fetch all, keep `mode==="paper"`. Per-run summary
+// + equity are NOT fetched here; they're deferred to the detail panel (useRunSummary/useRunEquity
+// on open), so the list is a single call and the table's metric columns show "—" until a run is
+// opened.
 async function fetchPaperRunRows(): Promise<PaperRunRow[]> {
-  const runs = (await fetchRuns()).filter((r) => r.mode === "paper");
-  return Promise.all(
-    runs.map(async (run) => {
-      const [summary, equity] = await Promise.all([
-        fetchRunSummary(run.id).catch(() => null),
-        fetchRunEquity(run.id).catch(() => []),
-      ]);
-      return toPaperRunRow(run, summary, equity);
-    }),
-  );
+  return (await fetchRuns()).filter((r) => r.mode === "paper").map(toPaperRunRow);
 }
 
 export function usePaperRuns() {

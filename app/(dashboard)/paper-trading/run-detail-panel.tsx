@@ -6,11 +6,15 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BaseChart } from "@/components/charts/base-chart";
-import { LineChart } from "@/components/charts/line-chart";
 import { cn, formatPercent } from "@/lib/utils";
 import { useTradeHistory } from "@/hooks/api/use-paper-runs";
+import { useRunSummary, useRunEquity } from "@/hooks/api/use-runs";
+import { ApiError } from "@/lib/api-client";
+import { USE_MOCK } from "@/lib/constant";
+import { toRunDetail, type RunDetail } from "@/lib/transform/runs";
 import type { PaperRunRow, TradeHistoryRow } from "@/lib/mock/paper-runs";
 import { StartLiveTradingDialog } from "./start-live-trading-dialog";
+import { CodeEditor } from "../create-strategy/code-editor";
 
 // Paper Trading run detail — a right-side slide-in with Charts / Trades / Configuration / Code
 // tabs. Figma nodes 13982:131691 (Charts), 13982:133350 (Trades), 14585:34189 (Configuration).
@@ -100,28 +104,39 @@ function PnlChart({ series }: { series: PaperRunRow["pnlChartSeries"] }) {
   return <BaseChart option={option} style={{ height: 240 }} />;
 }
 
-function ChartsTab({ run }: { run: PaperRunRow }) {
-  const m = run.metrics;
+function ChartsTab({ detail, error, loading }: { detail: RunDetail; error: unknown; loading: boolean }) {
+  if (error) {
+    return (
+      <div className="p-4 text-sm text-[#9db2ce]">
+        {error instanceof ApiError && error.status === 404
+          ? "No results — this run produced no artifacts (it never traded)."
+          : `Failed to load results: ${error instanceof Error ? error.message : ""}`}
+      </div>
+    );
+  }
+  if (loading) {
+    return <div className="p-4 text-sm text-[#9db2ce]">Loading results…</div>;
+  }
+  const m = detail.metrics;
   return (
     <div className="flex flex-col gap-3 p-4">
       <div className="flex gap-2">
         <StatCard label="Net PnL" value={`${m.netPnl >= 0 ? "+" : "-"}${Math.abs(m.netPnl).toLocaleString()}`} unit="USDT" tone={m.netPnl >= 0 ? "green" : "red"} />
         <StatCard label="Win rate" value={`${m.winRate.toFixed(2)}%`} tone={m.winRate >= 0 ? "green" : "red"} />
-        <StatCard label="Sharpe Ratio" value={run.sharpe.toFixed(2)} tone="orange" />
-        <StatCard label="Max Drawdown" value={formatPercent(run.maxDrawdownPct)} tone="red" />
+        <StatCard label="Sharpe Ratio" value={detail.sharpe.toFixed(2)} tone="orange" />
+        <StatCard label="Max Drawdown" value={formatPercent(detail.maxDrawdownPct)} tone="red" />
         <StatCard label="Trades" value={String(m.trades)} tone="white" />
         <StatCard label="Cost Drag" value={`${m.costDragPct.toFixed(2)}%`} tone="white" />
         <StatCard label="Edge net" value={m.edgeNetBp.toFixed(2)} unit="bp" tone="white" />
       </div>
-      <ChartCard title="PNL">
-        <PnlChart series={run.pnlChartSeries} />
-      </ChartCard>
-      <ChartCard title="Returns">
-        <LineChart
-          categories={run.returnsChartSeries.map((p) => p.date)}
-          series={[{ name: "Returns", data: run.returnsChartSeries.map((p) => p.value) }]}
-          style={{ height: 260 }}
-        />
+      <ChartCard title="Equity curve">
+        {detail.pnlChartSeries.length === 0 ? (
+          <div className="flex h-[240px] items-center justify-center text-sm text-muted-foreground">
+            No equity data.
+          </div>
+        ) : (
+          <PnlChart series={detail.pnlChartSeries} />
+        )}
       </ChartCard>
     </div>
   );
@@ -243,8 +258,6 @@ function ConfigTab({ run }: { run: PaperRunRow }) {
         <ConfigField label="TWAP interval" value={c.twapInterval} />
         <ConfigField label="Chase threshold" value={c.chaseThreshold} />
         <ConfigField label="Entry order TTL" value={c.entryOrderTtl} />
-        <ConfigField label="Take profit" value={c.takeProfit} />
-        <ConfigField label="Stop loss" value={c.stopLoss} />
         <ConfigField label="Cancel ratio" value={c.cancelRatio} />
         <ConfigField label="Simulated latency" value={c.simulatedLatency} />
         <ConfigField label="Trade processing cost" value={c.tradeProcessingCost} />
@@ -275,16 +288,13 @@ function ConfigTab({ run }: { run: PaperRunRow }) {
 }
 
 // ── Code tab ────────────────────────────────────────────────────────────────
+// Reuse the strategy builder's Monaco editor (read-only) so the syntax colors match the Create
+// page exactly. Paper/live runs all come from the HFT platform, whose strategies are Rhai
+// (Rust-like) — including the bar-data "MFT engine" ones — so always highlight as Rust.
 function CodeView({ code }: { code: string }) {
-  const lines = code.split("\n");
   return (
-    <div className="flex h-full overflow-auto font-mono text-xs">
-      <div className="flex-none px-3 py-4 text-right leading-5 text-muted-foreground/60 select-none">
-        {lines.map((_, i) => (
-          <div key={i}>{i + 1}</div>
-        ))}
-      </div>
-      <pre className="flex-1 px-2 py-4 leading-5 whitespace-pre text-white">{code}</pre>
+    <div className="flex h-full flex-col">
+      <CodeEditor code={code} language="rust" readOnly />
     </div>
   );
 }
@@ -299,6 +309,25 @@ export function RunDetailPanel({
   run: PaperRunRow | null;
 }) {
   const [tab, setTab] = useState<Tab>("Charts");
+  // Summary + equity are fetched here — only when the panel is open for a run — not per-row on the
+  // list. Skipped in mock mode (synthetic ids the real endpoints can't resolve; the mock row
+  // already carries its metrics).
+  const summaryQ = useRunSummary(!USE_MOCK && run ? run.id : undefined);
+  const equityQ = useRunEquity(!USE_MOCK && run ? run.id : undefined);
+  const detail: RunDetail =
+    USE_MOCK && run
+      ? {
+          returnPct: run.returnPct ?? 0,
+          sharpe: run.sharpe ?? 0,
+          maxDrawdownPct: run.maxDrawdownPct ?? 0,
+          metrics: run.metrics,
+          pnlSeries: run.pnlSeries,
+          pnlChartSeries: run.pnlChartSeries,
+        }
+      : toRunDetail(summaryQ.data ?? null, equityQ.data ?? [], run?.startingEquity ?? 0);
+  const lazy = !USE_MOCK && !!run;
+  const detailLoading = lazy && (summaryQ.isLoading || equityQ.isLoading);
+  const summaryError = lazy ? summaryQ.error : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -313,8 +342,13 @@ export function RunDetailPanel({
             <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-surface px-4 py-2.5">
               <div className="flex min-w-0 items-center gap-3">
                 <span className="truncate text-base font-semibold text-white">{run.strategyName}</span>
-                <span className={cn("shrink-0 text-lg font-semibold", run.returnPct >= 0 ? GRAD_GREEN : GRAD_RED)}>
-                  {formatPercent(run.returnPct)}
+                <span
+                  className={cn(
+                    "shrink-0 text-lg font-semibold",
+                    detailLoading ? "text-muted-foreground" : detail.returnPct >= 0 ? GRAD_GREEN : GRAD_RED,
+                  )}
+                >
+                  {detailLoading ? "—" : formatPercent(detail.returnPct)}
                 </span>
 
                 <div className="h-5 w-px shrink-0 bg-[#344054]" />
@@ -378,7 +412,7 @@ export function RunDetailPanel({
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto">
-              {tab === "Charts" && <ChartsTab run={run} />}
+              {tab === "Charts" && <ChartsTab detail={detail} error={summaryError} loading={detailLoading} />}
               {tab === "Trades" && <TradesTab runId={run.id} />}
               {tab === "Configuration" && <ConfigTab run={run} />}
               {tab === "Code" && <CodeView code={run.code} />}

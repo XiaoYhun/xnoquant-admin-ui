@@ -15,7 +15,6 @@ import { usePaperRuns } from "@/hooks/api/use-paper-runs";
 import { PaperRunsTable } from "./paper-runs-table";
 import { RunDetailPanel } from "./run-detail-panel";
 import type { PaperRunRow } from "@/lib/mock/paper-runs";
-import { useLiveTicks } from "@/hooks/use-live-ticks";
 
 const PAGE_SIZE = 9;
 const GROUP_TABS: { value: PaperRunRow["strategyType"]; label: string }[] = [
@@ -25,7 +24,6 @@ const GROUP_TABS: { value: PaperRunRow["strategyType"]; label: string }[] = [
 
 export default function Page() {
   const { data: runs = [], isLoading } = usePaperRuns();
-  useLiveTicks<PaperRunRow>(["paper-runs"]);
   const [search, setSearch] = useState("");
   const [group, setGroup] = useState<PaperRunRow["strategyType"]>("MFT");
   const [symbol, setSymbol] = useState("all");

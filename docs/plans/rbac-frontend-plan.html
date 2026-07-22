@@ -1,0 +1,579 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RBAC Frontend Plan — xnoquant-admin-ui</title>
+<style>
+  /* ---------- Tokens ---------- */
+  :root {
+    --bg: #F5F6F9;
+    --surface: #FFFFFF;
+    --surface-2: #EFF1F6;
+    --ink: #191B22;
+    --ink-2: #4A4F5C;
+    --ink-3: #7C8291;
+    --border: #E3E6ED;
+    --border-strong: #D2D6E0;
+    --accent: #4B57D4;
+    --accent-ink: #3A45B8;
+    --accent-wash: #ECEEFB;
+
+    --all: #7C4FCF;   --all-wash: #F1EAFB;
+    --lab: #2C7BC0;   --lab-wash: #E5F0FA;
+    --own: #2E9877;   --own-wash: #E3F4EE;
+    --none: #BE5262;  --none-wash: #FBE9EC;
+
+    --s403: #B4791F;  --s403-wash: #FaF0DD;
+    --s404: #6C7382;  --s404-wash: #EEF0F4;
+    --s422: #3A70C2;  --s422-wash: #E7EFFA;
+
+    --good: #2E9877;
+    --warn: #B4791F;
+    --crit: #C24B4B;
+
+    --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: "Cascadia Code", "JetBrains Mono", "SFMono-Regular", "SF Mono", Consolas, "Liberation Mono", ui-monospace, monospace;
+
+    --maxw: 74rem;
+    --prose: 42rem;
+    --radius: 12px;
+    --radius-sm: 8px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0E0F14;
+      --surface: #16181F;
+      --surface-2: #1C1F28;
+      --ink: #E9EBF1;
+      --ink-2: #A7ACBA;
+      --ink-3: #6E7484;
+      --border: #282B35;
+      --border-strong: #333743;
+      --accent: #8A92F0;
+      --accent-ink: #A6ADF5;
+      --accent-wash: #1E2136;
+
+      --all: #B49BEE;  --all-wash: #241E33;
+      --lab: #6FB0E8;  --lab-wash: #16222E;
+      --own: #5CC29E;  --own-wash: #142720;
+      --none: #E38A96; --none-wash: #2C1A1E;
+
+      --s403: #DFAE5F; --s403-wash: #2A2216;
+      --s404: #99A0AF; --s404-wash: #1E212A;
+      --s422: #79A6E6; --s422-wash: #15202F;
+
+      --good: #5CC29E; --warn: #DFAE5F; --crit: #E77B7B;
+    }
+  }
+  /* Explicit toggle overrides (must win over the media query in both directions) */
+  :root[data-theme="light"] {
+    --bg:#F5F6F9; --surface:#FFFFFF; --surface-2:#EFF1F6; --ink:#191B22; --ink-2:#4A4F5C; --ink-3:#7C8291;
+    --border:#E3E6ED; --border-strong:#D2D6E0; --accent:#4B57D4; --accent-ink:#3A45B8; --accent-wash:#ECEEFB;
+    --all:#7C4FCF; --all-wash:#F1EAFB; --lab:#2C7BC0; --lab-wash:#E5F0FA; --own:#2E9877; --own-wash:#E3F4EE; --none:#BE5262; --none-wash:#FBE9EC;
+    --s403:#B4791F; --s403-wash:#FaF0DD; --s404:#6C7382; --s404-wash:#EEF0F4; --s422:#3A70C2; --s422-wash:#E7EFFA;
+    --good:#2E9877; --warn:#B4791F; --crit:#C24B4B;
+  }
+  :root[data-theme="dark"] {
+    --bg:#0E0F14; --surface:#16181F; --surface-2:#1C1F28; --ink:#E9EBF1; --ink-2:#A7ACBA; --ink-3:#6E7484;
+    --border:#282B35; --border-strong:#333743; --accent:#8A92F0; --accent-ink:#A6ADF5; --accent-wash:#1E2136;
+    --all:#B49BEE; --all-wash:#241E33; --lab:#6FB0E8; --lab-wash:#16222E; --own:#5CC29E; --own-wash:#142720; --none:#E38A96; --none-wash:#2C1A1E;
+    --s403:#DFAE5F; --s403-wash:#2A2216; --s404:#99A0AF; --s404-wash:#1E212A; --s422:#79A6E6; --s422-wash:#15202F;
+    --good:#5CC29E; --warn:#DFAE5F; --crit:#E77B7B;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 clamp(1.1rem, 4vw, 3rem); }
+
+  /* ---------- Type ---------- */
+  h1, h2, h3 { text-wrap: balance; line-height: 1.15; margin: 0; }
+  h1 { font-size: clamp(1.9rem, 4.5vw, 2.6rem); font-weight: 680; letter-spacing: -0.022em; }
+  h2 { font-size: clamp(1.25rem, 2.6vw, 1.5rem); font-weight: 640; letter-spacing: -0.015em; }
+  h3 { font-size: 1.02rem; font-weight: 640; letter-spacing: -0.008em; }
+  p { margin: 0; }
+  a { color: var(--accent-ink); text-decoration: none; border-bottom: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); }
+  a:hover { border-bottom-color: var(--accent); }
+  strong { font-weight: 640; color: var(--ink); }
+  code, .mono { font-family: var(--font-mono); font-size: 0.86em; font-variant-ligatures: none; }
+  p code, li code, td code, .prose code {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 0.05em 0.36em;
+    color: var(--ink);
+    white-space: nowrap;
+  }
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    font-weight: 500;
+  }
+
+  /* ---------- Header ---------- */
+  header.masthead {
+    border-bottom: 1px solid var(--border);
+    padding: clamp(2rem, 6vw, 3.4rem) 0 clamp(1.4rem, 3vw, 2rem);
+    position: relative;
+  }
+  .kicker-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1.4rem; }
+  .brand-dot { display: inline-flex; align-items: center; gap: 0.55rem; font-family: var(--font-mono); font-size: 0.78rem; color: var(--ink-2); letter-spacing: 0.02em; }
+  .brand-dot b { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); }
+  header.masthead h1 { max-width: 20ch; }
+  .lede { margin-top: 0.9rem; max-width: 54ch; color: var(--ink-2); font-size: 1.06rem; }
+  .meta-grid {
+    margin-top: 1.8rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .meta-cell { background: var(--surface); padding: 0.85rem 1rem; }
+  .meta-cell .k { font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); }
+  .meta-cell .v { margin-top: 0.25rem; font-size: 0.9rem; color: var(--ink); font-family: var(--font-mono); word-break: break-word; }
+
+  /* Theme toggle */
+  .toggle {
+    appearance: none; border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink-2);
+    font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.04em; border-radius: 999px;
+    padding: 0.4rem 0.8rem; cursor: pointer; display: inline-flex; align-items: center; gap: 0.45rem; line-height: 1;
+  }
+  .toggle:hover { color: var(--ink); border-color: var(--accent); }
+  .toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ---------- Sections ---------- */
+  section { padding: clamp(2.2rem, 5vw, 3.4rem) 0; border-bottom: 1px solid var(--border); }
+  .sec-head { display: flex; align-items: baseline; gap: 0.9rem; margin-bottom: 1.5rem; }
+  .sec-head .num { font-family: var(--font-mono); font-size: 0.82rem; color: var(--accent); font-weight: 600; padding-top: 0.15rem; }
+  .prose { max-width: var(--prose); }
+  .prose p + p { margin-top: 0.9rem; }
+  .prose.wide { max-width: 58rem; }
+
+  /* Summary band */
+  .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 0.9rem; }
+  .stat {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 1.1rem 1.15rem; position: relative;
+  }
+  .stat .lab { font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-3); }
+  .stat .big { font-size: 1.5rem; font-weight: 660; letter-spacing: -0.02em; margin-top: 0.35rem; }
+  .stat .sub { font-size: 0.86rem; color: var(--ink-2); margin-top: 0.3rem; }
+
+  /* Scope ladder */
+  .ladder { display: flex; flex-direction: column; gap: 0.7rem; }
+  .rung {
+    display: grid; grid-template-columns: auto 1fr; gap: 1rem; align-items: start;
+    background: var(--surface); border: 1px solid var(--border); border-left-width: 4px;
+    border-radius: var(--radius-sm); padding: 0.95rem 1.1rem;
+  }
+  .rung.all  { border-left-color: var(--all); }
+  .rung.lab  { border-left-color: var(--lab); }
+  .rung.own  { border-left-color: var(--own); }
+  .rung.none { border-left-color: var(--none); }
+  .rung .tier { font-family: var(--font-mono); font-weight: 640; font-size: 0.95rem; min-width: 3.4rem; }
+  .rung.all .tier { color: var(--all); } .rung.lab .tier { color: var(--lab); }
+  .rung.own .tier { color: var(--own); } .rung.none .tier { color: var(--none); }
+  .rung .roles { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.4rem; }
+  .rung .desc { font-size: 0.9rem; color: var(--ink-2); }
+  .rolechip {
+    font-family: var(--font-mono); font-size: 0.74rem; padding: 0.12rem 0.5rem; border-radius: 5px;
+    background: var(--surface-2); border: 1px solid var(--border); color: var(--ink-2);
+  }
+
+  /* Chips */
+  .chip {
+    display: inline-flex; align-items: center; gap: 0.35rem; font-family: var(--font-mono); font-size: 0.72rem;
+    font-weight: 600; letter-spacing: 0.02em; padding: 0.16rem 0.5rem; border-radius: 999px; white-space: nowrap;
+  }
+  .chip.all  { color: var(--all);  background: var(--all-wash); }
+  .chip.lab  { color: var(--lab);  background: var(--lab-wash); }
+  .chip.own  { color: var(--own);  background: var(--own-wash); }
+  .chip.none { color: var(--none); background: var(--none-wash); }
+  .chip.s403 { color: var(--s403); background: var(--s403-wash); }
+  .chip.s404 { color: var(--s404); background: var(--s404-wash); }
+  .chip.s422 { color: var(--s422); background: var(--s422-wash); }
+  .chip.eff  { color: var(--ink-2); background: var(--surface-2); border: 1px solid var(--border); }
+
+  /* Cards / phases */
+  .phase {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 1.4rem 1.5rem; margin-bottom: 1.1rem;
+  }
+  .phase-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.7rem 0.9rem; margin-bottom: 0.5rem; }
+  .phase-head .pnum {
+    font-family: var(--font-mono); font-weight: 660; font-size: 0.78rem; color: var(--surface);
+    background: var(--accent); border-radius: 6px; padding: 0.2rem 0.5rem; letter-spacing: 0.03em;
+  }
+  .phase-head h3 { flex: 1 1 auto; min-width: 12rem; }
+  .phase-goal { color: var(--ink-2); font-size: 0.94rem; margin: 0.15rem 0 1rem; max-width: 60ch; }
+  .steps { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.55rem; }
+  .steps li { position: relative; padding-left: 1.4rem; font-size: 0.92rem; color: var(--ink); }
+  .steps li::before {
+    content: ""; position: absolute; left: 0; top: 0.62em; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent); opacity: 0.8;
+  }
+  .steps li .why { color: var(--ink-2); }
+  .files { margin-top: 1rem; padding-top: 0.9rem; border-top: 1px dashed var(--border-strong); display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+  .files .lbl { font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3); margin-right: 0.2rem; }
+  .fpath { font-family: var(--font-mono); font-size: 0.75rem; color: var(--ink-2); background: var(--surface-2); border: 1px solid var(--border); border-radius: 5px; padding: 0.1rem 0.45rem; }
+  .fpath.new { color: var(--own); border-color: color-mix(in srgb, var(--own) 40%, var(--border)); }
+
+  /* Tables */
+  .table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 0.86rem; min-width: 40rem; }
+  th, td { text-align: left; padding: 0.62rem 0.85rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  thead th { font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; background: var(--surface-2); position: sticky; top: 0; }
+  tbody tr:last-child td { border-bottom: none; }
+  td.mono, th.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+  td .endpoint { font-family: var(--font-mono); font-size: 0.8rem; color: var(--ink); }
+  .verb { font-family: var(--font-mono); font-weight: 640; font-size: 0.72rem; padding: 0.06rem 0.34rem; border-radius: 4px; background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--border); }
+
+  /* Callouts */
+  .callout {
+    border: 1px solid var(--border); border-left: 4px solid var(--accent); background: var(--surface);
+    border-radius: var(--radius-sm); padding: 1rem 1.2rem; margin: 1.2rem 0 0; max-width: 62rem;
+  }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.crit { border-left-color: var(--crit); }
+  .callout .ct { font-weight: 640; font-size: 0.9rem; margin-bottom: 0.3rem; display: flex; align-items: center; gap: 0.5rem; }
+  .callout .ct .tag { font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
+  .callout p { font-size: 0.9rem; color: var(--ink-2); }
+  .callout p + p { margin-top: 0.5rem; }
+
+  ul.plain { margin: 0; padding-left: 1.15rem; display: flex; flex-direction: column; gap: 0.5rem; }
+  ul.plain li { font-size: 0.93rem; }
+  ul.plain li::marker { color: var(--accent); }
+
+  .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr)); gap: 1rem; }
+  .mini {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.1rem 1.2rem;
+  }
+  .mini h3 { margin-bottom: 0.55rem; }
+  .mini p { font-size: 0.9rem; color: var(--ink-2); }
+  .mini .askstatus { font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 0.5rem; }
+
+  footer { padding: 2.4rem 0 3.4rem; color: var(--ink-3); font-size: 0.82rem; }
+  footer .mono { font-size: 0.78rem; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    a, .toggle, .fpath { transition: color .15s ease, border-color .15s ease, background .15s ease; }
+  }
+  @media (max-width: 34rem) {
+    .rung { grid-template-columns: 1fr; gap: 0.5rem; }
+    .meta-grid { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="kicker-row">
+      <span class="brand-dot"><b></b>xnoquant-admin-ui</span>
+      <button class="toggle" id="themeBtn" type="button" aria-label="Toggle color theme"><span id="themeIcon">◐</span><span id="themeLabel">Theme</span></button>
+    </div>
+    <p class="eyebrow">Implementation plan · frontend</p>
+    <h1>Role-aware UI for accounts, strategies &amp; runs</h1>
+    <p class="lede">Wiring the HFT API's RBAC scopes (<span class="mono">All · Lab · Own · None</span>) into the admin UI — session scope, resource ownership, and honest <span class="mono">403 / 404 / 422</span> handling.</p>
+    <div class="meta-grid">
+      <div class="meta-cell"><div class="k">Source spec</div><div class="v">rbac-api-scopes.md</div></div>
+      <div class="meta-cell"><div class="k">Backend truth</div><div class="v">crates/api · rbac.rs · auth.rs</div></div>
+      <div class="meta-cell"><div class="k">Governs</div><div class="v">HFT accounts · strategies · runs</div></div>
+      <div class="meta-cell"><div class="k">Prereq shipped</div><div class="v">owner_id on Run/Strategy ✓</div></div>
+    </div>
+  </header>
+
+  <!-- TRANSLATION NOTE -->
+  <section>
+    <div class="sec-head"><span class="num">00</span><h2>Read this first — the spec targets a different frontend</h2></div>
+    <div class="prose wide">
+      <p>The RBAC guide is written for a codebase that uses <code>web/src/lib/types.ts</code> and an <code>api.me()</code> call. Our project is a <strong>Next.js App Router</strong> app with different file names and an already-wired auth flow. This plan maps every recommendation onto <em>our</em> structure, and corrects two of the spec's assumptions that don't hold here:</p>
+    </div>
+    <div class="callout">
+      <div class="ct"><span class="tag">correction</span> The spec says our <code>User</code> type is missing <code>roles</code> and <code>me()</code> is never called. Not true here.</div>
+      <p>Our session <code>User</code> is <code>models.User</code> from the auth service (<code>store/auth-store.ts:7</code>), which <strong>already declares</strong> <code>roles?: string[]</code> and <code>user_id?: string</code> (<code>types/api/auth.ts:686,688</code>). And <code>useMe()</code> <em>is</em> called — but only to <code>console.log</code> the result (<code>components/auth/auth-provider.tsx:37–42</code>). So the gap isn't "add the field and the call" — it's <strong>nothing consumes <code>roles</code> or <code>user_id</code> yet</strong>, and the values are dropped before they reach any control.</p>
+    </div>
+    <div class="callout warn">
+      <div class="ct"><span class="tag">scope boundary</span> This governs the <strong>HFT</strong> resource family only.</div>
+      <p>Accounts, runs (live + paper), and HFT strategies come from the HFT API and carry the RBAC described here. Our <code>/strategies</code> list, however, is built from <strong>XALPHA / MFT</strong> data (<code>hooks/api/use-strategies.ts</code>, <code>StrategyInfo</code> has no <code>owner_id</code>) — a separate service with its own access model. Ownership work below applies to it only if backend adds an owner field. Treated as a non-goal here; see §6.</p>
+    </div>
+  </section>
+
+  <!-- SUMMARY -->
+  <section>
+    <div class="sec-head"><span class="num">01</span><h2>What changes, at a glance</h2></div>
+    <div class="summary">
+      <div class="stat"><div class="lab">Scope tiers</div><div class="big">4</div><div class="sub"><span class="chip all">ALL</span> <span class="chip lab">LAB</span> <span class="chip own">OWN</span> <span class="chip none">NONE</span></div></div>
+      <div class="stat"><div class="lab">Delivery phases</div><div class="big">4</div><div class="sub">Session → ownership → errors → role-aware UI</div></div>
+      <div class="stat"><div class="lab">Status codes to split</div><div class="big">403 / 404 / 422</div><div class="sub">Today only one branch exists (venue 409)</div></div>
+      <div class="stat"><div class="lab">Backend asks</div><div class="big">3</div><div class="sub">1 recommended · 2 conditional</div></div>
+    </div>
+    <div class="callout">
+      <div class="ct"><span class="tag">principle</span> Client gating is UX only — the server is the enforcement point.</div>
+      <p>Everything below hides or reshapes UI to match what the API will allow. It never grants access; it prevents dead-end clicks and clarifies why something is missing. A <code>None</code>-scoped user must still be handled by real <code>403</code> handling, not by hiding alone.</p>
+    </div>
+  </section>
+
+  <!-- SCOPE MODEL -->
+  <section>
+    <div class="sec-head"><span class="num">02</span><h2>The scope model</h2></div>
+    <div class="prose wide" style="margin-bottom:1.4rem">
+      <p>Every user has zero or more <code>roles</code> (strings from the external auth service). The backend reduces them to exactly one scope; when roles map to more than one tier, <strong>the highest wins</strong>. The ladder below is priority order, top = strongest.</p>
+    </div>
+    <div class="ladder">
+      <div class="rung all">
+        <span class="tier">All</span>
+        <div>
+          <div class="roles"><span class="rolechip">admin</span></div>
+          <div class="desc">Sees and mutates <strong>every</strong> user's accounts, strategies, and runs. The only scope that ever touches another user's account or stops/deletes another user's run.</div>
+        </div>
+      </div>
+      <div class="rung lab">
+        <span class="tier">Lab</span>
+        <div>
+          <div class="roles"><span class="rolechip">researcher</span><span class="rolechip">research-lead</span><span class="rolechip">student</span><span class="rolechip">intern</span></div>
+          <div class="desc"><strong>Read-sharing only.</strong> Sees own resources plus the quant-lab roster's <em>strategies</em> and <em>backtest/paper runs</em>. Never accounts, never <code>live</code> runs. All writes stay owner-or-admin.</div>
+        </div>
+      </div>
+      <div class="rung own">
+        <span class="tier">Own</span>
+        <div>
+          <div class="roles"><span class="rolechip">pm</span><span class="rolechip">trader</span></div>
+          <div class="desc">Own resources only — the default for a mapped role.</div>
+        </div>
+      </div>
+      <div class="rung none">
+        <span class="tier">None</span>
+        <div>
+          <div class="roles"><span class="rolechip">default</span><span class="rolechip">contributor</span><span class="rolechip">tester</span><span class="rolechip">unmapped / empty</span></div>
+          <div class="desc">No access. Every gated endpoint returns <span class="chip s403">403</span>. Must be handled explicitly — presence of no role is a valid state.</div>
+        </div>
+      </div>
+    </div>
+    <div class="callout">
+      <div class="ct"><span class="tag">what Lab really grants</span></div>
+      <p><strong>Accounts:</strong> never shared — Lab behaves exactly like Own. <strong>Strategies:</strong> read own + roster's; write is owner-or-admin. <strong>Runs:</strong> read own + roster's <code>backtest</code>/<code>paper</code> only — <code>live</code> is always excluded, even for lab-mates; write is owner-or-admin. In practice most role-aware behavior reduces to two checks: <em>is the caller</em> <code>admin</code>, and <em>does</em> <code>owner_id === my user_id</code>.</p>
+    </div>
+  </section>
+
+  <!-- PHASES -->
+  <section>
+    <div class="sec-head"><span class="num">03</span><h2>Delivery plan — four phases</h2></div>
+    <p class="prose" style="margin-bottom:1.4rem;color:var(--ink-2)">Ordered by dependency: identity and ownership are foundations that phases&nbsp;3–4 consume. Each phase ships independently and is testable on its own.</p>
+
+    <!-- Phase 1 -->
+    <div class="phase">
+      <div class="phase-head"><span class="pnum">P1</span><h3>Session scope &amp; identity</h3><span class="chip eff">effort · S</span><span class="chip all">foundation</span></div>
+      <p class="phase-goal">Derive the caller's scope from <code>roles</code> and expose <code>{ userId, roles, scope, isAdmin }</code> from one place, so no component re-implements the reduction.</p>
+      <ul class="steps">
+        <li>Add <code>lib/rbac.ts</code> — mirror <code>rbac.rs</code>'s three role arrays (<code>ALL_ACCESS</code>, <code>LAB_ACCESS</code>, <code>OWN_ACCESS</code>) and a <code>resourceScope(roles)</code> reducer that applies the priority order. <span class="why">Annotate it with the <code>rbac.rs</code> path — it's a deliberate second source of truth (Option A) until backend ships a derived <code>scope</code> (see §5).</span></li>
+        <li>Extend <code>hooks/use-auth.ts</code> to surface <code>userId</code>, <code>roles</code>, <code>scope</code>, and <code>isAdmin</code> off the store's <code>user</code>. <span class="why">The values are already in the store from the <code>/auth/token</code> exchange — this just reads them.</span></li>
+        <li><strong>Verify</strong> <code>/auth/token</code> actually populates <code>user.roles</code> at runtime (the field is optional). If it comes back empty, repoint the existing <code>useMe()</code> to the authoritative HFT <code>GET /api/auth/me</code> (now in the generated <code>User</code> type) and feed its <code>roles</code> into the store — replacing the debug <code>console.log</code>.</li>
+      </ul>
+      <div class="files"><span class="lbl">touches</span><span class="fpath new">lib/rbac.ts (new)</span><span class="fpath">hooks/use-auth.ts</span><span class="fpath">store/auth-store.ts</span><span class="fpath">components/auth/auth-provider.tsx</span></div>
+    </div>
+
+    <!-- Phase 2 -->
+    <div class="phase">
+      <div class="phase-head"><span class="pnum">P2</span><h3>Ownership plumbing</h3><span class="chip eff">effort · S–M</span><span class="chip all">foundation</span></div>
+      <p class="phase-goal">Carry <code>owner_id</code> from the API through the row transforms so controls can compare it to the current user. It's stripped everywhere today.</p>
+      <ul class="steps">
+        <li>Thread <code>owner_id</code> into the row shapes: <code>LiveRunRow</code>, <code>PaperRunRow</code> (add the field in <code>lib/mock/*.ts</code>, populate in <code>lib/transform/runs.ts</code> <code>toLiveRunRow</code>/<code>toPaperRunRow</code>) and <code>EditorTab</code> (<code>toEditorTab</code> in <code>use-hft-strategies.ts</code>). <span class="why">Accounts have no <code>owner_id</code> field on the payload — non-admins only ever receive their own, so ownership is implicit; only the admin cross-user view needs it (backend ask, §5).</span></li>
+        <li>Add helpers to <code>lib/rbac.ts</code>: <code>isOwner(resource, userId)</code> and <code>canMutate(resource, { userId, isAdmin })</code> = <code>isOwner || isAdmin</code>.</li>
+        <li>Update mock fixtures so at least one run/strategy is owned by a <em>different</em> user id, so shared-vs-owned rendering is exercisable before touching the real API.</li>
+      </ul>
+      <div class="files"><span class="lbl">touches</span><span class="fpath">lib/transform/runs.ts</span><span class="fpath">lib/mock/live-runs.ts</span><span class="fpath">lib/mock/paper-runs.ts</span><span class="fpath">hooks/api/use-hft-strategies.ts</span><span class="fpath">lib/rbac.ts</span></div>
+    </div>
+
+    <!-- Phase 3 -->
+    <div class="phase">
+      <div class="phase-head"><span class="pnum">P3</span><h3>Honest error semantics</h3><span class="chip eff">effort · M</span><span class="chip s403">403</span><span class="chip s404">404</span><span class="chip s422">422</span></div>
+      <p class="phase-goal">Stop collapsing failures into one generic state. Each status means something specific — surface it.</p>
+      <ul class="steps">
+        <li>Make the raw HFT helpers carry the server's message: <code>apiGet/apiPost/apiPut/apiDelete</code> in <code>lib/api-client.ts</code> currently throw <code>ApiError(status, res.statusText)</code> — read the JSON body like <code>throwEnvelopeError</code> does, so <code>422</code> business messages survive. Status is already preserved.</li>
+        <li><span class="chip s403">403</span> <strong>No access to this family</strong> — session-level, same for every resource. Render a dedicated "you don't have access to this section" state and/or hide the nav entry once scope is known to be <code>None</code>. Don't rely on hiding alone.</li>
+        <li><span class="chip s404">404</span> <strong>Not found — or hidden from you.</strong> On single-resource endpoints the API deliberately conflates "doesn't exist" with "someone else's." Render as <em>not found</em>, never "forbidden."</li>
+        <li><span class="chip s422">422</span> <strong>Business rule rejected</strong> (e.g. deleting a paper/live run, stopping a non-running run). Show the server's message verbatim — it's caller-facing.</li>
+        <li>Add the missing <code>isError</code> branches: <code>strategies/</code>, <code>live-trading/</code>, and <code>paper-trading/</code> pages read only <code>isLoading</code> today, so a failed query silently becomes the empty state. Model the branch on the existing <code>accounts</code>/<code>venues</code> list error states, and the status-aware precedent at <code>venue-list.tsx:100</code>.</li>
+        <li>Replace static mutation error strings (stop-run, launch, account CRUD, strategy create) with status-aware copy driven off <code>ApiError.status</code>.</li>
+      </ul>
+      <div class="files"><span class="lbl">touches</span><span class="fpath">lib/api-client.ts</span><span class="fpath">app/(dashboard)/strategies/page.tsx</span><span class="fpath">.../live-trading/page.tsx</span><span class="fpath">.../paper-trading/page.tsx</span><span class="fpath">live-runs-table.tsx</span><span class="fpath">create-strategy-modal.tsx</span></div>
+    </div>
+
+    <!-- Phase 4 -->
+    <div class="phase">
+      <div class="phase-head"><span class="pnum">P4</span><h3>Role-aware surfaces</h3><span class="chip eff">effort · M–L</span><span class="chip lab">consumes P1–P3</span></div>
+      <p class="phase-goal">Apply scope and ownership at the actual controls: nav, write buttons, and shared-resource badges.</p>
+      <ul class="steps">
+        <li><strong>Nav gating.</strong> Add <code>adminOnly?</code> / <code>minScope?</code> to <code>NavItem</code> (<code>nav-config.ts</code>) and extend the existing filter in <code>sidebar.tsx:85</code> (which already filters by <code>mode</code>). <code>None</code> → hide gated sections; any admin-only surface → gate on <code>isAdmin</code>.</li>
+        <li><strong>Hide — don't disable — write controls</strong> you can't use. Because Lab read- and write-visibility diverge, a lab-mate's strategy/run appears in lists but Stop/Edit/Delete would <code>404</code>. Gate on <code>canMutate</code>: Stop-run (<code>live-runs-table.tsx:161</code>), strategy delete/edit (<code>editors-bar.tsx</code>, <code>toolbar.tsx</code>), account edit/delete (<code>account-list.tsx</code> — cross-user only under admin).</li>
+        <li><strong>Badge shared resources.</strong> On the strategies and runs lists, compare <code>owner_id</code> to <code>userId</code> and render an "owned" vs "shared" chip so a lab-mate's item isn't mistaken for your own.</li>
+        <li><strong>Live runs are never shared</strong> — keep them out of any "shared with lab" filter/tab; a lab-mate's live run won't appear at all, not even greyed out. <strong>Accounts are never shared</strong> — build no shared-account affordance.</li>
+        <li><strong>Delete-run affordance is <code>backtest</code>-only.</strong> Paper/live return <code>422</code> for everyone, always. No delete button exists yet — when one is added, render it only when <code>mode === "backtest"</code>.</li>
+      </ul>
+      <div class="files"><span class="lbl">touches</span><span class="fpath">components/layout/nav-config.ts</span><span class="fpath">components/layout/sidebar.tsx</span><span class="fpath">live-runs-table.tsx</span><span class="fpath">strategies-table.tsx</span><span class="fpath">account-list.tsx</span><span class="fpath">create-strategy/editors-bar.tsx</span></div>
+    </div>
+  </section>
+
+  <!-- MATRIX -->
+  <section>
+    <div class="sec-head"><span class="num">04</span><h2>Permission → UI matrix</h2></div>
+    <p class="prose" style="margin-bottom:1.2rem;color:var(--ink-2)">The API's own visibility rules, condensed to what each drives in the UI. "Visibility" is what a <span class="chip s422" style="background:transparent;padding:0">200</span>-status caller receives; <code>None</code> gets <span class="chip s403">403</span> on all of them.</p>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th style="min-width:16rem">Endpoint</th>
+            <th><span class="chip all">All</span></th>
+            <th><span class="chip lab">Lab</span></th>
+            <th><span class="chip own">Own</span></th>
+            <th style="min-width:14rem">UI consequence</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="verb">GET</span> <span class="endpoint">/api/accounts</span></td>
+            <td>every account</td><td>own only</td><td>own only</td>
+            <td>Admin needs an owner column (backend ask). Others: all rows are theirs.</td>
+          </tr>
+          <tr>
+            <td><span class="verb">PUT</span><span class="verb">DEL</span> <span class="endpoint">/api/accounts/{id}</span></td>
+            <td>any</td><td>own only</td><td>own only</td>
+            <td>Edit/Delete: <code>canMutate</code>. Never a "shared account."</td>
+          </tr>
+          <tr>
+            <td><span class="verb">GET</span> <span class="endpoint">/api/strategies</span></td>
+            <td>all</td><td>own + roster</td><td>own only</td>
+            <td>Badge own vs shared (Lab). List is mixed for Lab.</td>
+          </tr>
+          <tr>
+            <td><span class="verb">PUT</span><span class="verb">DEL</span> <span class="endpoint">/api/strategies/{id}</span></td>
+            <td>any</td><td><strong>own only</strong></td><td>own only</td>
+            <td>Hide edit/delete unless <code>canMutate</code> — Lab ≠ write.</td>
+          </tr>
+          <tr>
+            <td><span class="verb">POST</span> <span class="endpoint">/api/strategies/validate</span></td>
+            <td colspan="3" style="color:var(--ink-3)">any authenticated user — no scope gate</td>
+            <td>Validate/feature-catalog stay available even at <code>None</code>.</td>
+          </tr>
+          <tr>
+            <td><span class="verb">GET</span> <span class="endpoint">/api/runs</span></td>
+            <td>all</td><td>own + roster <span class="mono">backtest/paper</span></td><td>own only</td>
+            <td>Badge shared. <code>live</code> never appears in shared sets.</td>
+          </tr>
+          <tr>
+            <td><span class="verb">POST</span> <span class="endpoint">/api/runs/{id}/stop</span></td>
+            <td>any</td><td><strong>own only</strong></td><td>own only</td>
+            <td>Stop button gated on <code>canMutate</code>.</td>
+          </tr>
+          <tr>
+            <td><span class="verb">DEL</span> <span class="endpoint">/api/runs/{id}</span></td>
+            <td>own+any <span class="mono">backtest</span></td><td>own <span class="mono">backtest</span></td><td>own <span class="mono">backtest</span></td>
+            <td>Delete only when <code>mode==="backtest"</code> &amp; <code>canMutate</code>.</td>
+          </tr>
+          <tr>
+            <td><span class="verb">GET</span> <span class="endpoint">/api/runs/{id}/live[/stream]</span></td>
+            <td>own, or any (admin)</td><td><strong>own only</strong></td><td>own only</td>
+            <td>Live detail/SSE excluded from lab sharing entirely.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- BACKEND ASKS -->
+  <section>
+    <div class="sec-head"><span class="num">05</span><h2>Asks for backend</h2></div>
+    <div class="grid-2">
+      <div class="mini">
+        <div class="askstatus" style="color:var(--good)">Recommended</div>
+        <h3>Derived <code>scope</code> on <code>/api/auth/me</code></h3>
+        <p>Return <code>scope: "all" | "lab" | "own" | "none"</code> so the frontend never re-implements the reduction. Small change in <code>routes/auth.rs</code> / <code>domain/user.rs</code>; removes the second source of truth in <code>lib/rbac.ts</code>.</p>
+      </div>
+      <div class="mini">
+        <div class="askstatus" style="color:var(--warn)">Conditional</div>
+        <h3>Owner on HFT <code>Account</code></h3>
+        <p>Accounts expose no owner field. Only needed for the <strong>admin</strong> cross-user account view — without it, admins can't label whose account a row is. Non-admin flows don't need it.</p>
+      </div>
+      <div class="mini">
+        <div class="askstatus" style="color:var(--warn)">Conditional</div>
+        <h3>Owner on XALPHA <code>StrategyInfo</code></h3>
+        <p>Our <code>/strategies</code> list is MFT/XALPHA and has no <code>owner_id</code>. Ownership badges/gating there are impossible until it's added — otherwise that list stays outside this RBAC work (see §6).</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- NON-GOALS + RISKS -->
+  <section style="border-bottom:none">
+    <div class="sec-head"><span class="num">06</span><h2>Non-goals &amp; risks</h2></div>
+    <div class="grid-2">
+      <div>
+        <h3 style="margin-bottom:0.7rem">Explicitly out of scope</h3>
+        <ul class="plain">
+          <li>The XALPHA <code>/strategies</code> (MFT) list — different service, no owner field, separate access model.</li>
+          <li>Any "shared account" affordance — accounts are never shared under any scope.</li>
+          <li>Server-side enforcement — untouched; this is purely presentation.</li>
+        </ul>
+      </div>
+      <div>
+        <h3 style="margin-bottom:0.7rem">Risks to watch</h3>
+        <ul class="plain">
+          <li><strong>Mock mode masks RBAC.</strong> <code>USE_MOCK</code> defaults <code>true</code> and fixtures are single-owner — Lab/admin behavior can't be exercised until mocks vary <code>owner_id</code> (P2) or you test against the real dev API with a Lab-role and an admin token.</li>
+          <li><strong><code>roles</code> may be empty/unmapped → <code>None</code>.</strong> Never rely on scope-hiding alone; always handle <code>403</code> explicitly.</li>
+          <li><strong>Rule drift.</strong> If <code>lib/rbac.ts</code> mirrors <code>rbac.rs</code> (Option A), the two can diverge — the derived-<code>scope</code> backend ask retires this risk.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="callout warn">
+      <div class="ct"><span class="tag">verification</span> Definition of done</div>
+      <p>A <code>None</code> user sees gated sections hidden and a clear <code>403</code> state, not empty lists. A <code>Lab</code> user sees lab-mates' strategies/backtest-paper runs badged as shared, with no write controls on them, and no live runs. An owner sees full controls. All checked against the real dev API — mock mode is not sufficient proof.</p>
+    </div>
+  </section>
+
+  <footer>
+    <p class="mono">Plan derived from rbac-api-scopes.md · file:line anchors reflect the working tree at authoring time — re-verify before editing.</p>
+  </footer>
+
+</div>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    var btn = document.getElementById('themeBtn');
+    var icon = document.getElementById('themeIcon');
+    var label = document.getElementById('themeLabel');
+    function current() {
+      var attr = root.getAttribute('data-theme');
+      if (attr) return attr;
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    function paint() {
+      var t = current();
+      icon.textContent = t === 'dark' ? '☾' : '☀';
+      label.textContent = t === 'dark' ? 'Dark' : 'Light';
+    }
+    btn.addEventListener('click', function () {
+      root.setAttribute('data-theme', current() === 'dark' ? 'light' : 'dark');
+      paint();
+    });
+    paint();
+  })();
+</script>
+</body>
+</html>

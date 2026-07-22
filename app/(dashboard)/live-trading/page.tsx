@@ -17,7 +17,6 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { useLiveRuns } from "@/hooks/api/use-live-runs";
-import { useLiveTicks } from "@/hooks/use-live-ticks";
 import { LiveRunsTable } from "./live-runs-table";
 import { LiveRunDetailPanel } from "./live-run-detail-panel";
 import type { LiveRunRow } from "@/lib/mock/live-runs";
@@ -34,7 +33,6 @@ const STATUS_FILTERS = [
 
 export default function Page() {
   const { data: runs = [], isLoading } = useLiveRuns();
-  useLiveTicks<LiveRunRow>(["live-runs"]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [page, setPage] = useState(1);

@@ -5,6 +5,9 @@ import { LineChart } from "@/components/charts/line-chart";
 import { cn, formatPercent } from "@/lib/utils";
 import type { RunStatus } from "@/types/domain";
 import type { LiveRunRow } from "@/lib/mock/live-runs";
+import { useRunSummary, useRunEquity } from "@/hooks/api/use-runs";
+import { USE_MOCK } from "@/lib/constant";
+import { toRunDetail } from "@/lib/transform/runs";
 
 // Right-side slide-in panel for a Live Trading row — same Dialog shell, header layout and
 // slide-in animation as the Strategy List's strategy-detail-panel.tsx (Figma node 13964:132139),
@@ -46,6 +49,16 @@ export function LiveRunDetailPanel({
   run: LiveRunRow | null;
 }) {
   const s = run ? STATUS_META[run.status] : null;
+  // Summary + equity are fetched here — only when the panel is open for a run — not per-row on the
+  // list. Skipped in mock mode (the mock row already carries its metrics).
+  const summaryQ = useRunSummary(!USE_MOCK && run ? run.id : undefined);
+  const equityQ = useRunEquity(!USE_MOCK && run ? run.id : undefined);
+  const lazy = !USE_MOCK && !!run;
+  const detailLoading = lazy && (summaryQ.isLoading || equityQ.isLoading);
+  const detail =
+    USE_MOCK && run
+      ? { returnPct: run.returnPct ?? 0, sharpe: run.sharpe ?? 0, maxDrawdownPct: run.maxDrawdownPct ?? 0, pnlSeries: run.pnlSeries }
+      : toRunDetail(summaryQ.data ?? null, equityQ.data ?? [], run?.startingEquity ?? 0);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -98,21 +111,35 @@ export function LiveRunDetailPanel({
               <div className="flex flex-wrap gap-3">
                 <StatTile
                   label="Return"
-                  value={formatPercent(run.returnPct)}
-                  valueClassName={run.returnPct >= 0 ? GRAD_GREEN : GRAD_RED}
+                  value={detailLoading ? "—" : formatPercent(detail.returnPct)}
+                  valueClassName={detailLoading ? undefined : detail.returnPct >= 0 ? GRAD_GREEN : GRAD_RED}
                 />
-                <StatTile label="Sharpe" value={run.sharpe.toFixed(2)} />
-                <StatTile label="Max drawdown" value={formatPercent(run.maxDrawdownPct)} valueClassName={GRAD_RED} />
+                <StatTile label="Sharpe" value={detailLoading ? "—" : detail.sharpe.toFixed(2)} />
+                <StatTile
+                  label="Max drawdown"
+                  value={detailLoading ? "—" : formatPercent(detail.maxDrawdownPct)}
+                  valueClassName={detailLoading ? undefined : GRAD_RED}
+                />
               </div>
 
               <div className="rounded-xl border border-border">
-                <div className="border-b border-border px-4 py-3 text-sm font-medium text-foreground">PnL</div>
+                <div className="border-b border-border px-4 py-3 text-sm font-medium text-foreground">Equity curve</div>
                 <div className="p-2">
-                  <LineChart
-                    categories={run.pnlSeries.map((_, i) => `T-${run.pnlSeries.length - i}`)}
-                    series={[{ name: "PnL", data: run.pnlSeries }]}
-                    style={{ height: 260 }}
-                  />
+                  {detailLoading ? (
+                    <div className="flex h-[260px] items-center justify-center text-sm text-muted-foreground">
+                      Loading…
+                    </div>
+                  ) : detail.pnlSeries.length === 0 ? (
+                    <div className="flex h-[260px] items-center justify-center text-sm text-muted-foreground">
+                      No equity data.
+                    </div>
+                  ) : (
+                    <LineChart
+                      categories={detail.pnlSeries.map((_, i) => `T-${detail.pnlSeries.length - i}`)}
+                      series={[{ name: "Equity", data: detail.pnlSeries }]}
+                      style={{ height: 260 }}
+                    />
+                  )}
                 </div>
               </div>
             </div>

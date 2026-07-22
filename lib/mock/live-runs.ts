@@ -12,10 +12,14 @@ export type LiveRunRow = {
   symbols: { symbol: string; market: string }[];
   timeframe: string;
   status: RunStatus;
+  // Manifest-derived starting equity — kept so the detail panel can compute % metrics from the
+  // lazily-fetched summary. See lib/transform/runs.ts.
+  startingEquity: number;
   pnlSeries: number[];
-  returnPct: number;
-  sharpe: number;
-  maxDrawdownPct: number;
+  // Summary/equity-derived — null/empty until the run's detail panel is opened (then fetched).
+  returnPct: number | null;
+  sharpe: number | null;
+  maxDrawdownPct: number | null;
 };
 
 // Deterministic pseudo-random walk (no Math.random) so sparkline data is stable across
@@ -38,7 +42,7 @@ function pnlSeries(seed: number, drift: number): number[] {
   return points;
 }
 
-export const MOCK_LIVE_RUNS: LiveRunRow[] = [
+const MOCK_LIVE_RUNS: Omit<LiveRunRow, "startingEquity">[] = [
   { id: "MFT-5IWb3Ux", strategyName: "Sample Strategy 1", alphaStatus: "Live Trading", accounts: ["DN-002"], symbols: [{ symbol: "VN30F1M", market: "VNFuture" }], timeframe: "5min", status: "running", returnPct: 134.22, sharpe: 1.82, maxDrawdownPct: -14.22, pnlSeries: pnlSeries(1, 1.4) },
   { id: "MFT-D7AxNplR", strategyName: "Momentum Booster", alphaStatus: "Live Trading", accounts: ["DN-002"], symbols: [{ symbol: "AAPL", market: "NASDAQ" }], timeframe: "5min", status: "running", returnPct: 87.45, sharpe: 2.15, maxDrawdownPct: -5.87, pnlSeries: pnlSeries(2, 1.1) },
   { id: "HFT-LqJvB9C", strategyName: "Reversal Hunter", alphaStatus: "Live Trading", accounts: ["DN-002"], symbols: [{ symbol: "BTCUSD", market: "Crypto" }], timeframe: "5min", status: "paused", returnPct: 56.13, sharpe: 1.6, maxDrawdownPct: -7.34, pnlSeries: pnlSeries(3, 0.8) },
@@ -64,6 +68,6 @@ export const liveRunMocks = {
     await delay();
     // Fresh copy — mirrors lib/mock/index.ts's listVenues comment: React Query needs a
     // new array reference to detect changes if this dataset is ever mutated.
-    return [...MOCK_LIVE_RUNS];
+    return MOCK_LIVE_RUNS.map((r) => ({ ...r, startingEquity: 1_000_000 }));
   },
 };

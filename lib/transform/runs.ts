@@ -93,8 +93,6 @@ function toRunConfig(manifest: RunManifest): PaperRunRow["config"] {
     twapInterval: `${exec?.twap_interval_ms ?? 0} ms`,
     chaseThreshold: `${exec?.chase_threshold_ticks ?? 0} ticks`,
     entryOrderTtl: "0 ms",
-    takeProfit: `${exec?.take_profit_points ?? 0} pts`,
-    stopLoss: `${exec?.stop_loss_points ?? 0} pts`,
     cancelRatio: `${((exec?.cancel_ratio ?? 0) * 100).toFixed(1)}%`,
     simulatedLatency: typeof latency === "string" || typeof latency === "number" ? String(latency) : "None",
     tradeProcessingCost: "0 ns",

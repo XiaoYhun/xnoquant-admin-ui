@@ -106,13 +106,19 @@ export function LiveRunDetailPanel({
               </div>
 
               <div className="rounded-xl border border-border">
-                <div className="border-b border-border px-4 py-3 text-sm font-medium text-foreground">PnL</div>
+                <div className="border-b border-border px-4 py-3 text-sm font-medium text-foreground">Equity curve</div>
                 <div className="p-2">
-                  <LineChart
-                    categories={run.pnlSeries.map((_, i) => `T-${run.pnlSeries.length - i}`)}
-                    series={[{ name: "PnL", data: run.pnlSeries }]}
-                    style={{ height: 260 }}
-                  />
+                  {run.pnlSeries.length === 0 ? (
+                    <div className="flex h-[260px] items-center justify-center text-sm text-muted-foreground">
+                      No equity data.
+                    </div>
+                  ) : (
+                    <LineChart
+                      categories={run.pnlSeries.map((_, i) => `T-${run.pnlSeries.length - i}`)}
+                      series={[{ name: "Equity", data: run.pnlSeries }]}
+                      style={{ height: 260 }}
+                    />
+                  )}
                 </div>
               </div>
             </div>

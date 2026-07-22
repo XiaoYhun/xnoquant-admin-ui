@@ -138,6 +138,8 @@ export interface paths {
                     data_category?: string;
                     /** @description Dataset filter */
                     dataset?: string;
+                    /** @description Authoring mode filter */
+                    mode?: "time_series" | "cross_sectional";
                 };
                 header?: never;
                 path?: never;
@@ -190,7 +192,10 @@ export interface paths {
          */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description Authoring mode filter */
+                    mode?: "time_series" | "cross_sectional";
+                };
                 header?: never;
                 path?: never;
                 cookie?: never;
@@ -242,7 +247,10 @@ export interface paths {
          */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description Authoring mode filter */
+                    mode?: "time_series" | "cross_sectional";
+                };
                 header?: never;
                 path?: never;
                 cookie?: never;
@@ -1838,7 +1846,7 @@ export interface paths {
         put?: never;
         /**
          * Autocomplete editor source
-         * @description Get autocomplete suggestions for editor source code (proxied to Python service) (default)
+         * @description Get mode-filtered autocomplete suggestions for editor source code; mode defaults to time_series (proxied to Python service) (default)
          */
         post: {
             parameters: {
@@ -2677,6 +2685,8 @@ export interface components {
         "handlers.updateStrategyRequest": {
             name?: string;
         };
+        /** @enum {string} */
+        "models.CatalogMode": "time_series" | "cross_sectional";
         "models.CodeExample": {
             category?: string;
             /** @description Code example info */
@@ -2728,9 +2738,12 @@ export interface components {
             docs?: string;
             /** @description Function info */
             group?: string;
+            input_shapes?: string[];
             name?: string;
             prototype?: string;
+            return_shape?: string;
             returns?: string;
+            supported_modes?: string[];
             users?: number;
         };
         "models.DatasetItem": {
@@ -2756,7 +2769,10 @@ export interface components {
             total?: number;
         };
         "models.EditorAutocompleteContext": {
+            detected_source_mode?: string;
             expression?: string;
+            filter_mode?: components["schemas"]["models.CatalogMode"];
+            mode_conflict?: boolean;
             namespace?: string;
             prefix?: string;
         };
@@ -2764,13 +2780,16 @@ export interface components {
             allowed?: boolean;
             detail?: string;
             documentation?: string;
+            input_shapes?: string[];
             insert_text?: string;
             kind?: string;
             label?: string;
             prototype?: string;
+            return_shape?: string;
             returns?: string;
             sort_text?: string;
             source?: string;
+            supported_modes?: string[];
         };
         "models.EditorAutocompleteReplacement": {
             end_column?: number;
@@ -2783,6 +2802,7 @@ export interface components {
             line?: number;
             market?: string;
             max_items?: number;
+            mode?: string;
             source?: string;
             trigger?: string;
             universe?: string;
@@ -2806,9 +2826,12 @@ export interface components {
             docs?: string;
             /** @description Function info */
             group?: string;
+            input_shapes?: string[];
             name?: string;
             prototype?: string;
+            return_shape?: string;
             returns?: string;
+            supported_modes?: string[];
         };
         "models.MarketItem": {
             /** @description Market info */
@@ -2821,9 +2844,12 @@ export interface components {
             docs?: string;
             /** @description Function info */
             group?: string;
+            input_shapes?: string[];
             name?: string;
             prototype?: string;
+            return_shape?: string;
             returns?: string;
+            supported_modes?: string[];
         };
         "models.Pagination": {
             /** @description Current page info */

@@ -138,8 +138,9 @@ export interface paths {
             };
         };
         /**
-         * PUT /api/accounts/:id — update name/venue/type; credentials are re-encrypted only if
-         * @description supplied (otherwise the stored ciphertext is kept via COALESCE).
+         * PUT /api/accounts/:id — update name/venue/type.
+         * @description Credentials are re-encrypted only if supplied (otherwise the stored ciphertext is kept via
+         *     COALESCE).
          */
         put: {
             parameters: {
@@ -231,6 +232,67 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/accounts/{id}/dnse/send-otp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * POST /api/accounts/:id/dnse/send-otp — trigger DNSE to email an OTP to the account owner.
+         * @description Only valid for DNSE-venue accounts. Returns 204 on success.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Account ID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OTP email sent */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description DNSE request failed */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/me": {
         parameters: {
             query?: never;
@@ -311,10 +373,10 @@ export interface paths {
         };
         put?: never;
         /**
-         * POST /api/runs — launch a run binding a strategy to an account and an ordered set of
-         * @description symbols. Validates ownership, that every symbol is tradable on the account's venue, and
-         *     that the strategy compiles, then snapshots a [`RunManifest`] and records it as `running`.
-         *     No engine process is spawned — this is control-plane bookkeeping for now.
+         * POST /api/runs — launch a run binding a strategy to an account and an ordered set of symbols.
+         * @description Validates ownership, that every symbol is tradable on the account's venue, and that the
+         *     strategy compiles, then snapshots a [`RunManifest`], records it as `running`, and dispatches
+         *     an [`EngineCommand::Launch`] to the worker pool to actually start the engine.
          */
         post: {
             parameters: {
@@ -448,6 +510,13 @@ export interface paths {
                     };
                     content?: never;
                 };
+                /** @description Paper and live runs cannot be deleted */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
             };
         };
         options?: never;
@@ -570,8 +639,9 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * GET /api/runs/:id/live/stream — Server-Sent Events stream of live snapshots: the current
-         * @description cached snapshot first, then one event per published update. `404` when Redis isn't configured.
+         * GET /api/runs/:id/live/stream — Server-Sent Events stream of live snapshots.
+         * @description Sends the current cached snapshot first, then one event per published update. `404` when
+         *     Redis isn't configured.
          */
         get: {
             parameters: {
@@ -847,7 +917,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** GET /api/strategies — list the caller's strategies, oldest first. */
+        /**
+         * GET /api/strategies — list the caller's strategies, oldest first.
+         * @description Quant-lab roles (`Lab` scope) also see every lab-mate's strategies, via the `user_roles`
+         *     roster mirror.
+         */
         get: {
             parameters: {
                 query?: never;
@@ -929,8 +1003,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * GET /api/strategies/feature-catalog — the fields + functions available to feature
-         * @description DSL expressions, sorted by name. Static (derived from the engine registries).
+         * GET /api/strategies/feature-catalog — feature DSL fields and functions, sorted by name.
+         * @description Static (derived from the engine registries).
          */
         get: {
             parameters: {
@@ -1020,8 +1094,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * POST /api/strategies/validate-features — compile each feature DSL expression and report the
-         * @description ones that fail, positioned by index and name (no DB write).
+         * POST /api/strategies/validate-features — compile each feature DSL expression (no DB write).
+         * @description Reports the ones that fail, positioned by index and name.
          */
         post: {
             parameters: {
@@ -1545,6 +1619,28 @@ export interface components {
          */
         AccountType: "spot" | "cross_margin" | "isolated_margin" | "linear_futures" | "inverse_futures";
         /**
+         * @description Inclusive date range for a backtest's historical OHLC fetch. `start_date <= end_date <=
+         *     today`, validated by the launch handler.
+         */
+        BacktestDateRange: {
+            /** Format: date */
+            end_date: string;
+            /** Format: date */
+            start_date: string;
+        };
+        /**
+         * @description Mirrors the engine's `DataFormat`. See [`DataSourceType`] for why this is duplicated.
+         * @enum {string}
+         */
+        DataFormat: "json" | "csv" | "dnse_csv";
+        /**
+         * @description Mirrors the engine's `DataSourceType` (`src/control_plane/run_config/venue_config.rs`) —
+         *     duplicated here (rather than shared) because that type lives in the main binary crate, not
+         *     `common`, and only derives `Deserialize` there.
+         * @enum {string}
+         */
+        DataSourceType: "orderbook" | "trade" | "ohlc";
+        /**
          * @description One downsampled point on the equity curve. `equity`/`pnl` are cumulative realized PnL (the
          *     run is assumed to start flat at 0); `ts` is epoch milliseconds of the closing fill.
          */
@@ -1572,16 +1668,19 @@ export interface components {
              * @description How far price may move (in ticks) before a resting order chases it.
              */
             chase_threshold_ticks?: number;
+            /**
+             * Format: int64
+             * @description Cancel an unfilled entry (a resting order opening a position from flat) once
+             *     it's rested this long, so it doesn't starve indefinitely (e.g. a signal flip
+             *     before it fills). `0` = disabled (never aged out).
+             */
+            entry_order_ttl_ms?: number;
             latency?: components["schemas"]["LatencyModel"];
             /**
              * Format: double
              * @description Max child-order size when slicing a parent order.
              */
             max_slice_size?: number;
-            /** Format: double */
-            stop_loss_points?: number;
-            /** Format: double */
-            take_profit_points?: number;
             /**
              * Format: int64
              * @description TWAP slice interval.
@@ -1674,6 +1773,7 @@ export interface components {
         LaunchRequest: {
             /** Format: uuid */
             account_id: string;
+            backtest_range?: components["schemas"]["BacktestDateRange"] | null;
             data_kind?: components["schemas"]["MarketDataKind"];
             execution?: components["schemas"]["ExecutionSettings"] | null;
             /**
@@ -1683,6 +1783,11 @@ export interface components {
             extra_account_ids?: string[];
             live_condition?: components["schemas"]["LiveConditionSettings"] | null;
             mode: components["schemas"]["RunMode"];
+            /**
+             * @description DNSE live runs only: the Smart/email OTP passcode used to obtain an 8-hour trading
+             *     token. Omit when a valid token is already cached (Redis). Never persisted.
+             */
+            otp_passcode?: string | null;
             params?: Record<string, never> | null;
             starting_balances?: components["schemas"]["StartingBalances"] | null;
             /** Format: uuid */
@@ -1729,6 +1834,18 @@ export interface components {
             venue_id: string;
             venue_name: string;
             venue_type: components["schemas"]["VenueType"];
+        };
+        /**
+         * @description One resolved historical data file, cached on disk at launch time. Mirrors the engine's
+         *     `DataSourceConfig` field-for-field so `manifest_bridge` can map this 1:1.
+         */
+        ManifestDataSource: {
+            data_type: components["schemas"]["DataSourceType"];
+            format: components["schemas"]["DataFormat"];
+            instrument_class: components["schemas"]["InstrumentClass"];
+            path: string;
+            symbol: string;
+            venue: string;
         };
         ManifestStrategy: {
             code: string;
@@ -1849,6 +1966,12 @@ export interface components {
             id: string;
             manifest: components["schemas"]["RunManifest"];
             mode: components["schemas"]["RunMode"];
+            /**
+             * @description The run's owner (external auth service user id). Only informative to callers who can
+             *     see other users' resources (admin, or a quant-lab peer on a backtest/paper run) — an
+             *     owner-scoped caller always sees their own id here.
+             */
+            owner_id: string;
             /** Format: date-time */
             started_at?: string | null;
             status: components["schemas"]["RunStatus"];
@@ -1868,6 +1991,12 @@ export interface components {
         RunManifest: {
             account: components["schemas"]["ManifestAccount"];
             data_kind?: components["schemas"]["MarketDataKind"];
+            /**
+             * @description Historical data sources resolved and cached at launch time (backtest + bar mode only).
+             *     Empty for live/paper runs and for tick-mode backtests (not yet supported). Mirrors the
+             *     engine's `RunConfig.dataset: Vec<DataSourceConfig>` field-for-field.
+             */
+            dataset?: components["schemas"]["ManifestDataSource"][];
             execution?: components["schemas"]["ExecutionSettings"];
             /**
              * @description Additional accounts beyond the primary, in leg order. Only arbitrage runs use this
@@ -1910,9 +2039,35 @@ export interface components {
             artifact_root: string;
             /**
              * Format: double
+             * @description All-in trading cost (`total_fee`) per unit traded notional, in bps. Notional is the sum
+             *     of `fill_price * fill_qty` over every fill (both legs of each round-trip). `0.0` when
+             *     notional is zero.
+             */
+            cost_bps: number;
+            /**
+             * Format: double
+             * @description Gross edge (`net_pnl + total_fee`) per unit traded notional, in bps. Satisfies
+             *     `edge_gross_bps - cost_bps == edge_net_bps`.
+             */
+            edge_gross_bps: number;
+            /**
+             * Format: double
+             * @description Net edge (`net_pnl`) per unit traded notional, in bps.
+             */
+            edge_net_bps: number;
+            /**
+             * Format: double
              * @description Largest peak-to-trough drop of the cumulative realized-PnL curve, in PnL units.
              */
             max_drawdown: number;
+            /**
+             * Format: double
+             * @description [`max_drawdown`](Self::max_drawdown) as a fraction of starting capital (the run's
+             *     settlement-currency balance). `None` when no starting capital is known — currently
+             *     always the case for live runs (`ManifestAccount.balances` is empty until the live
+             *     snapshot TODO lands).
+             */
+            max_drawdown_pct?: number | null;
             /**
              * Format: double
              * @description Sum of per-symbol `net_pnl` (already net of fees).
@@ -1925,6 +2080,13 @@ export interface components {
              *     mean, not a calendar Sharpe.
              */
             sharpe: number;
+            /**
+             * Format: double
+             * @description [`sharpe`](Self::sharpe) scaled by `sqrt(periods_per_year)`, where `periods_per_year` is
+             *     derived from the run's own trade rate (`total_trades / run_duration_in_years`, from the
+             *     `close_ts` span). `0.0` when undefined (fewer than 2 trades, or zero duration).
+             */
+            sharpe_annualized: number;
             /** Format: double */
             total_fee: number;
             /**
@@ -1932,6 +2094,13 @@ export interface components {
              * @description Number of fills (execution rows in `fills.parquet`), i.e. the trade-history row count.
              */
             total_trades: number;
+            /**
+             * Format: double
+             * @description Mark-to-market PnL of whatever position was still open when the run stopped (e.g. a
+             *     buy-and-hold strategy that never closes), from `<run_dir>/unrealized_pnl.json`. `0.0` when
+             *     the run ended flat, or for runs recorded before this sidecar existed.
+             */
+            unrealized_pnl: number;
             /**
              * Format: double
              * @description Fraction of closing (round-trip-reducing) trades with positive realized PnL, in `[0, 1]`.
@@ -1959,6 +2128,12 @@ export interface components {
             /** Format: uuid */
             id: string;
             name: string;
+            /**
+             * @description The strategy's owner (external auth service user id). Only informative to callers who
+             *     can see other users' resources (admin, or a quant-lab peer) — an owner-scoped caller
+             *     always sees their own id here.
+             */
+            owner_id: string;
             strategy_type: components["schemas"]["StrategyType"];
             /** Format: date-time */
             updated_at: string;
@@ -2101,6 +2276,7 @@ export interface components {
          */
         User: {
             email: string;
+            roles?: string[];
             user_id: string;
             username?: string | null;
         };

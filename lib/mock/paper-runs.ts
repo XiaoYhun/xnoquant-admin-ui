@@ -27,8 +27,6 @@ export type RunConfig = {
   twapInterval: string;
   chaseThreshold: string;
   entryOrderTtl: string;
-  takeProfit: string;
-  stopLoss: string;
   cancelRatio: string;
   simulatedLatency: string;
   tradeProcessingCost: string;
@@ -229,8 +227,6 @@ function buildDetail(r: PaperRunBase): Pick<PaperRunRow, "metrics" | "config" | 
       twapInterval: "1000 ms",
       chaseThreshold: "100 ticks",
       entryOrderTtl: "0 ms",
-      takeProfit: "0 pts",
-      stopLoss: "0 pts",
       cancelRatio: "0.0%",
       simulatedLatency: "None",
       tradeProcessingCost: "0 ns",

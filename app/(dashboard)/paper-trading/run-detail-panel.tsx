@@ -9,8 +9,12 @@ import { BaseChart } from "@/components/charts/base-chart";
 import { LineChart } from "@/components/charts/line-chart";
 import { cn, formatPercent } from "@/lib/utils";
 import { useTradeHistory } from "@/hooks/api/use-paper-runs";
+import { useRunSummary } from "@/hooks/api/use-runs";
+import { ApiError } from "@/lib/api-client";
+import { USE_MOCK } from "@/lib/constant";
 import type { PaperRunRow, TradeHistoryRow } from "@/lib/mock/paper-runs";
 import { StartLiveTradingDialog } from "./start-live-trading-dialog";
+import { CodeEditor } from "../create-strategy/code-editor";
 
 // Paper Trading run detail — a right-side slide-in with Charts / Trades / Configuration / Code
 // tabs. Figma nodes 13982:131691 (Charts), 13982:133350 (Trades), 14585:34189 (Configuration).
@@ -101,6 +105,19 @@ function PnlChart({ series }: { series: PaperRunRow["pnlChartSeries"] }) {
 }
 
 function ChartsTab({ run }: { run: PaperRunRow }) {
+  // usePaperRuns swallows the run-summary error to null, so re-fetch here to tell a genuinely
+  // empty run apart from a failed/absent summary. Skipped in mock mode (synthetic run ids the
+  // real /summary endpoint can't resolve).
+  const { error } = useRunSummary(USE_MOCK ? undefined : run.id);
+  if (error) {
+    return (
+      <div className="p-4 text-sm text-[#9db2ce]">
+        {error instanceof ApiError && error.status === 404
+          ? "No results — this run produced no artifacts (it never traded)."
+          : `Failed to load results: ${error instanceof Error ? error.message : ""}`}
+      </div>
+    );
+  }
   const m = run.metrics;
   return (
     <div className="flex flex-col gap-3 p-4">
@@ -113,8 +130,14 @@ function ChartsTab({ run }: { run: PaperRunRow }) {
         <StatCard label="Cost Drag" value={`${m.costDragPct.toFixed(2)}%`} tone="white" />
         <StatCard label="Edge net" value={m.edgeNetBp.toFixed(2)} unit="bp" tone="white" />
       </div>
-      <ChartCard title="PNL">
-        <PnlChart series={run.pnlChartSeries} />
+      <ChartCard title="Equity curve">
+        {run.pnlChartSeries.length === 0 ? (
+          <div className="flex h-[240px] items-center justify-center text-sm text-muted-foreground">
+            No equity data.
+          </div>
+        ) : (
+          <PnlChart series={run.pnlChartSeries} />
+        )}
       </ChartCard>
       <ChartCard title="Returns">
         <LineChart
@@ -243,8 +266,6 @@ function ConfigTab({ run }: { run: PaperRunRow }) {
         <ConfigField label="TWAP interval" value={c.twapInterval} />
         <ConfigField label="Chase threshold" value={c.chaseThreshold} />
         <ConfigField label="Entry order TTL" value={c.entryOrderTtl} />
-        <ConfigField label="Take profit" value={c.takeProfit} />
-        <ConfigField label="Stop loss" value={c.stopLoss} />
         <ConfigField label="Cancel ratio" value={c.cancelRatio} />
         <ConfigField label="Simulated latency" value={c.simulatedLatency} />
         <ConfigField label="Trade processing cost" value={c.tradeProcessingCost} />
@@ -275,16 +296,13 @@ function ConfigTab({ run }: { run: PaperRunRow }) {
 }
 
 // ── Code tab ────────────────────────────────────────────────────────────────
+// Reuse the strategy builder's Monaco editor (read-only) so the syntax colors match the Create
+// page exactly. Paper/live runs all come from the HFT platform, whose strategies are Rhai
+// (Rust-like) — including the bar-data "MFT engine" ones — so always highlight as Rust.
 function CodeView({ code }: { code: string }) {
-  const lines = code.split("\n");
   return (
-    <div className="flex h-full overflow-auto font-mono text-xs">
-      <div className="flex-none px-3 py-4 text-right leading-5 text-muted-foreground/60 select-none">
-        {lines.map((_, i) => (
-          <div key={i}>{i + 1}</div>
-        ))}
-      </div>
-      <pre className="flex-1 px-2 py-4 leading-5 whitespace-pre text-white">{code}</pre>
+    <div className="flex h-full flex-col">
+      <CodeEditor code={code} language="rust" readOnly />
     </div>
   );
 }

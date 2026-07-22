@@ -3,9 +3,9 @@
 // Taker/Maker/Arbitrage sub-tabs + static curated sample cards ("View source" expands the code
 // inline, "Use template" loads it into the editor) + a static Script API Reference block.
 import { useState } from "react";
-import { CheckCircle, Code, Database, NotebookBookmark } from "@solar-icons/react";
+import { CheckCircle, Code, Database } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
-import { HFT_SAMPLES, HFT_SCRIPT_API_REFERENCE, type HftSample } from "@/lib/mock/hft-strategy-samples";
+import { HFT_SAMPLES, type HftSample } from "@/lib/mock/hft-strategy-samples";
 
 const STRATEGY_TYPES = ["taker", "maker", "arbitrage"] as const;
 type StrategyType = (typeof STRATEGY_TYPES)[number];
@@ -15,7 +15,6 @@ export function HftSamplesTab({ onUseTemplate }: { onUseTemplate?: (code: string
   const [type, setType] = useState<StrategyType>("taker");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const samples: HftSample[] = HFT_SAMPLES[type];
-  const ref = HFT_SCRIPT_API_REFERENCE[type];
 
   return (
     <div className="flex flex-col gap-4 p-4">
@@ -78,28 +77,6 @@ export function HftSamplesTab({ onUseTemplate }: { onUseTemplate?: (code: string
             </div>
           );
         })}
-      </div>
-
-      <div className="flex flex-col gap-3">
-        <div className="flex items-center gap-2">
-          <NotebookBookmark weight="Outline" className="size-5 text-muted-foreground" />
-          <h3 className="text-sm font-medium text-white">Script API Reference</h3>
-        </div>
-        <div className="rounded-xl border border-border p-3 text-xs leading-relaxed text-muted-foreground">
-          <p>{ref.intro}</p>
-
-          <p className="mt-3 font-semibold text-white">Function</p>
-          <p className="mt-2 font-mono text-xs font-semibold text-white">{ref.functionSig}</p>
-          <p className="mt-0.5">{ref.functionDoc}</p>
-
-          <p className="mt-3 font-semibold text-white">Scope</p>
-          {ref.scope.map((entry) => (
-            <div key={entry.name} className="mt-2">
-              <p className="font-mono text-xs font-semibold text-white">{entry.name}</p>
-              <p className="mt-0.5">{entry.doc}</p>
-            </div>
-          ))}
-        </div>
       </div>
     </div>
   );

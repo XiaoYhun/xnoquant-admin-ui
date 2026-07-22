@@ -1,6 +1,9 @@
 "use client";
 import { useState, type ReactNode } from "react";
 import { Pause, Play } from "@solar-icons/react";
+import { resourceErrorMessage } from "@/lib/api-client";
+import { useAuth } from "@/hooks/use-auth";
+import { canMutate } from "@/lib/rbac";
 import {
   Table,
   TableBody,
@@ -88,6 +91,7 @@ export function LiveRunsTable({
   onOpenDetail: (run: LiveRunRow) => void;
 }) {
   const stopRun = useStopRun();
+  const { userId, isAdmin } = useAuth();
   const [pendingStop, setPendingStop] = useState<LiveRunRow | null>(null);
 
   return (
@@ -157,7 +161,8 @@ export function LiveRunsTable({
                   </FlashValue>
                 </TableCell>
                 <TableCell className="text-right">
-                  {r.status === "running" ? (
+                  {/* Hide write controls for runs the caller can't mutate (e.g. a lab-mate's run). */}
+                  {!canMutate(r, { userId, isAdmin }) ? null : r.status === "running" ? (
                     <button
                       type="button"
                       onClick={(e) => {
@@ -207,7 +212,7 @@ export function LiveRunsTable({
             </DialogDescription>
           </DialogHeader>
           {stopRun.isError && (
-            <p className="text-xs text-destructive">Couldn&rsquo;t stop the bot. Please try again.</p>
+            <p className="text-xs text-destructive">{resourceErrorMessage(stopRun.error, "this run")}</p>
           )}
           <DialogFooter>
             <DialogClose asChild>

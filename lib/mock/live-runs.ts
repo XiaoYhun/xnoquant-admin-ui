@@ -6,6 +6,8 @@ import type { RunStatus } from "@/types/domain";
 // bound to one OR two accounts / instruments (the taller rows).
 export type LiveRunRow = {
   id: string;
+  /** Resource owner (HFT `owner_id`) — compared against the caller's user_id for ownership. */
+  owner_id?: string;
   strategyName: string;
   alphaStatus: string;
   accounts: string[];

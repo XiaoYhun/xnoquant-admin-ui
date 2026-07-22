@@ -118,6 +118,7 @@ export function toLiveRunRow(run: Run, summary: RunSummary | null, equity: Equit
   const { manifest } = run;
   return {
     id: run.id,
+    owner_id: run.owner_id,
     strategyName: manifest.strategy.name,
     alphaStatus: "Live Trading", // GAP-4: no API field — constant per plan §4.C
     accounts: accountNames(manifest),
@@ -148,6 +149,7 @@ export function toPaperRunRow(run: Run, summary: RunSummary | null, equity: Equi
   const { manifest } = run;
   return {
     id: run.id,
+    owner_id: run.owner_id,
     strategyName: manifest.strategy.name,
     strategyType: strategyGroup(manifest.data_kind),
     status: run.status,

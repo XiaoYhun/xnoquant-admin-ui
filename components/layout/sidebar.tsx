@@ -17,7 +17,7 @@ const LABEL = cn("overflow-hidden whitespace-nowrap", TRANSITION);
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { logout } = useAuth();
+  const { logout, scope, roles, isAdmin } = useAuth();
   const mode = useModeStore((s) => s.mode);
   const setMode = useModeStore((s) => s.setMode);
   const [collapsed, setCollapsed] = useState(false);
@@ -81,8 +81,15 @@ export function Sidebar() {
       {/* Menu */}
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-x-hidden overflow-y-auto border-b border-border px-3 py-4">
         {NAV_GROUPS.map((group, i) => {
-          // Filter items by the current lab mode; drop groups that become empty.
-          const items = group.items.filter((item) => !item.modes || item.modes.includes(mode));
+          // Filter by lab mode, then RBAC scope; drop groups that become empty.
+          const items = group.items.filter((item) => {
+            if (item.modes && !item.modes.includes(mode)) return false;
+            if (item.adminOnly && !isAdmin) return false;
+            // Hide gated sections only when roles are known and reduce to no access — a
+            // genuinely empty roles set stays visible and is caught by the page's 403 handling.
+            if (item.requiresAccess && scope === "none" && roles.length > 0) return false;
+            return true;
+          });
           if (items.length === 0) return null;
           if (!group.heading) {
             return (

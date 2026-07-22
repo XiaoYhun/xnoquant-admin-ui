@@ -41,6 +41,8 @@ export type RunConfig = {
 // because the design binds some runs to two accounts / instruments (the taller rows).
 export type PaperRunRow = {
   id: string;
+  /** Resource owner (HFT `owner_id`) — compared against the caller's user_id for ownership. */
+  owner_id?: string;
   strategyName: string;
   strategyType: "MFT" | "HFT";
   status: RunStatus;

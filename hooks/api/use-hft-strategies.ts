@@ -16,7 +16,7 @@ export type HftStrategyType = components["schemas"]["StrategyType"];
 export type FeatureDef = components["schemas"]["FeatureDef"];
 
 function toEditorTab(s: Strategy): EditorTab {
-  return { id: s.id, name: s.name, code: s.code, type: "hft", created_at: s.created_at };
+  return { id: s.id, owner_id: s.owner_id, name: s.name, code: s.code, type: "hft", created_at: s.created_at };
 }
 
 // Merged into the Create Strategy editors list (page.tsx). Tolerate any failure (401, empty list,

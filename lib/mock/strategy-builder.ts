@@ -42,6 +42,8 @@ class CryptoScalping(StockAlgorithm):
 // `type` distinguishes MFT (XALPHA editors) from HFT (HFT strategies) tabs.
 export type EditorTab = {
   id: string;
+  /** Resource owner (HFT `owner_id`) — HFT strategies only; MFT editors leave it undefined. */
+  owner_id?: string;
   name: string;
   code: string;
   strategy_ids?: string[];

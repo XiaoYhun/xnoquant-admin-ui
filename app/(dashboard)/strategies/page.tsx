@@ -10,6 +10,7 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { useStrategies } from "@/hooks/api/use-strategies";
+import { resourceErrorMessage } from "@/lib/api-client";
 import { useMode } from "@/store/mode-store";
 import { StrategyAnalyticsHeader } from "./strategy-analytics";
 import { StrategiesTable } from "./strategies-table";
@@ -17,7 +18,7 @@ import { StrategiesTable } from "./strategies-table";
 const PAGE_SIZE = 10;
 
 export default function Page() {
-  const { data: strategies = [], isLoading } = useStrategies();
+  const { data: strategies = [], isLoading, isError, error } = useStrategies();
   const mode = useMode();
   // The MFT/HFT split is driven by the global lab mode (Figma 13964-56847) — the old
   // in-header toggle was removed. StrategyRow.group is "MFT"/"HFT" (uppercase).
@@ -67,7 +68,9 @@ export default function Page() {
 
       <section className="flex flex-col overflow-hidden rounded-xl border border-border bg-background">
         <div>
-          {isLoading ? (
+          {isError ? (
+            <p className="p-4 text-sm text-destructive">{resourceErrorMessage(error)}</p>
+          ) : isLoading ? (
             <p className="p-4 text-sm text-muted-foreground">Loading&hellip;</p>
           ) : pageRows.length === 0 ? (
             <p className="p-4 text-sm text-muted-foreground">No strategies found.</p>

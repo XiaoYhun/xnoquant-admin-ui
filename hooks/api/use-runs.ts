@@ -46,6 +46,11 @@ export function useRunSummary(id: string | undefined) {
     queryKey: ["run-summary", id],
     queryFn: () => fetchRunSummary(id as string),
     enabled: !!id,
+    // The dev summary/equity endpoints 500 intermittently; keep retries (they recover) but with a
+    // short fixed backoff so the detail panel's "Loading results…" settles in ~1s rather than the
+    // default exponential ~7s.
+    retry: 3,
+    retryDelay: 400,
   });
 }
 
@@ -54,6 +59,8 @@ export function useRunEquity(id: string | undefined) {
     queryKey: ["run-equity", id],
     queryFn: () => fetchRunEquity(id as string),
     enabled: !!id,
+    retry: 3,
+    retryDelay: 400,
   });
 }
 

@@ -21,7 +21,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description List of accounts */
+                /** @description List of accounts (caller's own; admins see all — accounts are never lab-shared) */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -32,6 +32,13 @@ export interface paths {
                 };
                 /** @description Unauthorized */
                 401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Caller's role has no access to this resource family */
+                403: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -65,6 +72,13 @@ export interface paths {
                 };
                 /** @description Unauthorized */
                 401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Caller's role has no access to this resource family */
+                403: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -112,7 +126,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Account */
+                /** @description Account (caller's own; admins may fetch any) */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -123,6 +137,13 @@ export interface paths {
                 };
                 /** @description Unauthorized */
                 401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Caller's role has no access to this resource family */
+                403: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -174,6 +195,13 @@ export interface paths {
                     };
                     content?: never;
                 };
+                /** @description Caller's role has no access to this resource family */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
                 /** @description Not found */
                 404: {
                     headers: {
@@ -213,6 +241,13 @@ export interface paths {
                 };
                 /** @description Unauthorized */
                 401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Caller's role has no access to this resource family */
+                403: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -266,6 +301,13 @@ export interface paths {
                 };
                 /** @description Unauthorized */
                 401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Caller's role has no access to this resource family */
+                403: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -353,7 +395,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description List of runs */
+                /** @description List of runs (caller's own, plus lab roster's backtest/paper runs — never live — for lab roles; admins see all) */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -364,6 +406,13 @@ export interface paths {
                 };
                 /** @description Unauthorized */
                 401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Caller's role has no access to this resource family */
+                403: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -402,6 +451,13 @@ export interface paths {
                 };
                 /** @description Unauthorized */
                 401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Caller's role has no access to this resource family */
+                403: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -449,7 +505,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Run */
+                /** @description Run (caller's own, a lab-mate's backtest/paper run for lab roles, or any for admins) */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -460,6 +516,13 @@ export interface paths {
                 };
                 /** @description Unauthorized */
                 401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Caller's role has no access to this resource family */
+                403: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -503,7 +566,14 @@ export interface paths {
                     };
                     content?: never;
                 };
-                /** @description Not found */
+                /** @description Caller's role has no access to this resource family */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not found (owner-or-admin only — lab visibility doesn't grant delete access) */
                 404: {
                     headers: {
                         [name: string]: unknown;
@@ -544,7 +614,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Downsampled equity curve points */
+                /** @description Downsampled equity curve points (same visibility as the run itself) */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -555,6 +625,13 @@ export interface paths {
                 };
                 /** @description Unauthorized */
                 401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Caller's role has no access to this resource family */
+                403: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -600,7 +677,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Latest live snapshot JSON */
+                /** @description Latest live snapshot JSON (caller's own run; lab sharing does not extend to live runs; admins see any) */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -609,6 +686,13 @@ export interface paths {
                 };
                 /** @description Unauthorized */
                 401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Caller's role has no access to this resource family */
+                403: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -655,7 +739,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description SSE stream of live run snapshots (text/event-stream) */
+                /** @description SSE stream of live run snapshots (text/event-stream) — caller's own run; lab sharing does not extend to live runs; admins see any */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -664,6 +748,13 @@ export interface paths {
                 };
                 /** @description Unauthorized */
                 401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Caller's role has no access to this resource family */
+                403: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -724,7 +815,14 @@ export interface paths {
                     };
                     content?: never;
                 };
-                /** @description Not found */
+                /** @description Caller's role has no access to this resource family */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not found (owner-or-admin only — lab visibility doesn't grant stop access) */
                 404: {
                     headers: {
                         [name: string]: unknown;
@@ -766,7 +864,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Headline performance metrics */
+                /** @description Headline performance metrics (caller's own run, a lab-mate's backtest/paper run for lab roles, or any for admins) */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -777,6 +875,13 @@ export interface paths {
                 };
                 /** @description Unauthorized */
                 401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Caller's role has no access to this resource family */
+                403: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -819,7 +924,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Per-symbol PnL attribution */
+                /** @description Per-symbol PnL attribution (same visibility as the run itself) */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -830,6 +935,13 @@ export interface paths {
                 };
                 /** @description Unauthorized */
                 401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Caller's role has no access to this resource family */
+                403: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -877,7 +989,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Paginated trade history */
+                /** @description Paginated trade history (same visibility as the run itself) */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -888,6 +1000,13 @@ export interface paths {
                 };
                 /** @description Unauthorized */
                 401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Caller's role has no access to this resource family */
+                403: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -931,7 +1050,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description List of strategies */
+                /** @description List of strategies (caller's own, plus lab roster's strategies for lab roles; admins see all) */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -942,6 +1061,13 @@ export interface paths {
                 };
                 /** @description Unauthorized */
                 401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Caller's role has no access to this resource family */
+                403: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -975,6 +1101,13 @@ export interface paths {
                 };
                 /** @description Unauthorized */
                 401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Caller's role has no access to this resource family */
+                403: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -1152,7 +1285,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Strategy */
+                /** @description Strategy (caller's own, a lab-mate's for lab roles, or any for admins) */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -1163,6 +1296,13 @@ export interface paths {
                 };
                 /** @description Unauthorized */
                 401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Caller's role has no access to this resource family */
+                403: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -1210,7 +1350,14 @@ export interface paths {
                     };
                     content?: never;
                 };
-                /** @description Not found */
+                /** @description Caller's role has no access to this resource family */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not found (owner-or-admin only — lab visibility doesn't grant write access) */
                 404: {
                     headers: {
                         [name: string]: unknown;
@@ -1247,7 +1394,14 @@ export interface paths {
                     };
                     content?: never;
                 };
-                /** @description Not found */
+                /** @description Caller's role has no access to this resource family */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not found (owner-or-admin only — lab visibility doesn't grant delete access) */
                 404: {
                     headers: {
                         [name: string]: unknown;
@@ -1605,6 +1759,13 @@ export interface components {
             /** Format: uuid */
             id: string;
             name: string;
+            /**
+             * @description The owner's display username, from the local `user_roles` mirror. `None` if the owner
+             *     has never authenticated against this API (roster not yet populated), has no username set
+             *     with the auth service, or this `Account` came from a write endpoint's `RETURNING` clause
+             *     (create/update), which doesn't join `user_roles` — see [`AccountRow::owner_username`].
+             */
+            owner_username?: string | null;
             risk: components["schemas"]["RiskConfig"];
             /** Format: date-time */
             updated_at: string;
@@ -1965,6 +2126,8 @@ export interface components {
             /** Format: uuid */
             id: string;
             manifest: components["schemas"]["RunManifest"];
+            /** Format: double */
+            max_drawdown_pct?: number | null;
             mode: components["schemas"]["RunMode"];
             /**
              * @description The run's owner (external auth service user id). Only informative to callers who can
@@ -1972,6 +2135,23 @@ export interface components {
              *     owner-scoped caller always sees their own id here.
              */
             owner_id: string;
+            /**
+             * @description The owner's display username, from the local `user_roles` mirror. `None` if the owner
+             *     has never authenticated against this API (roster not yet populated) or has no username
+             *     set with the auth service.
+             */
+            owner_username?: string | null;
+            /** Format: double */
+            return_pct?: number | null;
+            /**
+             * Format: double
+             * @description Headline risk/return metrics, filled in by `routes::runs` from the result service
+             *     (`result::store::summary`) after building this `Run` — `None` unless that lookup ran
+             *     (e.g. `TryFrom<RunRow>` alone leaves these unset), or if the run has no metrics yet (no
+             *     fills recorded). See [`crate::domain::result::RunSummary`] for the same fields'
+             *     semantics.
+             */
+            sharpe_annualized?: number | null;
             /** Format: date-time */
             started_at?: string | null;
             status: components["schemas"]["RunStatus"];
@@ -1990,6 +2170,7 @@ export interface components {
          */
         RunManifest: {
             account: components["schemas"]["ManifestAccount"];
+            backtest_range?: components["schemas"]["BacktestDateRange"] | null;
             data_kind?: components["schemas"]["MarketDataKind"];
             /**
              * @description Historical data sources resolved and cached at launch time (backtest + bar mode only).
@@ -2073,6 +2254,12 @@ export interface components {
              * @description Sum of per-symbol `net_pnl` (already net of fees).
              */
             net_pnl: number;
+            /**
+             * Format: double
+             * @description [`net_pnl`](Self::net_pnl) as a fraction of starting capital (the run's settlement-
+             *     currency balance). `None` under the same conditions as [`max_drawdown_pct`](Self::max_drawdown_pct).
+             */
+            return_pct?: number | null;
             /**
              * Format: double
              * @description Per-closing-trade Sharpe: `mean / std` of realized-trade PnLs. **Not annualized** — the

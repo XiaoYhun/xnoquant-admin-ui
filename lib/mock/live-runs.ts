@@ -12,6 +12,8 @@ export type LiveRunRow = {
   symbols: { symbol: string; market: string }[];
   timeframe: string;
   status: RunStatus;
+  // Run.owner_username — the owner's display name; null when the roster hasn't been populated.
+  owner: string | null;
   // Manifest-derived starting equity — kept so the detail panel can compute % metrics from the
   // lazily-fetched summary. See lib/transform/runs.ts.
   startingEquity: number;
@@ -42,7 +44,7 @@ function pnlSeries(seed: number, drift: number): number[] {
   return points;
 }
 
-const MOCK_LIVE_RUNS: Omit<LiveRunRow, "startingEquity">[] = [
+const MOCK_LIVE_RUNS: Omit<LiveRunRow, "startingEquity" | "owner">[] = [
   { id: "MFT-5IWb3Ux", strategyName: "Sample Strategy 1", alphaStatus: "Live Trading", accounts: ["DN-002"], symbols: [{ symbol: "VN30F1M", market: "VNFuture" }], timeframe: "5min", status: "running", returnPct: 134.22, sharpe: 1.82, maxDrawdownPct: -14.22, pnlSeries: pnlSeries(1, 1.4) },
   { id: "MFT-D7AxNplR", strategyName: "Momentum Booster", alphaStatus: "Live Trading", accounts: ["DN-002"], symbols: [{ symbol: "AAPL", market: "NASDAQ" }], timeframe: "5min", status: "running", returnPct: 87.45, sharpe: 2.15, maxDrawdownPct: -5.87, pnlSeries: pnlSeries(2, 1.1) },
   { id: "HFT-LqJvB9C", strategyName: "Reversal Hunter", alphaStatus: "Live Trading", accounts: ["DN-002"], symbols: [{ symbol: "BTCUSD", market: "Crypto" }], timeframe: "5min", status: "paused", returnPct: 56.13, sharpe: 1.6, maxDrawdownPct: -7.34, pnlSeries: pnlSeries(3, 0.8) },
@@ -68,6 +70,6 @@ export const liveRunMocks = {
     await delay();
     // Fresh copy — mirrors lib/mock/index.ts's listVenues comment: React Query needs a
     // new array reference to detect changes if this dataset is ever mutated.
-    return MOCK_LIVE_RUNS.map((r) => ({ ...r, startingEquity: 1_000_000 }));
+    return MOCK_LIVE_RUNS.map((r) => ({ ...r, owner: "demo-user", startingEquity: 1_000_000 }));
   },
 };

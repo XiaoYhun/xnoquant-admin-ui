@@ -50,6 +50,8 @@ export type PaperRunRow = {
   strategyId: string | null;
   symbolIds: string[];
   executionType: StrategyType;
+  // Run.owner_username — the owner's display name; null when the roster hasn't been populated.
+  owner: string | null;
   // Manifest-derived starting equity — kept so the detail panel can compute % metrics from the
   // lazily-fetched summary. See lib/transform/runs.ts.
   startingEquity: number;
@@ -69,7 +71,7 @@ export type PaperRunRow = {
 
 // The 16 mock literals below carry only the list-row fields; the detail-tab fields
 // (metrics/config/code) are synthesized in listPaperRuns so the literals stay compact.
-type PaperRunBase = Omit<PaperRunRow, "metrics" | "config" | "code" | "startingEquity">;
+type PaperRunBase = Omit<PaperRunRow, "metrics" | "config" | "code" | "startingEquity" | "owner">;
 
 // UI-only row for the detail view's "Trade history" table.
 export type TradeHistoryRow = {
@@ -250,7 +252,7 @@ export const paperRunMocks = {
     await delay();
     // Fresh copy — mirrors lib/mock/index.ts's listVenues comment: React Query needs a
     // new array reference to detect changes if this dataset is ever mutated.
-    return MOCK_PAPER_RUNS.map((r) => ({ ...r, ...buildDetail(r), startingEquity: 1_000_000 }));
+    return MOCK_PAPER_RUNS.map((r) => ({ ...r, ...buildDetail(r), owner: "demo-user", startingEquity: 1_000_000 }));
   },
   async getTradeHistory(id: string): Promise<TradeHistoryRow[]> {
     await delay();

@@ -134,10 +134,23 @@ export function toRunDetail(summary: RunSummary | null, equity: EquityPoint[], s
   };
 }
 
-// List rows carry only what `/api/runs` provides (run + manifest). The summary/equity-derived
-// metrics are deferred to panel open, so they start null/empty — the tables render "—" until a
-// run is opened. `startingEquity` is kept so the panel can compute % metrics from the lazily
-// fetched summary without re-fetching the run.
+// `Run.{return_pct,max_drawdown_pct}` are fractions of starting capital (despite the `_pct`
+// name) — ×100 into the percent numbers the tables format. Drawdown is forced negative to
+// match the UI's "-0.11%" convention (same as maxDrawdownPctFrom above).
+function runReturnPct(run: Run): number | null {
+  return run.return_pct == null ? null : Number((run.return_pct * 100).toFixed(2));
+}
+
+function runMaxDrawdownPct(run: Run): number | null {
+  return run.max_drawdown_pct == null ? null : Number((-Math.abs(run.max_drawdown_pct) * 100).toFixed(2));
+}
+
+// List rows: `/api/runs` now embeds headline metrics on each Run (`return_pct`,
+// `sharpe_annualized`, `max_drawdown_pct`, nullable — unset until the run has fills) plus
+// `owner_username`, so the metric columns fill from the single list call. Only the PnL
+// sparkline still needs the per-run equity-curve, deferred to panel open. `startingEquity`
+// is kept so the panel can compute % metrics from the lazily fetched summary without
+// re-fetching the run.
 export function toLiveRunRow(run: Run): LiveRunRow {
   const { manifest } = run;
   return {
@@ -148,11 +161,12 @@ export function toLiveRunRow(run: Run): LiveRunRow {
     symbols: symbolRows(manifest),
     timeframe: timeframeLabel(manifest.data_kind),
     status: run.status,
+    owner: run.owner_username ?? null,
     startingEquity: startingEquity(manifest),
     pnlSeries: [],
-    returnPct: null,
-    sharpe: null,
-    maxDrawdownPct: null,
+    returnPct: runReturnPct(run),
+    sharpe: run.sharpe_annualized ?? null,
+    maxDrawdownPct: runMaxDrawdownPct(run),
   };
 }
 
@@ -169,11 +183,12 @@ export function toPaperRunRow(run: Run): PaperRunRow {
     strategyId: run.strategy_id ?? manifest.strategy.id,
     symbolIds: manifest.symbols.map((s) => s.id),
     executionType: manifest.strategy.strategy_type,
+    owner: run.owner_username ?? null,
     startingEquity: startingEquity(manifest),
     pnlSeries: [],
-    returnPct: null,
-    sharpe: null,
-    maxDrawdownPct: null,
+    returnPct: runReturnPct(run),
+    sharpe: run.sharpe_annualized ?? null,
+    maxDrawdownPct: runMaxDrawdownPct(run),
     pnlChartSeries: [],
     returnsChartSeries: [],
     metrics: metricsFrom(null, 0),

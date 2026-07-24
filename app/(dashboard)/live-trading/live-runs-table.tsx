@@ -68,16 +68,17 @@ const STATUS_META: Record<RunStatus, { label: string; dot: string; bg: string; t
 const COLS = [
   { key: "status", label: "Status", w: "8%", align: "left" },
   { key: "id", label: "ID", w: "8%", align: "left" },
-  { key: "name", label: "Strategy Name", w: "13%", align: "left" },
-  { key: "alpha", label: "Alpha Status", w: "8%", align: "left" },
+  { key: "name", label: "Strategy Name", w: "11%", align: "left" },
+  { key: "alpha", label: "Alpha Status", w: "7%", align: "left" },
+  { key: "owner", label: "Owner", w: "7%", align: "left" },
   { key: "account", label: "Account", w: "7%", align: "left" },
-  { key: "symbols", label: "Symbols/Market", w: "12%", align: "left" },
-  { key: "tf", label: "TF", w: "6%", align: "left" },
-  { key: "pnl", label: "PnL chart", w: "9%", align: "left" },
-  { key: "return", label: "Return", w: "8%", align: "right" },
+  { key: "symbols", label: "Symbols/Market", w: "11%", align: "left" },
+  { key: "tf", label: "TF", w: "5%", align: "left" },
+  { key: "pnl", label: "PnL chart", w: "8%", align: "left" },
+  { key: "return", label: "Return", w: "7%", align: "right" },
   { key: "sharpe", label: "Sharpe", w: "5%", align: "right" },
   { key: "mdd", label: "Max drawdown", w: "8%", align: "right" },
-  { key: "action", label: "Action", w: "10%", align: "right" },
+  { key: "action", label: "Action", w: "8%", align: "right" },
 ] as const;
 
 export function LiveRunsTable({
@@ -122,6 +123,9 @@ export function LiveRunsTable({
                 </TableCell>
                 <TableCell>
                   <span className={`text-xs ${GRAD_YELLOW}`}>{r.alphaStatus}</span>
+                </TableCell>
+                <TableCell className="truncate text-xs text-white" title={r.owner ?? undefined}>
+                  {r.owner ?? <span className="text-muted-foreground">—</span>}
                 </TableCell>
                 <TableCell className="p-0 align-middle">
                   <MiniRows items={r.accounts.map((a) => <span key={a} className={PILL}>{a}</span>)} />

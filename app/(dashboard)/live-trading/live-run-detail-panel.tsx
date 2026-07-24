@@ -54,7 +54,10 @@ export function LiveRunDetailPanel({
   const summaryQ = useRunSummary(!USE_MOCK && run ? run.id : undefined);
   const equityQ = useRunEquity(!USE_MOCK && run ? run.id : undefined);
   const lazy = !USE_MOCK && !!run;
-  const detailLoading = lazy && (summaryQ.isLoading || equityQ.isLoading);
+  // Tiles come from /summary, the equity chart from /equity-curve — track separately so a slow
+  // equity fetch doesn't hold the already-loaded Return/Sharpe/Max-drawdown tiles on "—".
+  const summaryLoading = lazy && summaryQ.isLoading;
+  const equityLoading = lazy && equityQ.isLoading;
   const detail =
     USE_MOCK && run
       ? { returnPct: run.returnPct ?? 0, sharpe: run.sharpe ?? 0, maxDrawdownPct: run.maxDrawdownPct ?? 0, pnlSeries: run.pnlSeries }
@@ -111,21 +114,21 @@ export function LiveRunDetailPanel({
               <div className="flex flex-wrap gap-3">
                 <StatTile
                   label="Return"
-                  value={detailLoading ? "—" : formatPercent(detail.returnPct)}
-                  valueClassName={detailLoading ? undefined : detail.returnPct >= 0 ? GRAD_GREEN : GRAD_RED}
+                  value={summaryLoading ? "—" : formatPercent(detail.returnPct)}
+                  valueClassName={summaryLoading ? undefined : detail.returnPct >= 0 ? GRAD_GREEN : GRAD_RED}
                 />
-                <StatTile label="Sharpe" value={detailLoading ? "—" : detail.sharpe.toFixed(2)} />
+                <StatTile label="Sharpe" value={summaryLoading ? "—" : detail.sharpe.toFixed(2)} />
                 <StatTile
                   label="Max drawdown"
-                  value={detailLoading ? "—" : formatPercent(detail.maxDrawdownPct)}
-                  valueClassName={detailLoading ? undefined : GRAD_RED}
+                  value={summaryLoading ? "—" : formatPercent(detail.maxDrawdownPct)}
+                  valueClassName={summaryLoading ? undefined : GRAD_RED}
                 />
               </div>
 
               <div className="rounded-xl border border-border">
                 <div className="border-b border-border px-4 py-3 text-sm font-medium text-foreground">Equity curve</div>
                 <div className="p-2">
-                  {detailLoading ? (
+                  {equityLoading ? (
                     <div className="flex h-[260px] items-center justify-center text-sm text-muted-foreground">
                       Loading…
                     </div>

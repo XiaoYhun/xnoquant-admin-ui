@@ -104,7 +104,17 @@ function PnlChart({ series }: { series: PaperRunRow["pnlChartSeries"] }) {
   return <BaseChart option={option} style={{ height: 240 }} />;
 }
 
-function ChartsTab({ detail, error, loading }: { detail: RunDetail; error: unknown; loading: boolean }) {
+function ChartsTab({
+  detail,
+  error,
+  summaryLoading,
+  equityLoading,
+}: {
+  detail: RunDetail;
+  error: unknown;
+  summaryLoading: boolean;
+  equityLoading: boolean;
+}) {
   if (error) {
     return (
       <div className="p-4 text-sm text-[#9db2ce]">
@@ -114,7 +124,7 @@ function ChartsTab({ detail, error, loading }: { detail: RunDetail; error: unkno
       </div>
     );
   }
-  if (loading) {
+  if (summaryLoading) {
     return <div className="p-4 text-sm text-[#9db2ce]">Loading results…</div>;
   }
   const m = detail.metrics;
@@ -130,7 +140,11 @@ function ChartsTab({ detail, error, loading }: { detail: RunDetail; error: unkno
         <StatCard label="Edge net" value={m.edgeNetBp.toFixed(2)} unit="bp" tone="white" />
       </div>
       <ChartCard title="Equity curve">
-        {detail.pnlChartSeries.length === 0 ? (
+        {equityLoading ? (
+          <div className="flex h-[240px] items-center justify-center text-sm text-muted-foreground">
+            Loading…
+          </div>
+        ) : detail.pnlChartSeries.length === 0 ? (
           <div className="flex h-[240px] items-center justify-center text-sm text-muted-foreground">
             No equity data.
           </div>
@@ -326,7 +340,10 @@ export function RunDetailPanel({
         }
       : toRunDetail(summaryQ.data ?? null, equityQ.data ?? [], run?.startingEquity ?? 0);
   const lazy = !USE_MOCK && !!run;
-  const detailLoading = lazy && (summaryQ.isLoading || equityQ.isLoading);
+  // Metrics come from /summary, the equity chart from /equity-curve — track them separately so a
+  // slow/flaky equity fetch doesn't hide already-loaded metrics behind "Loading results…".
+  const summaryLoading = lazy && summaryQ.isLoading;
+  const equityLoading = lazy && equityQ.isLoading;
   const summaryError = lazy ? summaryQ.error : null;
 
   return (
@@ -345,10 +362,10 @@ export function RunDetailPanel({
                 <span
                   className={cn(
                     "shrink-0 text-lg font-semibold",
-                    detailLoading ? "text-muted-foreground" : detail.returnPct >= 0 ? GRAD_GREEN : GRAD_RED,
+                    summaryLoading ? "text-muted-foreground" : detail.returnPct >= 0 ? GRAD_GREEN : GRAD_RED,
                   )}
                 >
-                  {detailLoading ? "—" : formatPercent(detail.returnPct)}
+                  {summaryLoading ? "—" : formatPercent(detail.returnPct)}
                 </span>
 
                 <div className="h-5 w-px shrink-0 bg-[#344054]" />
@@ -412,7 +429,14 @@ export function RunDetailPanel({
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto">
-              {tab === "Charts" && <ChartsTab detail={detail} error={summaryError} loading={detailLoading} />}
+              {tab === "Charts" && (
+                <ChartsTab
+                  detail={detail}
+                  error={summaryError}
+                  summaryLoading={summaryLoading}
+                  equityLoading={equityLoading}
+                />
+              )}
               {tab === "Trades" && <TradesTab runId={run.id} />}
               {tab === "Configuration" && <ConfigTab run={run} />}
               {tab === "Code" && <CodeView code={run.code} />}

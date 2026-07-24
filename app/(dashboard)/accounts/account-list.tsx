@@ -19,10 +19,11 @@ import type { Account } from "@/types/domain";
 type OtpFeedback = "sending" | "sent" | "error";
 
 const COLS = [
-  { key: "name", label: "Name", w: "22%" },
-  { key: "venue", label: "Venue", w: "20%" },
-  { key: "capital", label: "Capital", w: "18%" },
-  { key: "strategy", label: "Strategy", w: "18%" },
+  { key: "name", label: "Name", w: "18%" },
+  { key: "venue", label: "Venue", w: "16%" },
+  { key: "owner", label: "Owner", w: "12%" },
+  { key: "capital", label: "Capital", w: "16%" },
+  { key: "strategy", label: "Strategy", w: "16%" },
   { key: "asset", label: "Asset", w: "14%" },
   { key: "action", label: "", w: "8%" },
 ] as const;
@@ -96,6 +97,9 @@ export function AccountList({
                     {a.name}
                   </TableCell>
                   <TableCell className="truncate text-sm text-foreground">{venueName(a.venue_id)}</TableCell>
+                  <TableCell className="truncate text-sm text-foreground" title={a.owner_username ?? undefined}>
+                    {a.owner_username ?? <span className="text-muted-foreground">-</span>}
+                  </TableCell>
                   {/* Capital/Strategy/Asset: not in the HFT Account schema — see docs/plans/api-integration.md. */}
                   <TableCell className="text-sm text-muted-foreground">-</TableCell>
                   <TableCell className="text-sm text-muted-foreground">-</TableCell>

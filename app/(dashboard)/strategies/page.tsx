@@ -9,61 +9,81 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import { useStrategies } from "@/hooks/api/use-strategies";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useBacktestRuns } from "@/hooks/api/use-backtest-runs";
 import { resourceErrorMessage } from "@/lib/api-client";
-import { useMode } from "@/store/mode-store";
 import { StrategyAnalyticsHeader } from "./strategy-analytics";
-import { StrategiesTable } from "./strategies-table";
+import { BacktestRunsTable } from "./backtest-runs-table";
+import { RunDetailPanel } from "../paper-trading/run-detail-panel";
 
 const PAGE_SIZE = 10;
+const STATUS_FILTERS = [
+  { value: "all", label: "All statuses" },
+  { value: "running", label: "Running" },
+  { value: "completed", label: "Completed" },
+  { value: "stopped", label: "Stopped" },
+  { value: "failed", label: "Failed" },
+  { value: "pending", label: "Pending" },
+];
 
+// Strategy List is a list of backtest runs (`GET /api/runs`, mode==="backtest"), laid out like the
+// Paper Trading page. Rows share the paper row contract, so the paper detail panel is reused.
 export default function Page() {
-  const { data: strategies = [], isLoading, isError, error } = useStrategies();
-  const mode = useMode();
-  // The MFT/HFT split is driven by the global lab mode (Figma 13964-56847) — the old
-  // in-header toggle was removed. StrategyRow.group is "MFT"/"HFT" (uppercase).
-  const group = mode === "hft" ? "HFT" : "MFT";
+  const { data: runs = [], isLoading, isError, error } = useBacktestRuns();
   const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("all");
   const [page, setPage] = useState(1);
-
-  // Reset to the first page whenever the mode switches (row set changes) — React's
-  // adjust-state-during-render pattern, avoiding a setState-in-effect.
-  const [prevMode, setPrevMode] = useState(mode);
-  if (prevMode !== mode) {
-    setPrevMode(mode);
-    setPage(1);
-  }
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return strategies.filter((s) => {
-      const matchesSearch = !q || s.name.toLowerCase().includes(q);
-      const matchesGroup = s.group === group;
-      return matchesSearch && matchesGroup;
+    return runs.filter((r) => {
+      const matchesSearch = !q || r.id.toLowerCase().includes(q) || r.strategyName.toLowerCase().includes(q);
+      const matchesStatus = status === "all" || r.status === status;
+      return matchesSearch && matchesStatus;
     });
-  }, [strategies, search, group]);
+  }, [runs, search, status]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount);
   const pageRows = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const selectedRun = runs.find((r) => r.id === selectedId) ?? null;
 
   return (
     <main className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4 bg-surface">
       <StrategyAnalyticsHeader />
 
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex h-8 w-60 items-center gap-2 rounded-[20px] border border-border px-3">
+      <div className="flex items-center gap-3">
+        <div className="flex h-8 w-64 items-center gap-2 rounded-[20px] border border-border px-3">
           <input
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);
               setPage(1);
             }}
-            placeholder="Search strategies..."
+            placeholder="Search by ID or strategy..."
             className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
           />
           <MinimalisticMagnifer size={20} weight="Outline" className="shrink-0 text-muted-foreground" />
         </div>
+        <Select
+          value={status}
+          onValueChange={(v) => {
+            setStatus(v ?? "all");
+            setPage(1);
+          }}
+        >
+          <SelectTrigger className="h-8 w-auto gap-2 rounded-full border-border bg-background px-3 text-xs text-foreground">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {STATUS_FILTERS.map((f) => (
+              <SelectItem key={f.value} value={f.value}>
+                {f.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       <section className="flex flex-col overflow-hidden rounded-xl border border-border bg-background">
@@ -73,9 +93,9 @@ export default function Page() {
           ) : isLoading ? (
             <p className="p-4 text-sm text-muted-foreground">Loading&hellip;</p>
           ) : pageRows.length === 0 ? (
-            <p className="p-4 text-sm text-muted-foreground">No strategies found.</p>
+            <p className="p-4 text-sm text-muted-foreground">No backtest runs found.</p>
           ) : (
-            <StrategiesTable rows={pageRows} />
+            <BacktestRunsTable rows={pageRows} selectedId={selectedId ?? undefined} onSelect={setSelectedId} />
           )}
         </div>
         {pageCount > 1 && (
@@ -119,6 +139,8 @@ export default function Page() {
           </div>
         )}
       </section>
+
+      <RunDetailPanel open={!!selectedRun} onOpenChange={(o) => !o && setSelectedId(null)} run={selectedRun} />
     </main>
   );
 }

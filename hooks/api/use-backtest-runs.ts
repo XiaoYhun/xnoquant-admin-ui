@@ -1,0 +1,45 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiDelete, apiPost } from "@/lib/api-client";
+import { USE_MOCK, HFT_API_URL } from "@/lib/constant";
+import type { Run } from "@/types/domain";
+import type { PaperRunRow } from "@/lib/mock/paper-runs";
+import { fetchRuns } from "./use-runs";
+import { toPaperRunRow } from "@/lib/transform/runs";
+
+// GAP-2: `GET /api/runs` has no `mode` filter — fetch all, keep `mode==="backtest"`. Same shape as
+// the paper list (toPaperRunRow), so the Strategy List reuses the paper-trading row contract.
+// Per-run summary + equity stay deferred to the detail panel.
+async function fetchBacktestRunRows(): Promise<PaperRunRow[]> {
+  return (await fetchRuns()).filter((r) => r.mode === "backtest").map(toPaperRunRow);
+}
+
+export function useBacktestRuns() {
+  return useQuery({
+    queryKey: ["backtest-runs"],
+    queryFn: () => (USE_MOCK ? Promise.resolve<PaperRunRow[]>([]) : fetchBacktestRunRows()),
+  });
+}
+
+/**
+ * `POST /api/runs/{id}/stop`. Owner-or-admin only — lab visibility doesn't grant stop access, so a
+ * lab-mate's run 404s. 422 when the run isn't in a stoppable state.
+ */
+export function useStopRun() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiPost<Run>(`${HFT_API_URL}/api/runs/${id}/stop`, {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["backtest-runs"] }),
+  });
+}
+
+/**
+ * `DELETE /api/runs/{id}`. Owner-or-admin only (lab visibility doesn't grant delete). The API
+ * rejects paper and live runs with 422 — only backtest runs are deletable.
+ */
+export function useDeleteRun() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiDelete(`${HFT_API_URL}/api/runs/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["backtest-runs"] }),
+  });
+}

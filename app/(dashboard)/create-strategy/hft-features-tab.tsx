@@ -45,8 +45,11 @@ export function HftFeaturesTab({ strategyId }: { strategyId?: string }) {
   const focusedRef = useRef<{ el: HTMLInputElement; index: number; field: RowField } | null>(null);
   const exprRefs = useRef<Record<number, HTMLInputElement | null>>({});
 
-  if (strategy && seededFor !== strategy.id) {
-    setSeededFor(strategy.id);
+  // Keyed on the server-side features too, so applying a template re-seeds the rows. Local edits
+  // do not change this key, so typing is never clobbered.
+  const seedKey = strategy ? `${strategy.id}:${JSON.stringify(strategy.features ?? [])}` : undefined;
+  if (strategy && seededFor !== seedKey) {
+    setSeededFor(seedKey);
     setRows(withTrailingEmptyRow((strategy.features ?? []).map((f) => ({ name: f.name, expression: f.expression }))));
   }
 

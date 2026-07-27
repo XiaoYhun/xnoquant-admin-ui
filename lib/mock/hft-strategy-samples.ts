@@ -1,12 +1,19 @@
 // Static curated content for the Create Strategy (HFT) "Samples" tab (Figma 14562:20367).
-// There is no HFT samples API endpoint — this data is UI-only, not fetched.
-// Each type leads with a blank annotated scaffold, followed by the concrete starter
-// strategies mirrored from the HFT control plane's "Start from a template" dropdown.
+// There is no HFT samples API endpoint — this data is UI-only, not fetched. It mirrors the HFT
+// control plane's own scaffolds + "Start from a template" list, transcribed from its bundle so the
+// code, comments and features match exactly. Re-transcribe when the control plane changes them.
+//
+// Upstream shape, preserved here: the control plane has two scaffold bodies (arbitrage, and one
+// shared by taker/maker that only differs in its title) and four templates tagged by
+// strategy_type — three taker, one arbitrage, none for maker.
+import type { FeatureDef } from "@/hooks/api/use-hft-strategies";
 
 export type HftSample = {
   id: string;
   name: string;
   description: string;
+  /** Applied alongside the code — a template defines the features its script indexes into. */
+  features: FeatureDef[];
   code: string;
 };
 
@@ -16,11 +23,12 @@ export const HFT_SAMPLES: Record<"taker" | "maker" | "arbitrage", HftSample[]> =
       id: "hft-taker-template",
       name: "Taker Template",
       description: "Marketable-order starter scaffold with a NaN feature guard",
+      features: [],
       code: `// Taker strategy — runs once per tick.
 //
 // Function:
 //   target_pos_intent(symbol: int, qty: float, style: string)
-//     symbol  engine SymbolId — pass the \`symbol\` variable below
+//     symbol  engine SymbolId — pass the \\\`symbol\\\` variable below
 //     qty     signed target position (+long / -short / 0.0 = flatten)
 //     style   "market" (sweep now) | "cross" (marketable at touch)
 //           | "join" (passive at touch) | "mid" (passive at mid)
@@ -30,9 +38,15 @@ export const HFT_SAMPLES: Record<"taker" | "maker" | "arbitrage", HftSample[]> =
 //                   below — features[0], features[1], … (NaN until warmed up)
 //   symbol          this run's SymbolId, pass straight to target_pos_intent
 //   positions       signed position per symbol, indexed by SymbolId
+//   pnl_points      unrealized PnL per symbol, in price points per unit —
+//                   positive always means "in the position's favour"
+//                   regardless of side; 0.0 when flat. There is no engine-side
+//                   stop-loss/take-profit — exits are entirely up to this
+//                   script, e.g. \\\`if pnl_points[symbol] <= -SL { return
+//                   target_pos_intent(symbol, 0.0, "cross"); }\\\`
 //   asset_features  features[] per symbol — asset_features[sym_id][feature_idx]
 //
-// Call \`return target_pos_intent(...)\` to act this tick; fall through (no
+// Call \\\`return target_pos_intent(...)\\\` to act this tick; fall through (no
 // return) to hold.
 
 let f0 = features[0];
@@ -42,14 +56,14 @@ if f0 != f0 { return; } // NaN guard — feature not warmed up yet
 `,
     },
     {
-      id: "hft-taker-ema-crossover",
+      id: "ema-crossover",
       name: "EMA crossover",
       description: "Trend-following: long while the fast EMA is above the slow EMA, short on the flip, with a points-based stop-loss/take-profit.",
-      code: `// Features (add these in the Features tab, in order):
-//   features[0]  fast_ema = ema(last_price, 10)
-//   features[1]  slow_ema = ema(last_price, 50)
-//
-// EMA crossover — long while the fast EMA is above the slow EMA, short on
+      features: [
+        { name: "fast_ema", expression: "ema(last_price, 10)" },
+        { name: "slow_ema", expression: "ema(last_price, 50)" },
+      ],
+      code: `// EMA crossover — long while the fast EMA is above the slow EMA, short on
 // the flip. Manages the position with a points-based stop-loss / take-profit.
 let QTY = 1.0;
 let SL = 5.0;
@@ -75,13 +89,13 @@ if fast > slow && pos <= 0.0 {
 `,
     },
     {
-      id: "hft-taker-mean-reversion",
+      id: "mean-reversion",
       name: "Mean reversion (z-score)",
       description: "Buy when price is far below its rolling mean, sell when far above, flatten once it reverts.",
-      code: `// Features (add these in the Features tab, in order):
-//   features[0]  z = zscore(last_price, 50)
-//
-// Mean reversion — enter when price is far from its rolling mean, exit once
+      features: [
+        { name: "z", expression: "zscore(last_price, 50)" },
+      ],
+      code: `// Mean reversion — enter when price is far from its rolling mean, exit once
 // it reverts back toward it.
 let QTY = 1.0;
 let ENTRY_Z = 2.0;
@@ -101,15 +115,15 @@ if z <= -ENTRY_Z && pos <= 0.0 {
 `,
     },
     {
-      id: "hft-taker-donchian-breakout",
+      id: "donchian-breakout",
       name: "Donchian breakout",
       description: "Buy on a close above the recent high channel, sell on a close below the recent low channel.",
-      code: `// Features (add these in the Features tab, in order):
-//   features[0]  price = last_price
-//   features[1]  upper = rolling_quantile(high, 20, 1.0)
-//   features[2]  lower = rolling_quantile(low, 20, 0.0)
-//
-// Donchian breakout — buy on a close above the recent high channel, sell on
+      features: [
+        { name: "price", expression: "last_price" },
+        { name: "upper", expression: "rolling_quantile(high, 20, 1.0)" },
+        { name: "lower", expression: "rolling_quantile(low, 20, 0.0)" },
+      ],
+      code: `// Donchian breakout — buy on a close above the recent high channel, sell on
 // a close below the recent low channel.
 let QTY = 1.0;
 
@@ -131,12 +145,13 @@ if price >= upper && pos <= 0.0 {
     {
       id: "hft-maker-template",
       name: "Maker Template",
-      description: "Passive-quote starter scaffold with a NaN feature guard",
+      description: "Passive-quoting starter scaffold with a NaN feature guard",
+      features: [],
       code: `// Maker strategy — runs once per tick.
 //
 // Function:
 //   target_pos_intent(symbol: int, qty: float, style: string)
-//     symbol  engine SymbolId — pass the \`symbol\` variable below
+//     symbol  engine SymbolId — pass the \\\`symbol\\\` variable below
 //     qty     signed target position (+long / -short / 0.0 = flatten)
 //     style   "market" (sweep now) | "cross" (marketable at touch)
 //           | "join" (passive at touch) | "mid" (passive at mid)
@@ -146,9 +161,15 @@ if price >= upper && pos <= 0.0 {
 //                   below — features[0], features[1], … (NaN until warmed up)
 //   symbol          this run's SymbolId, pass straight to target_pos_intent
 //   positions       signed position per symbol, indexed by SymbolId
+//   pnl_points      unrealized PnL per symbol, in price points per unit —
+//                   positive always means "in the position's favour"
+//                   regardless of side; 0.0 when flat. There is no engine-side
+//                   stop-loss/take-profit — exits are entirely up to this
+//                   script, e.g. \\\`if pnl_points[symbol] <= -SL { return
+//                   target_pos_intent(symbol, 0.0, "cross"); }\\\`
 //   asset_features  features[] per symbol — asset_features[sym_id][feature_idx]
 //
-// Call \`return target_pos_intent(...)\` to act this tick; fall through (no
+// Call \\\`return target_pos_intent(...)\\\` to act this tick; fall through (no
 // return) to hold.
 
 let f0 = features[0];
@@ -162,7 +183,8 @@ if f0 != f0 { return; } // NaN guard — feature not warmed up yet
     {
       id: "hft-arbitrage-template",
       name: "Arbitrage Template",
-      description: "Two-leg starter scaffold using arbitrage_intent + arb_ctx",
+      description: "Two-leg cross-venue starter scaffold with a NaN feature guard",
+      features: [],
       code: `// Arbitrage strategy — runs once per tick when both legs' order books are fresh.
 //
 // Function:
@@ -182,7 +204,7 @@ if f0 != f0 { return; } // NaN guard — feature not warmed up yet
 //   <param name>  strategy params (defined at launch) are in scope as plain
 //     variables, e.g. threshold, order_size_value, max_position
 //
-// Call \`return arbitrage_intent(...)\` to act this tick; fall through (no
+// Call \\\`return arbitrage_intent(...)\\\` to act this tick; fall through (no
 // return) to hold.
 
 let fee_rate = arb_ctx.taker_fee_leg1 + arb_ctx.maker_fee_leg2;
@@ -191,9 +213,10 @@ let fee_rate = arb_ctx.taker_fee_leg1 + arb_ctx.maker_fee_leg2;
 `,
     },
     {
-      id: "hft-arb-cross-venue-spread",
+      id: "arbitrage-spread",
       name: "Cross-venue spread capture",
       description: "Arb leg1 vs leg2 once the spread clears fees plus a safety margin.",
+      features: [],
       code: `// Cross-venue spread capture — arb leg1 vs leg2 once the spread clears fees
 // plus a safety margin.
 let THRESHOLD = 0.001; // extra edge required beyond fees, as a fraction of price

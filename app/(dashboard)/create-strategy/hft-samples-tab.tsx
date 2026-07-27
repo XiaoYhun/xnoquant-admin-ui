@@ -11,7 +11,7 @@ const STRATEGY_TYPES = ["taker", "maker", "arbitrage"] as const;
 type StrategyType = (typeof STRATEGY_TYPES)[number];
 const TYPE_LABEL: Record<StrategyType, string> = { taker: "Taker", maker: "Maker", arbitrage: "Arbitrage" };
 
-export function HftSamplesTab({ onUseTemplate }: { onUseTemplate?: (code: string) => void }) {
+export function HftSamplesTab({ onUseTemplate }: { onUseTemplate?: (code: string, features: HftSample["features"]) => void }) {
   const [type, setType] = useState<StrategyType>("taker");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const samples: HftSample[] = HFT_SAMPLES[type];
@@ -62,7 +62,7 @@ export function HftSamplesTab({ onUseTemplate }: { onUseTemplate?: (code: string
                 </button>
                 <button
                   type="button"
-                  onClick={() => onUseTemplate?.(s.code)}
+                  onClick={() => onUseTemplate?.(s.code, s.features)}
                   className="inline-flex h-8 cursor-pointer items-center gap-1 rounded-full bg-[linear-gradient(163deg,#cff8ea_0%,#67e1c1_100%)] px-3 text-xs text-black"
                 >
                   <CheckCircle weight="Outline" className="size-4" />

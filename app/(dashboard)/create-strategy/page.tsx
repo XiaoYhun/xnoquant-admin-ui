@@ -8,12 +8,13 @@ import { ConsolePanel } from "./console-panel";
 import { ResultsPanel, type ResultsPanelTab } from "./results-panel";
 import { type EditorTab } from "@/lib/mock/strategy-builder";
 import { useEditors, useCreateEditor, useSimulateEditor, useUpdateEditor, useDeleteEditor, fetchEditors } from "@/hooks/api/use-strategy-builder";
-import { useHftStrategies, useCreateHftStrategy, useUpdateHftStrategy, useDeleteHftStrategy, type HftStrategyType } from "@/hooks/api/use-hft-strategies";
+import { useHftStrategies, useCreateHftStrategy, useUpdateHftStrategy, useDeleteHftStrategy, type HftStrategyType, type FeatureDef } from "@/hooks/api/use-hft-strategies";
 import { CreateStrategyModal } from "@/components/layout/create-strategy-modal";
 import { useConsoleLog } from "@/store/console-log-store";
 import { useMode, type Mode } from "@/store/mode-store";
 import { useAuth } from "@/hooks/use-auth";
 import { canMutate } from "@/lib/rbac";
+import { resourceErrorMessage } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 
 // Draggable two-pane split (editor | results). Left width is a % clamped to [30, 70].
@@ -166,9 +167,24 @@ function StrategyBuilder({ mode, initialEditors }: { mode: Mode; initialEditors:
       return next;
     });
   };
-  // "Use template" (Samples tab) loads a sample's code into the active editor.
-  const setActiveCode = (code: string) => {
+  // "Use template" (Samples tab) loads a sample into the active editor. A template defines the
+  // features its script indexes into (features[0], features[1], …), so they are persisted with it —
+  // otherwise the code would read NaN out of a feature list that was never created.
+  const applyTemplate = async (code: string, features: FeatureDef[]) => {
     setEditors((prev) => prev.map((e) => (e.id === activeId ? { ...e, code } : e)));
+    if (active?.type === "hft" && features.length) {
+      try {
+        // Code goes in the same PUT as the features: persisting one without the other leaves the
+        // strategy half-applied (features indexed by a script the server never received).
+        await updateHftStrategy.mutateAsync({ id: activeId, code, features });
+        setSavedCodes((prev) => ({ ...prev, [activeId]: code }));
+        addLog("success", `Loaded template — ${features.length} feature${features.length > 1 ? "s" : ""} applied`);
+        return;
+      } catch (err) {
+        addLog("error", `Template features not applied: ${resourceErrorMessage(err, "this strategy")}`);
+        return;
+      }
+    }
     addLog("info", "Loaded sample code into the editor");
   };
   // Monaco keystrokes -> active editor's code, no logging.
@@ -218,7 +234,7 @@ function StrategyBuilder({ mode, initialEditors }: { mode: Mode; initialEditors:
               left={left}
               right={
                 <div className="h-full min-h-0 overflow-hidden bg-background">
-                  <ResultsPanel onUseTemplate={setActiveCode} variant={active.type} strategyId={resultsStrategyId} tab={resultsTab} onTabChange={setResultsTab} />
+                  <ResultsPanel onUseTemplate={applyTemplate} variant={active.type} strategyId={resultsStrategyId} tab={resultsTab} onTabChange={setResultsTab} />
                 </div>
               }
             />

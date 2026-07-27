@@ -7,6 +7,7 @@ import { FeaturesTab } from "./features-tab";
 import { DataTab } from "./data-tab";
 import { OperatorsTab } from "./operators-tab";
 import { HftSamplesTab } from "./hft-samples-tab";
+import type { FeatureDef } from "@/hooks/api/use-hft-strategies";
 import { HftFeaturesTab } from "./hft-features-tab";
 
 // Right-panel underline tabs (Figma 14180:15378). The HFT lab shows a reduced set with its own
@@ -22,7 +23,7 @@ export function ResultsPanel({
   tab: controlledTab,
   onTabChange,
 }: {
-  onUseTemplate?: (code: string) => void;
+  onUseTemplate?: (code: string, features: FeatureDef[]) => void;
   variant?: "mft" | "hft";
   strategyId?: string;
   tab?: ResultsPanelTab;
@@ -59,7 +60,7 @@ export function ResultsPanel({
       </div>
       <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto [scrollbar-gutter:stable]">
         {tab === "Samples" &&
-          (variant === "hft" ? <HftSamplesTab onUseTemplate={onUseTemplate} /> : <SamplesTab onUseTemplate={onUseTemplate} />)}
+          (variant === "hft" ? <HftSamplesTab onUseTemplate={onUseTemplate} /> : <SamplesTab onUseTemplate={(code) => onUseTemplate?.(code, [])} />)}
         {tab === "Results" && <ResultsTab variant={variant} strategyId={strategyId} />}
         {tab === "Features" && (variant === "hft" ? <HftFeaturesTab strategyId={strategyId} /> : <FeaturesTab />)}
         {tab === "Data" && variant === "mft" && <DataTab />}

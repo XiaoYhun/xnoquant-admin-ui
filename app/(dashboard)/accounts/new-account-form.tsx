@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useVenues } from "@/hooks/api/use-venues";
 import { useCreateAccount } from "@/hooks/api/use-accounts";
+import { resourceErrorMessage } from "@/lib/api-client";
 
 const schema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -147,7 +148,7 @@ export function NewAccountForm() {
           </div>
         </div>
         {createAccount.isError && (
-          <p className="text-xs text-destructive">Couldn&rsquo;t create account. Please try again.</p>
+          <p className="text-xs text-destructive">{resourceErrorMessage(createAccount.error, "accounts")}</p>
         )}
         <button
           type="submit"

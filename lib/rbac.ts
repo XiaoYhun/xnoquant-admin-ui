@@ -45,3 +45,11 @@ export function canMutate(
 ): boolean {
   return caller.isAdmin || isOwner(resource, caller.userId);
 }
+
+/**
+ * True when the resource is visible to the caller but owned by someone else — a lab-mate's
+ * share (Lab scope) or the admin cross-user view. Used to render a read-only "Shared" chip.
+ */
+export function isShared(resource: { owner_id?: string } | undefined, userId: string | undefined): boolean {
+  return !!resource?.owner_id && !!userId && resource.owner_id !== userId;
+}

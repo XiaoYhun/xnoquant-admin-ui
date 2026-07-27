@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resourceScope, isOwner, canMutate } from "./rbac";
+import { resourceScope, isOwner, canMutate, isShared } from "./rbac";
 
 describe("resourceScope", () => {
   it("maps admin to all", () => {
@@ -58,5 +58,21 @@ describe("canMutate", () => {
 
   it("a non-admin cannot mutate a resource they don't own (e.g. a lab-mate's)", () => {
     expect(canMutate({ owner_id: "other" }, { userId: "me", isAdmin: false })).toBe(false);
+  });
+});
+
+describe("isShared", () => {
+  it("is false for the caller's own resource", () => {
+    expect(isShared({ owner_id: "me" }, "me")).toBe(false);
+  });
+
+  it("is true when owned by someone else (e.g. a lab-mate's)", () => {
+    expect(isShared({ owner_id: "other" }, "me")).toBe(true);
+  });
+
+  it("is false when owner_id or user id is missing", () => {
+    expect(isShared({ owner_id: undefined }, "me")).toBe(false);
+    expect(isShared(undefined, "me")).toBe(false);
+    expect(isShared({ owner_id: "other" }, undefined)).toBe(false);
   });
 });

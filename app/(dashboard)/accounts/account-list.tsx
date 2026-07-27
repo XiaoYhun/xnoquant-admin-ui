@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { useVenues } from "@/hooks/api/use-venues";
 import { useDeleteAccount, useSendDnseOtp } from "@/hooks/api/use-accounts";
+import { resourceErrorMessage } from "@/lib/api-client";
 import type { Account } from "@/types/domain";
 
 type OtpFeedback = "sending" | "sent" | "error";
@@ -172,7 +173,7 @@ export function AccountList({
             </DialogDescription>
           </DialogHeader>
           {deleteAccount.isError && (
-            <p className="text-xs text-destructive">Couldn&rsquo;t delete account. Please try again.</p>
+            <p className="text-xs text-destructive">{resourceErrorMessage(deleteAccount.error, "this account")}</p>
           )}
           <DialogFooter>
             <DialogClose asChild>

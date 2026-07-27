@@ -9,6 +9,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { SimulateModal, HFT_MARKET_LABEL, HFT_TYPE_LABEL } from "./simulate-modal";
 import { USE_MOCK } from "@/lib/constant";
+import { resourceErrorMessage } from "@/lib/api-client";
+import { useAuth } from "@/hooks/use-auth";
+import { canMutate } from "@/lib/rbac";
 import { useMarkets } from "@/hooks/api/use-markets";
 import { useUpdateEditor } from "@/hooks/api/use-strategy-builder";
 import { useHftStrategy, useUpdateHftStrategy, type HftStrategyType } from "@/hooks/api/use-hft-strategies";
@@ -51,14 +54,17 @@ function IconButton({
 // strategy's values.
 function HftSettingsFields({
   id,
+  ownerId,
   onClose,
 }: {
   id: string;
+  ownerId?: string;
   onClose: () => void;
 }) {
   const { data: strategy } = useHftStrategy(id);
   const updateStrategy = useUpdateHftStrategy();
   const addLog = useConsoleLog((s) => s.addLog);
+  const { userId, isAdmin } = useAuth();
 
   // Derive Type from the fetched strategy until the user overrides it (avoids seeding via an
   // effect — the strategy loads async, so `typeOverride ?? loaded ?? default`).
@@ -66,6 +72,8 @@ function HftSettingsFields({
   const draftType: HftStrategyType = typeOverride ?? strategy?.strategy_type ?? "taker";
 
   const hasChanges = !!strategy && draftType !== strategy.strategy_type;
+  // PUT /api/strategies/{id} 404s for a strategy the caller doesn't own — hide Save for those.
+  const canSave = !ownerId || canMutate({ owner_id: ownerId }, { userId, isAdmin });
 
   const handleSave = async () => {
     if (!hasChanges || !id || updateStrategy.isPending) return;
@@ -74,7 +82,7 @@ function HftSettingsFields({
       addLog("success", "Strategy settings saved");
       onClose();
     } catch (err) {
-      addLog("error", `Failed to save settings: ${err instanceof Error ? err.message : "unknown error"}`);
+      addLog("error", `Failed to save settings: ${resourceErrorMessage(err, "this strategy")}`);
     }
   };
 
@@ -94,16 +102,18 @@ function HftSettingsFields({
           </SelectContent>
         </Select>
       </div>
-      <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={!hasChanges || updateStrategy.isPending}
-          className="cursor-pointer rounded-full bg-[linear-gradient(171deg,#cff8ea_0%,#67e1c1_100%)] px-3 py-1.5 text-xs font-medium text-[#0d0d0d] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {updateStrategy.isPending ? "Saving…" : "Save"}
-        </button>
-      </div>
+      {canSave && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={!hasChanges || updateStrategy.isPending}
+            className="cursor-pointer rounded-full bg-[linear-gradient(171deg,#cff8ea_0%,#67e1c1_100%)] px-3 py-1.5 text-xs font-medium text-[#0d0d0d] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {updateStrategy.isPending ? "Saving…" : "Save"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -221,6 +231,7 @@ function MftSettingsFields({
 function SettingsMenu({
   type,
   id,
+  ownerId,
   market,
   universe,
   trainRatio,
@@ -228,6 +239,7 @@ function SettingsMenu({
 }: {
   type: "mft" | "hft";
   id: string;
+  ownerId?: string;
   market?: string;
   universe?: string;
   trainRatio?: number;
@@ -258,7 +270,7 @@ function SettingsMenu({
             onClose={() => setOpen(false)}
           />
         ) : (
-          <HftSettingsFields key={id} id={id} onClose={() => setOpen(false)} />
+          <HftSettingsFields key={id} id={id} ownerId={ownerId} onClose={() => setOpen(false)} />
         )}
       </PopoverContent>
     </Popover>
@@ -269,6 +281,7 @@ export function Toolbar({
   name,
   type,
   id,
+  ownerId,
   market,
   universe,
   trainRatio,
@@ -279,6 +292,7 @@ export function Toolbar({
   name: string;
   type: "mft" | "hft";
   id: string;
+  ownerId?: string;
   market?: string;
   universe?: string;
   trainRatio?: number;
@@ -395,6 +409,7 @@ export function Toolbar({
         <SettingsMenu
           type={type}
           id={id}
+          ownerId={ownerId}
           market={market}
           universe={universe}
           trainRatio={trainRatio}

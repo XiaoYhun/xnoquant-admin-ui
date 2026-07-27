@@ -12,6 +12,8 @@ import {
 import { Sparkline } from "@/components/charts/sparkline";
 import { FlashValue } from "@/components/ui/flash-value";
 import { cn, formatPercent } from "@/lib/utils";
+import { useAuth } from "@/hooks/use-auth";
+import { isShared } from "@/lib/rbac";
 import type { PaperRunRow } from "@/lib/mock/paper-runs";
 
 // Gradient text tokens from the Figma design.
@@ -66,6 +68,7 @@ export function PaperRunsTable({
   selectedId?: string;
   onSelect: (id: string) => void;
 }) {
+  const { userId } = useAuth();
   return (
     <Table className="table-fixed">
       <TableHeader>
@@ -86,8 +89,14 @@ export function PaperRunsTable({
             className="cursor-pointer"
           >
             <TableCell className="truncate text-sm text-white">{r.id}</TableCell>
-            <TableCell className="truncate text-sm font-semibold text-white" title={r.strategyName}>
-              {r.strategyName}
+            <TableCell className="flex items-center text-sm font-semibold text-white">
+              <span className="truncate" title={r.strategyName}>{r.strategyName}</span>
+              {/* RBAC plan: a lab-mate's paper run is a read-only share, not owned by the caller. */}
+              {isShared(r, userId) && (
+                <span className="ml-2 inline-flex shrink-0 items-center rounded-[20px] border border-[#1d2939] bg-[#151a24] px-2 py-0.5 text-[10px] font-normal text-[#9db2ce]">
+                  Shared
+                </span>
+              )}
             </TableCell>
             <TableCell>
               <span className={`text-xs ${GRAD_GREEN}`}>Paper Trading</span>

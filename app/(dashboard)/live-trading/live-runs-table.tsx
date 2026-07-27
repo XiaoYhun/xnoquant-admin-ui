@@ -3,7 +3,7 @@ import { useState, type ReactNode } from "react";
 import { Pause, Play } from "@solar-icons/react";
 import { resourceErrorMessage } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
-import { canMutate } from "@/lib/rbac";
+import { canMutate, isShared } from "@/lib/rbac";
 import {
   Table,
   TableBody,
@@ -121,8 +121,14 @@ export function LiveRunsTable({
                   </span>
                 </TableCell>
                 <TableCell className="truncate text-sm text-white">{r.id}</TableCell>
-                <TableCell className="truncate text-sm font-semibold text-white" title={r.strategyName}>
-                  {r.strategyName}
+                <TableCell className="flex items-center text-sm font-semibold text-white">
+                  <span className="truncate" title={r.strategyName}>{r.strategyName}</span>
+                  {/* RBAC plan: a lab-mate's live run is a read-only share, not owned by the caller. */}
+                  {isShared(r, userId) && (
+                    <span className="ml-2 inline-flex shrink-0 items-center rounded-[20px] border border-[#1d2939] bg-[#151a24] px-2 py-0.5 text-[10px] font-normal text-[#9db2ce]">
+                      Shared
+                    </span>
+                  )}
                 </TableCell>
                 <TableCell>
                   <span className={`text-xs ${GRAD_YELLOW}`}>{r.alphaStatus}</span>

@@ -161,6 +161,7 @@ function StrategyBuilder({ mode, initialEditors }: { mode: Mode; initialEditors:
         name={active?.name ?? ""}
         type={active?.type ?? "mft"}
         id={active?.id ?? ""}
+        ownerId={active?.owner_id}
         market={active?.market}
         universe={active?.universe}
         trainRatio={active?.train_ratio}

@@ -6,6 +6,8 @@ import type { RunStatus } from "@/types/domain";
 // bound to one OR two accounts / instruments (the taller rows).
 export type LiveRunRow = {
   id: string;
+  /** Resource owner (HFT `owner_id`) — compared against the caller's user_id for ownership. */
+  owner_id?: string;
   strategyName: string;
   alphaStatus: string;
   accounts: string[];
@@ -47,7 +49,8 @@ function pnlSeries(seed: number, drift: number): number[] {
 const MOCK_LIVE_RUNS: Omit<LiveRunRow, "startingEquity" | "owner">[] = [
   { id: "MFT-5IWb3Ux", strategyName: "Sample Strategy 1", alphaStatus: "Live Trading", accounts: ["DN-002"], symbols: [{ symbol: "VN30F1M", market: "VNFuture" }], timeframe: "5min", status: "running", returnPct: 134.22, sharpe: 1.82, maxDrawdownPct: -14.22, pnlSeries: pnlSeries(1, 1.4) },
   { id: "MFT-D7AxNplR", strategyName: "Momentum Booster", alphaStatus: "Live Trading", accounts: ["DN-002"], symbols: [{ symbol: "AAPL", market: "NASDAQ" }], timeframe: "5min", status: "running", returnPct: 87.45, sharpe: 2.15, maxDrawdownPct: -5.87, pnlSeries: pnlSeries(2, 1.1) },
-  { id: "HFT-LqJvB9C", strategyName: "Reversal Hunter", alphaStatus: "Live Trading", accounts: ["DN-002"], symbols: [{ symbol: "BTCUSD", market: "Crypto" }], timeframe: "5min", status: "paused", returnPct: 56.13, sharpe: 1.6, maxDrawdownPct: -7.34, pnlSeries: pnlSeries(3, 0.8) },
+  // owner_id set to exercise the shared/not-mutable rendering in mock mode (P2.3).
+  { id: "HFT-LqJvB9C", owner_id: "user-someone-else", strategyName: "Reversal Hunter", alphaStatus: "Live Trading", accounts: ["DN-002"], symbols: [{ symbol: "BTCUSD", market: "Crypto" }], timeframe: "5min", status: "paused", returnPct: 56.13, sharpe: 1.6, maxDrawdownPct: -7.34, pnlSeries: pnlSeries(3, 0.8) },
   { id: "MFT-2k9GYxS", strategyName: "Breakout Seeker", alphaStatus: "Live Trading", accounts: ["DN-001", "DN-002"], symbols: [{ symbol: "ETHUSD", market: "Crypto" }, { symbol: "VN30F2M", market: "VNFuture" }], timeframe: "5min", status: "paused", returnPct: 98.77, sharpe: 2.05, maxDrawdownPct: -10.12, pnlSeries: pnlSeries(4, 1.0) },
   { id: "HFT-f9PmYxQ", strategyName: "Trend Rider", alphaStatus: "Live Trading", accounts: ["DN-002"], symbols: [{ symbol: "TSLA", market: "NASDAQ" }], timeframe: "5min", status: "running", returnPct: 45.66, sharpe: 1.75, maxDrawdownPct: -3.88, pnlSeries: pnlSeries(5, 0.9) },
   { id: "HFT-3RxWyQJ", strategyName: "Volatility Scalper", alphaStatus: "Live Trading", accounts: ["DN-001", "DN-002"], symbols: [{ symbol: "ETHUSD", market: "Crypto" }, { symbol: "VN30F2M", market: "VNFuture" }], timeframe: "5min", status: "running", returnPct: 120.89, sharpe: 2.3, maxDrawdownPct: -12.5, pnlSeries: pnlSeries(6, 1.3) },

@@ -14,6 +14,7 @@ import { useAccounts } from "@/hooks/api/use-accounts";
 import { useVenues } from "@/hooks/api/use-venues";
 import { useSymbols } from "@/hooks/api/use-symbols";
 import { useLaunchRun, type LaunchRequest } from "@/hooks/api/use-runs";
+import { resourceErrorMessage } from "@/lib/api-client";
 import type { HftStrategyType } from "@/hooks/api/use-hft-strategies";
 import type { Account, RunMode } from "@/types/domain";
 
@@ -815,9 +816,7 @@ export function SimulateModal({
           </GroupBox>
 
           {launchRun.isError && (
-            <p className="text-xs text-destructive">
-              {launchRun.error instanceof Error ? launchRun.error.message : "Failed to start run. Please try again."}
-            </p>
+            <p className="text-xs text-destructive">{resourceErrorMessage(launchRun.error, "this run")}</p>
           )}
         </div>
 

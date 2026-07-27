@@ -13,6 +13,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/use-auth";
+import { canMutate, isShared } from "@/lib/rbac";
 import type { EditorTab } from "@/lib/mock/strategy-builder";
 
 // Browser-style strip of open editors: click to switch, × to close, + to add a new one.
@@ -30,6 +32,7 @@ export function EditorsBar({
   onAdd: () => void;
 }) {
   const [pendingClose, setPendingClose] = useState<EditorTab | null>(null);
+  const { userId, isAdmin } = useAuth();
   return (
     <div className="flex h-14 shrink-0 items-stretch border-b border-border bg-background overflow-y-hidden">
       <div className="flex min-w-0 items-stretch overflow-x-auto overflow-y-hidden">
@@ -47,17 +50,27 @@ export function EditorsBar({
               )}
             >
               <span>{e.name}</span>
-              <button
-                type="button"
-                aria-label={`Close ${e.name}`}
-                onClick={(ev) => {
-                  ev.stopPropagation();
-                  setPendingClose(e);
-                }}
-                className="flex size-4 items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-white cursor-pointer -mr-2"
-              >
-                <CloseIcon className="size-3.5" />
-              </button>
+              {/* RBAC plan: a lab-mate's HFT strategy is a read-only share. */}
+              {e.type === "hft" && isShared(e, userId) && (
+                <span className="shrink-0 rounded-[20px] border border-[#1d2939] bg-[#151a24] px-1.5 py-0.5 text-[10px] font-normal text-[#9db2ce]">
+                  Shared
+                </span>
+              )}
+              {/* Closing an HFT tab DELETEs the strategy server-side, which 404s for a
+                  strategy the caller doesn't own — hide the × for those. */}
+              {!(e.type === "hft" && e.owner_id && !canMutate(e, { userId, isAdmin })) && (
+                <button
+                  type="button"
+                  aria-label={`Close ${e.name}`}
+                  onClick={(ev) => {
+                    ev.stopPropagation();
+                    setPendingClose(e);
+                  }}
+                  className="flex size-4 items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-white cursor-pointer -mr-2"
+                >
+                  <CloseIcon className="size-3.5" />
+                </button>
+              )}
             </div>
           );
         })}

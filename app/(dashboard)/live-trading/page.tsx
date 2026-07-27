@@ -17,6 +17,7 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { useLiveRuns } from "@/hooks/api/use-live-runs";
+import { resourceErrorMessage } from "@/lib/api-client";
 import { LiveRunsTable } from "./live-runs-table";
 import { LiveRunDetailPanel } from "./live-run-detail-panel";
 import type { LiveRunRow } from "@/lib/mock/live-runs";
@@ -32,7 +33,7 @@ const STATUS_FILTERS = [
 ];
 
 export default function Page() {
-  const { data: runs = [], isLoading } = useLiveRuns();
+  const { data: runs = [], isLoading, isError, error } = useLiveRuns();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [page, setPage] = useState(1);
@@ -90,7 +91,9 @@ export default function Page() {
 
       <section className="flex flex-col overflow-hidden rounded-xl border border-border bg-background">
         <div>
-          {isLoading ? (
+          {isError ? (
+            <p className="p-4 text-sm text-destructive">{resourceErrorMessage(error)}</p>
+          ) : isLoading ? (
             <p className="p-4 text-sm text-muted-foreground">Loading&hellip;</p>
           ) : pageRows.length === 0 ? (
             <p className="p-4 text-sm text-muted-foreground">No live strategies found.</p>

@@ -6,6 +6,7 @@ import type { IconProps } from "@solar-icons/react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { ApiError, resourceErrorMessage } from "@/lib/api-client";
 import type { HftStrategyType } from "@/hooks/api/use-hft-strategies";
 
 // Figma node 14135:29458 — "Select Strategy Type" popup: pick MFT or HFT, then confirm.
@@ -58,8 +59,12 @@ export function CreateStrategyModal({
       await onConfirm?.(selected, name.trim(), selected === "hft" ? hftType : undefined);
       reset();
       onOpenChange(false);
-    } catch {
-      setError("Couldn't create — a strategy with this name may already exist.");
+    } catch (err) {
+      setError(
+        err instanceof ApiError && err.status === 409
+          ? "A strategy with this name already exists."
+          : resourceErrorMessage(err, "strategies"),
+      );
       setSubmitting(false);
     }
   };

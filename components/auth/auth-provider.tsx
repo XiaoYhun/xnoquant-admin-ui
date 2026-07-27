@@ -34,11 +34,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => unsubscribe();
   }, []);
 
+  // GET /me carries the authoritative roles + user_id (the token-exchange user may omit them).
+  // Merge them into the session user so role-aware UI can reduce scope via lib/rbac.ts.
   const { data: me } = useMe();
   useEffect(() => {
     if (!me) return;
-    console.log("[auth/me]", me);
-    (window as unknown as Record<string, unknown>).__me = me;
+    useAuthStore.getState().patchUser({ roles: me.roles, user_id: me.user_id });
   }, [me]);
 
   return <>{children}</>;

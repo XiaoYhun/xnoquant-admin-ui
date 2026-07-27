@@ -10,6 +10,40 @@ import type { components } from "@/types/api/xalpha";
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
+
+// Raw HFT error bodies aren't enveloped and their shape varies (`{message}`, `{error}`,
+// `{detail}`, or a bare string). Extract the best message so 422 business-rule rejections
+// surface their caller-facing text instead of a generic reason phrase.
+async function throwHftError(res: Response): Promise<never> {
+  const text = await res.text().catch(() => "");
+  let message = res.statusText;
+  if (text) {
+    try {
+      const body: unknown = JSON.parse(text);
+      if (typeof body === "string") message = body;
+      else if (body && typeof body === "object") {
+        const o = body as { message?: string; error?: string; detail?: string };
+        message = o.message ?? o.error ?? o.detail ?? res.statusText;
+      }
+    } catch {
+      message = text;
+    }
+  }
+  throw new ApiError(res.status, message);
+}
+
+// Human-facing message for a failed accounts/strategies/runs call, per the RBAC status
+// contract (docs/plans/rbac-frontend-plan.html §3): 403 = no access to the whole family;
+// 404 = missing OR hidden from you (render as "not found", never "forbidden"); 422 = a
+// caller-facing business-rule rejection whose server message is shown verbatim.
+export function resourceErrorMessage(err: unknown, resource = "this section"): string {
+  if (err instanceof ApiError) {
+    if (err.status === 403) return `You don't have access to ${resource}.`;
+    if (err.status === 404) return "Not found.";
+    if (err.status === 422) return err.message;
+  }
+  return err instanceof Error && err.message ? err.message : "Something went wrong.";
+}
 export async function apiGet<T>(
   url: string,
   token: string | undefined = useAuthStore.getState().accessToken ?? undefined,
@@ -17,7 +51,7 @@ export async function apiGet<T>(
   const res = await fetch(url, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
-  if (!res.ok) throw new ApiError(res.status, res.statusText);
+  if (!res.ok) await throwHftError(res);
   return res.json() as Promise<T>;
 }
 export async function apiPost<T>(
@@ -33,7 +67,7 @@ export async function apiPost<T>(
     },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new ApiError(res.status, res.statusText);
+  if (!res.ok) await throwHftError(res);
   if (res.status === 204) return undefined as T; // no-content responses (e.g. DNSE send-otp) have no body to parse
   return res.json() as Promise<T>;
 }
@@ -50,7 +84,7 @@ export async function apiPut<T>(
     },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new ApiError(res.status, res.statusText);
+  if (!res.ok) await throwHftError(res);
   return res.json() as Promise<T>;
 }
 export async function apiDelete(
@@ -61,7 +95,7 @@ export async function apiDelete(
     method: "DELETE",
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
-  if (!res.ok) throw new ApiError(res.status, res.statusText);
+  if (!res.ok) await throwHftError(res);
 }
 
 // ---- Enveloped-API helpers (XALPHA / AUTH only — do NOT use for HFT) ----

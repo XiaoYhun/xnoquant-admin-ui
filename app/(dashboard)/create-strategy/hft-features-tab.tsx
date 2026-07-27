@@ -9,6 +9,7 @@ import { PlusIcon } from "@/components/icons/plus";
 import { CloseIcon } from "@/components/icons/close";
 import { useHftStrategy, useUpdateHftStrategy, type FeatureDef } from "@/hooks/api/use-hft-strategies";
 import { useFeatureCatalog, useValidateFeatures, type FeatureCatalogItem } from "@/hooks/api/use-hft-features";
+import { resourceErrorMessage } from "@/lib/api-client";
 
 type DraftRow = { name: string; expression: string };
 type RowField = "name" | "expression";
@@ -216,7 +217,9 @@ export function HftFeaturesTab({ strategyId }: { strategyId?: string }) {
 
         {/* Validate/Save kept for functionality (per request; not in the design node) */}
         <div className="flex items-center justify-end gap-2 border-t border-border p-2">
-          {updateStrategy.isError && <p className="mr-auto text-xs text-destructive">Couldn&apos;t save features.</p>}
+          {updateStrategy.isError && (
+            <p className="mr-auto text-xs text-destructive">{resourceErrorMessage(updateStrategy.error, "this strategy")}</p>
+          )}
           {updateStrategy.isSuccess && !updateStrategy.isPending && (
             <p className="mr-auto text-xs text-primary">Saved.</p>
           )}

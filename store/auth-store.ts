@@ -14,6 +14,8 @@ type AuthState = {
   /** Last session/login error surfaced from AuthProvider (e.g. token-exchange failure). */
   error: string | null;
   setSession: (user: User, accessToken: string) => void;
+  /** Merge authoritative profile fields (roles, user_id) from GET /me into the session user. */
+  patchUser: (patch: Partial<User>) => void;
   clear: (error?: string | null) => void;
 };
 
@@ -23,5 +25,6 @@ export const useAuthStore = create<AuthState>((set) => ({
   status: "loading",
   error: null,
   setSession: (user, accessToken) => set({ user, accessToken, status: "authenticated", error: null }),
+  patchUser: (patch) => set((s) => (s.user ? { user: { ...s.user, ...patch } } : {})),
   clear: (error = null) => set({ user: null, accessToken: null, status: "unauthenticated", error }),
 }));

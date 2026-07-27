@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { useVenues } from "@/hooks/api/use-venues";
 import { useUpdateAccount } from "@/hooks/api/use-accounts";
+import { resourceErrorMessage } from "@/lib/api-client";
 import type { Account } from "@/types/domain";
 
 const schema = z.object({
@@ -156,7 +157,7 @@ export function EditAccountModal({
             </div>
           </div>
           {updateAccount.isError && (
-            <p className="text-xs text-destructive">Couldn&rsquo;t update account. Please try again.</p>
+            <p className="text-xs text-destructive">{resourceErrorMessage(updateAccount.error, "this account")}</p>
           )}
           <DialogFooter>
             <DialogClose asChild>

@@ -12,6 +12,7 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { usePaperRuns } from "@/hooks/api/use-paper-runs";
+import { resourceErrorMessage } from "@/lib/api-client";
 import { PaperRunsTable } from "./paper-runs-table";
 import { RunDetailPanel } from "./run-detail-panel";
 import type { PaperRunRow } from "@/lib/mock/paper-runs";
@@ -23,7 +24,7 @@ const GROUP_TABS: { value: PaperRunRow["strategyType"]; label: string }[] = [
 ];
 
 export default function Page() {
-  const { data: runs = [], isLoading } = usePaperRuns();
+  const { data: runs = [], isLoading, isError, error } = usePaperRuns();
   const [search, setSearch] = useState("");
   const [group, setGroup] = useState<PaperRunRow["strategyType"]>("MFT");
   const [symbol, setSymbol] = useState("all");
@@ -126,7 +127,9 @@ export default function Page() {
 
       <section className="flex flex-col overflow-hidden rounded-xl border border-border bg-background">
         <div>
-          {isLoading ? (
+          {isError ? (
+            <p className="p-4 text-sm text-destructive">{resourceErrorMessage(error)}</p>
+          ) : isLoading ? (
             <p className="p-4 text-sm text-muted-foreground">Loading&hellip;</p>
           ) : pageRows.length === 0 ? (
             <p className="p-4 text-sm text-muted-foreground">No paper strategies found.</p>

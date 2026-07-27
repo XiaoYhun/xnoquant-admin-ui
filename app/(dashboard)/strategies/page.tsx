@@ -12,7 +12,6 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useBacktestRuns } from "@/hooks/api/use-backtest-runs";
 import { resourceErrorMessage } from "@/lib/api-client";
-import { StrategyAnalyticsHeader } from "./strategy-analytics";
 import { BacktestRunsTable } from "./backtest-runs-table";
 import { RunDetailPanel } from "../paper-trading/run-detail-panel";
 
@@ -26,7 +25,7 @@ const STATUS_FILTERS = [
   { value: "pending", label: "Pending" },
 ];
 
-// Strategy List is a list of backtest runs (`GET /api/runs`, mode==="backtest"), laid out like the
+// Backtesting is a list of backtest runs (`GET /api/runs`, mode==="backtest"), laid out like the
 // Paper Trading page. Rows share the paper row contract, so the paper detail panel is reused.
 export default function Page() {
   const { data: runs = [], isLoading, isError, error } = useBacktestRuns();
@@ -51,8 +50,6 @@ export default function Page() {
 
   return (
     <main className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4 bg-surface">
-      <StrategyAnalyticsHeader />
-
       <div className="flex items-center gap-3">
         <div className="flex h-8 w-64 items-center gap-2 rounded-[20px] border border-border px-3">
           <input

@@ -18,7 +18,7 @@ export const NAV_GROUPS: NavGroup[] = [
     heading: "Quant Lab",
     items: [
       { label: "Create strategy", href: "/create-strategy", icon: AddCircle, requiresAccess: true },
-      { label: "Strategy List", href: "/strategies", icon: ServerMinimalistic, requiresAccess: true },
+      { label: "Backtesting", href: "/strategies", icon: ServerMinimalistic, requiresAccess: true },
       { label: "Paper Trading", href: "/paper-trading", icon: Receipt2, requiresAccess: true },
     ],
   },

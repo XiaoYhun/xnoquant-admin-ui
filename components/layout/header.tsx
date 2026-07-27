@@ -4,7 +4,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const ROUTE_TITLES: Record<string, string> = {
-  "/strategies": "Strategy List",
+  "/strategies": "Backtesting",
   "/paper-trading": "Paper Trading",
   "/create-strategy": "Create Strategy",
   "/venues": "Venue List",

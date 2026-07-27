@@ -50,11 +50,16 @@ export function CodeEditor({
   onChange,
   language = "python",
   readOnly = false,
+  modelId,
 }: {
   code: string;
   onChange?: (code: string) => void;
   language?: "python" | "rust";
   readOnly?: boolean;
+  /** Gives this document its own Monaco model. Required when one mounted editor switches between
+   *  documents (the builder's tabs): without it they share a model and swapping replays one
+   *  document's content as an onChange on the next. */
+  modelId?: string;
 }) {
   const file = language === "rust" ? "strategy.rs" : "strategy.py";
   return (
@@ -64,11 +69,17 @@ export function CodeEditor({
         language={language}
         // Read-only views (e.g. a run's Code tab) get a distinct model path so they never share
         // Monaco's model with the editable builder instance.
-        path={readOnly ? `view/${file}` : file}
+        path={modelId ? `${modelId}/${file}` : readOnly ? `view/${file}` : file}
         value={code}
         theme="xnoquant"
         beforeMount={defineTheme}
-        onChange={(v) => onChange?.(v ?? "")}
+        // `isFlush` marks a programmatic model reset (switching tabs re-seeds the model) rather than
+        // a user keystroke. Propagating those would mark an untouched strategy dirty — and could save
+        // one document's content over another.
+        onChange={(v, ev) => {
+          if (ev.isFlush) return;
+          onChange?.(v ?? "");
+        }}
         options={{
           fontSize: 13,
           minimap: { enabled: false },

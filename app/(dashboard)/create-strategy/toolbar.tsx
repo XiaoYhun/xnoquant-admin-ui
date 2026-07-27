@@ -285,6 +285,9 @@ export function Toolbar({
   market,
   universe,
   trainRatio,
+  canWrite = true,
+  isDirty = false,
+  onSave,
   onToggleConsole,
   onSimulate,
   onSettingsSaved,
@@ -296,11 +299,15 @@ export function Toolbar({
   market?: string;
   universe?: string;
   trainRatio?: number;
+  canWrite?: boolean;
+  isDirty?: boolean;
+  onSave?: () => Promise<void>;
   onToggleConsole?: () => void;
   onSimulate?: (editorId: string) => Promise<void>;
   onSettingsSaved?: (changes: { market?: string; universe?: string; train_ratio?: number }) => void;
 }) {
   const [simulateOpen, setSimulateOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [mftSimStatus, setMftSimStatus] = useState<"idle" | "running" | "done" | "error">("idle");
   const addLog = useConsoleLog((s) => s.addLog);
   // HFT Market/Type pill: Market is UI-only (default tick/L2, shared with the Settings popover);
@@ -311,6 +318,17 @@ export function Toolbar({
   const [hftInterval, setHftInterval] = useState("5m");
   const { data: hftStrategy } = useHftStrategy(type === "hft" ? id : undefined);
   const hftType = hftStrategy?.strategy_type;
+
+  const handleSaveClick = async () => {
+    setSaving(true);
+    try {
+      await onSave?.();
+    } catch (err) {
+      addLog("error", `Save failed: ${resourceErrorMessage(err, "this strategy")}`);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handleSimulateClick = async () => {
     if (type === "hft") {
@@ -417,15 +435,28 @@ export function Toolbar({
         />
         <IconButton icon={SidebarCode} label="Toggle console" onClick={onToggleConsole} />
         <IconButton icon={Copy} label="Duplicate" />
-        <button
-          type="button"
-          onClick={handleSimulateClick}
-          disabled={mftSimStatus === "running"}
-          className="inline-flex h-[34px] shrink-0 cursor-pointer items-center gap-1 rounded-full bg-[linear-gradient(164deg,#cff8ea_0%,var(--primary)_100%)] px-3 text-xs font-medium text-black transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          <SkipNext weight="Outline" className="size-3.5" />
-          {simulateLabel}
-        </button>
+        {/* Save/Simulate both PUT the strategy, which 404s for a lab-mate's share — hide them there. */}
+        {canWrite && (
+          <>
+            <button
+              type="button"
+              onClick={handleSaveClick}
+              disabled={!isDirty || saving}
+              className="inline-flex h-[34px] shrink-0 cursor-pointer items-center rounded-full border border-border px-3 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {saving ? "Saving…" : "Save"}
+            </button>
+            <button
+              type="button"
+              onClick={handleSimulateClick}
+              disabled={mftSimStatus === "running"}
+              className="inline-flex h-[34px] shrink-0 cursor-pointer items-center gap-1 rounded-full bg-[linear-gradient(164deg,#cff8ea_0%,var(--primary)_100%)] px-3 text-xs font-medium text-black transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <SkipNext weight="Outline" className="size-3.5" />
+              {simulateLabel}
+            </button>
+          </>
+        )}
       </div>
 
       <SimulateModal

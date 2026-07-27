@@ -12,6 +12,8 @@ import { useHftStrategies, useCreateHftStrategy, useUpdateHftStrategy, useDelete
 import { CreateStrategyModal } from "@/components/layout/create-strategy-modal";
 import { useConsoleLog } from "@/store/console-log-store";
 import { useMode, type Mode } from "@/store/mode-store";
+import { useAuth } from "@/hooks/use-auth";
+import { canMutate } from "@/lib/rbac";
 import { cn } from "@/lib/utils";
 
 // Draggable two-pane split (editor | results). Left width is a % clamped to [30, 70].
@@ -86,6 +88,10 @@ export default function Page() {
 
 function StrategyBuilder({ mode, initialEditors }: { mode: Mode; initialEditors: EditorTab[] }) {
   const [editors, setEditors] = useState<EditorTab[]>(initialEditors);
+  // Baseline of what is on the server, so Save can be offered only when the code actually differs.
+  const [savedCodes, setSavedCodes] = useState<Record<string, string>>(() =>
+    Object.fromEntries(initialEditors.map((e) => [e.id, e.code])),
+  );
   const [activeId, setActiveId] = useState(initialEditors[0]?.id ?? "");
   const active = editors.find((e) => e.id === activeId) ?? editors[0];
   const [consoleOpen, setConsoleOpen] = useState(true);
@@ -100,6 +106,10 @@ function StrategyBuilder({ mode, initialEditors }: { mode: Mode; initialEditors:
   const deleteHftStrategy = useDeleteHftStrategy();
   const qc = useQueryClient();
   const addLog = useConsoleLog((s) => s.addLog);
+  const { userId, isAdmin } = useAuth();
+  // A lab-mate's strategy is a read-only share: every write 404s, so the editor is locked and the
+  // Save/Simulate controls hidden. Strategies with no owner_id (MFT editors) stay writable.
+  const canWrite = !active?.owner_id || canMutate(active, { userId, isAdmin });
 
   const addEditor = async (type: "mft" | "hft", name: string, hftStrategyType?: HftStrategyType) => {
     // Errors propagate to CreateStrategyModal so it can stay open + surface the failure (e.g. 409).
@@ -108,7 +118,18 @@ function StrategyBuilder({ mode, initialEditors }: { mode: Mode; initialEditors:
         ? await createHftStrategy.mutateAsync({ name, strategyType: hftStrategyType ?? "taker" })
         : await createEditor.mutateAsync(name);
     setEditors((prev) => [...prev, tab]);
+    setSavedCodes((prev) => ({ ...prev, [tab.id]: tab.code }));
     setActiveId(tab.id);
+  };
+  // Explicit code save. Simulate also persists, but a user who only edits code needs a way to
+  // commit it without launching a run.
+  const handleSave = async () => {
+    if (!active) return;
+    const { id, type, code, name } = active;
+    if (type === "hft") await updateHftStrategy.mutateAsync({ id, code });
+    else await updateEditor.mutateAsync({ id, code });
+    setSavedCodes((prev) => ({ ...prev, [id]: code }));
+    addLog("success", `Saved "${name}"`);
   };
   const handleSimulate = async (editorId: string) => {
     // Focus the Results tab so the running screen is visible even if the user is on Samples.
@@ -119,10 +140,12 @@ function StrategyBuilder({ mode, initialEditors }: { mode: Mode; initialEditors:
     if (editor?.type === "hft") {
       // HFT simulation is deferred/mock — just persist the edited code and stop.
       await updateHftStrategy.mutateAsync({ id: editorId, code: editor.code });
+      setSavedCodes((prev) => ({ ...prev, [editorId]: editor.code }));
       addLog("info", "HFT code saved (simulation not available yet)");
       return;
     }
     await updateEditor.mutateAsync({ id: editorId, code: editor?.code ?? "" });
+    setSavedCodes((prev) => ({ ...prev, [editorId]: editor?.code ?? "" }));
     await simulateEditor.mutateAsync(editorId);
     await qc.invalidateQueries({ queryKey: ["strategy-builder", "editors"] });
     const fresh = await qc.fetchQuery({ queryKey: ["strategy-builder", "editors"], queryFn: fetchEditors });
@@ -165,11 +188,20 @@ function StrategyBuilder({ mode, initialEditors }: { mode: Mode; initialEditors:
         market={active?.market}
         universe={active?.universe}
         trainRatio={active?.train_ratio}
+        canWrite={canWrite}
+        isDirty={!!active && active.code !== (savedCodes[active.id] ?? "")}
+        onSave={handleSave}
         onToggleConsole={() => setConsoleOpen((v) => !v)}
         onSimulate={handleSimulate}
         onSettingsSaved={handleSettingsSaved}
       />
-      <CodeEditor code={active?.code ?? ""} onChange={handleCodeChange} language={active?.type === "hft" ? "rust" : "python"} />
+      <CodeEditor
+        code={active?.code ?? ""}
+        onChange={handleCodeChange}
+        language={active?.type === "hft" ? "rust" : "python"}
+        readOnly={!canWrite}
+        modelId={active?.id}
+      />
       <ConsolePanel open={consoleOpen} onOpenChange={setConsoleOpen} />
     </div>
   );

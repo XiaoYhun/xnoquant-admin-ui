@@ -124,7 +124,7 @@ export function BacktestRunsTable({
                   )}
                 </TableCell>
                 <TableCell>
-                  <span className={`text-xs ${STATUS_CLASS[r.status] ?? "text-white"}`}>{r.status}</span>
+                  <span className={`text-xs capitalize ${STATUS_CLASS[r.status] ?? "text-white"}`}>{r.status}</span>
                 </TableCell>
                 <TableCell className="truncate text-xs text-white" title={r.owner ?? undefined}>
                   {r.owner ?? <span className="text-muted-foreground">—</span>}

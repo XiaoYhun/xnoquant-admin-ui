@@ -75,11 +75,13 @@ export function useUpdateHftStrategy() {
   return useMutation({
     mutationFn: async ({
       id,
+      name,
       strategyType,
       code,
       features,
     }: {
       id: string;
+      name?: string;
       strategyType?: HftStrategyType;
       code?: string;
       features?: FeatureDef[];
@@ -87,7 +89,7 @@ export function useUpdateHftStrategy() {
       if (USE_MOCK) return;
       const current = await apiGet<Strategy>(`${HFT_API_URL}/api/strategies/${id}`);
       await apiPut<Strategy>(`${HFT_API_URL}/api/strategies/${id}`, {
-        name: current.name,
+        name: name ?? current.name,
         description: current.description ?? undefined,
         strategy_type: strategyType ?? current.strategy_type,
         code: code ?? current.code,

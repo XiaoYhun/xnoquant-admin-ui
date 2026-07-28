@@ -204,12 +204,16 @@ function StrategyBuilder({ mode, initialEditors }: { mode: Mode; initialEditors:
         market={active?.market}
         universe={active?.universe}
         trainRatio={active?.train_ratio}
+        code={active?.code ?? ""}
         canWrite={canWrite}
         isDirty={!!active && active.code !== (savedCodes[active.id] ?? "")}
         onSave={handleSave}
         onToggleConsole={() => setConsoleOpen((v) => !v)}
         onSimulate={handleSimulate}
         onSettingsSaved={handleSettingsSaved}
+        onRenamed={(nextName) =>
+          setEditors((prev) => prev.map((e) => (e.id === activeId ? { ...e, name: nextName } : e)))
+        }
       />
       <CodeEditor
         code={active?.code ?? ""}

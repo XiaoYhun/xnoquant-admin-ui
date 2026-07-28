@@ -9,12 +9,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { SimulateModal, HFT_MARKET_LABEL, HFT_TYPE_LABEL } from "./simulate-modal";
 import { USE_MOCK } from "@/lib/constant";
+import { cn } from "@/lib/utils";
 import { resourceErrorMessage } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
 import { canMutate } from "@/lib/rbac";
 import { useMarkets } from "@/hooks/api/use-markets";
 import { useUpdateEditor } from "@/hooks/api/use-strategy-builder";
 import { useHftStrategy, useUpdateHftStrategy, type HftStrategyType } from "@/hooks/api/use-hft-strategies";
+import { useValidateScript, useValidateFeatures } from "@/hooks/api/use-hft-features";
 import { useConsoleLog } from "@/store/console-log-store";
 
 // Toolbar row above the code editor — Figma node 13964:52172 (inside 13964:50200).
@@ -244,6 +246,7 @@ function SettingsMenu({
   universe?: string;
   trainRatio?: number;
   onSettingsSaved?: (changes: { market?: string; universe?: string; train_ratio?: number }) => void;
+  onRenamed?: (name: string) => void;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -285,12 +288,14 @@ export function Toolbar({
   market,
   universe,
   trainRatio,
+  code = "",
   canWrite = true,
   isDirty = false,
   onSave,
   onToggleConsole,
   onSimulate,
   onSettingsSaved,
+  onRenamed,
 }: {
   name: string;
   type: "mft" | "hft";
@@ -299,15 +304,18 @@ export function Toolbar({
   market?: string;
   universe?: string;
   trainRatio?: number;
+  code?: string;
   canWrite?: boolean;
   isDirty?: boolean;
   onSave?: () => Promise<void>;
   onToggleConsole?: () => void;
   onSimulate?: (editorId: string) => Promise<void>;
   onSettingsSaved?: (changes: { market?: string; universe?: string; train_ratio?: number }) => void;
+  onRenamed?: (name: string) => void;
 }) {
   const [simulateOpen, setSimulateOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const updateStrategy = useUpdateHftStrategy();
   const [mftSimStatus, setMftSimStatus] = useState<"idle" | "running" | "done" | "error">("idle");
   const addLog = useConsoleLog((s) => s.addLog);
   // HFT Market/Type pill: Market is UI-only (default tick/L2, shared with the Settings popover);
@@ -318,6 +326,53 @@ export function Toolbar({
   const [hftInterval, setHftInterval] = useState("5m");
   const { data: hftStrategy } = useHftStrategy(type === "hft" ? id : undefined);
   const hftType = hftStrategy?.strategy_type;
+
+  // Inline rename, like the MFT platform's title field: click the name, edit, Enter/blur commits.
+  const [renaming, setRenaming] = useState(false);
+  const [draftName, setDraftName] = useState(name);
+
+  const commitRename = async () => {
+    const next = draftName.trim();
+    setRenaming(false);
+    if (!next || next === name) return;
+    if (type !== "hft") {
+      onRenamed?.(next);
+      return;
+    }
+    try {
+      await updateStrategy.mutateAsync({ id, name: next });
+      onRenamed?.(next);
+      addLog("success", `Renamed to "${next}"`);
+    } catch (err) {
+      setDraftName(name);
+      addLog("error", `Rename failed: ${resourceErrorMessage(err, "this strategy")}`);
+    }
+  };
+
+  const validateScript = useValidateScript();
+  const validateFeatures = useValidateFeatures();
+  const strategyFeatures = hftStrategy?.features ?? [];
+
+  // Both validate endpoints are unscoped (no :id in the path), so they also work on a lab-mate's
+  // script — useful for reviewing a shared strategy you cannot save.
+  const runValidation = async (what: "script" | "features") => {
+    try {
+      const errors =
+        what === "script"
+          ? await validateScript.mutateAsync({ code, features: strategyFeatures, strategyType: hftType })
+          : await validateFeatures.mutateAsync(strategyFeatures);
+      if (errors.length === 0) {
+        addLog("success", what === "script" ? "Script is valid" : "Features are valid");
+        return;
+      }
+      for (const e of errors) {
+        const where = e.name ?? (e.index != null ? `#${e.index}` : "");
+        addLog("error", where ? `${where}: ${e.error}` : e.error);
+      }
+    } catch (err) {
+      addLog("error", `Validation failed: ${resourceErrorMessage(err, "this strategy")}`);
+    }
+  };
 
   const handleSaveClick = async () => {
     setSaving(true);
@@ -360,9 +415,38 @@ export function Toolbar({
   return (
     <div className="flex h-12 shrink-0 items-center justify-between gap-4 border-b border-border px-4 bg-surface">
       <div className="flex min-w-0 flex-1 items-center gap-3">
-        <span className="min-w-0 shrink truncate text-xl font-semibold text-white" title={name}>
-          {name}
-        </span>
+        {renaming && canWrite ? (
+          <input
+            autoFocus
+            value={draftName}
+            onChange={(e) => setDraftName(e.target.value)}
+            onBlur={commitRename}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commitRename();
+              if (e.key === "Escape") {
+                setDraftName(name);
+                setRenaming(false);
+              }
+            }}
+            aria-label="Strategy name"
+            className="min-w-0 shrink rounded-md border border-border bg-background px-2 py-0.5 text-xl font-semibold text-white outline-none focus:border-primary"
+          />
+        ) : (
+          <span
+            className={cn(
+              "min-w-0 shrink truncate text-xl font-semibold text-white",
+              canWrite && "cursor-text hover:opacity-80",
+            )}
+            title={canWrite ? `${name} — click to rename` : name}
+            onClick={() => {
+              if (!canWrite) return;
+              setDraftName(name);
+              setRenaming(true);
+            }}
+          >
+            {name}
+          </span>
+        )}
         <span className="flex shrink-0 items-center gap-1">
           <span
             className={
@@ -435,6 +519,26 @@ export function Toolbar({
         />
         <IconButton icon={SidebarCode} label="Toggle console" onClick={onToggleConsole} />
         <IconButton icon={Copy} label="Duplicate" />
+        {type === "hft" && (
+          <>
+            <button
+              type="button"
+              onClick={() => runValidation("script")}
+              disabled={validateScript.isPending}
+              className="inline-flex h-[34px] shrink-0 cursor-pointer items-center rounded-full border border-border px-3 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {validateScript.isPending ? "Validating…" : "Validate script"}
+            </button>
+            <button
+              type="button"
+              onClick={() => runValidation("features")}
+              disabled={validateFeatures.isPending}
+              className="inline-flex h-[34px] shrink-0 cursor-pointer items-center rounded-full border border-border px-3 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {validateFeatures.isPending ? "Validating…" : "Validate features"}
+            </button>
+          </>
+        )}
         {/* Save/Simulate both PUT the strategy, which 404s for a lab-mate's share — hide them there. */}
         {canWrite && (
           <>

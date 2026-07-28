@@ -1,7 +1,6 @@
 "use client";
 import { useMemo, useState } from "react";
 import { MinimalisticMagnifer } from "@solar-icons/react";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Pagination,
@@ -15,18 +14,12 @@ import { usePaperRuns } from "@/hooks/api/use-paper-runs";
 import { resourceErrorMessage } from "@/lib/api-client";
 import { PaperRunsTable } from "./paper-runs-table";
 import { RunDetailPanel } from "./run-detail-panel";
-import type { PaperRunRow } from "@/lib/mock/paper-runs";
 
 const PAGE_SIZE = 9;
-const GROUP_TABS: { value: PaperRunRow["strategyType"]; label: string }[] = [
-  { value: "MFT", label: "MFT Strategies" },
-  { value: "HFT", label: "HFT Strategies" },
-];
 
 export default function Page() {
   const { data: runs = [], isLoading, isError, error } = usePaperRuns();
   const [search, setSearch] = useState("");
-  const [group, setGroup] = useState<PaperRunRow["strategyType"]>("MFT");
   const [symbol, setSymbol] = useState("all");
   const [status, setStatus] = useState("all");
   const [page, setPage] = useState(1);
@@ -41,12 +34,11 @@ export default function Page() {
     const q = search.trim().toLowerCase();
     return runs.filter((r) => {
       const matchesSearch = !q || r.id.toLowerCase().includes(q) || r.strategyName.toLowerCase().includes(q);
-      const matchesGroup = r.strategyType === group;
       const matchesSymbol = symbol === "all" || r.symbols.some((s) => s.symbol === symbol);
       const matchesStatus = status === "all" || r.status === status;
-      return matchesSearch && matchesGroup && matchesSymbol && matchesStatus;
+      return matchesSearch && matchesSymbol && matchesStatus;
     });
-  }, [runs, search, group, symbol, status]);
+  }, [runs, search, symbol, status]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount);
@@ -55,74 +47,57 @@ export default function Page() {
 
   return (
     <main className="relative flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4 bg-surface">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="flex h-8 w-64 items-center gap-2 rounded-[20px] border border-border px-3">
-            <input
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-              placeholder="Search by ID or strategy..."
-              className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
-            />
-            <MinimalisticMagnifer size={20} weight="Outline" className="shrink-0 text-muted-foreground" />
-          </div>
-          <Select
-            value={symbol}
-            onValueChange={(v) => {
-              setSymbol(v ?? "all");
+      <div className="flex items-center gap-3">
+        <div className="flex h-8 w-64 items-center gap-2 rounded-[20px] border border-border px-3">
+          <input
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
               setPage(1);
             }}
-          >
-            <SelectTrigger className="h-8 w-auto gap-2 rounded-full border-border bg-background px-3 text-xs text-foreground">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All symbols</SelectItem>
-              {symbolOptions.map((s) => (
-                <SelectItem key={s} value={s}>
-                  {s}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select
-            value={status}
-            onValueChange={(v) => {
-              setStatus(v ?? "all");
-              setPage(1);
-            }}
-          >
-            <SelectTrigger className="h-8 w-auto gap-2 rounded-full border-border bg-background px-3 text-xs text-foreground">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All status</SelectItem>
-              <SelectItem value="running">Running</SelectItem>
-              <SelectItem value="paused">Paused</SelectItem>
-              <SelectItem value="stopped">Stopped</SelectItem>
-              <SelectItem value="failed">Failed</SelectItem>
-              <SelectItem value="completed">Completed</SelectItem>
-            </SelectContent>
-          </Select>
+            placeholder="Search by ID or strategy..."
+            className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
+          />
+          <MinimalisticMagnifer size={20} weight="Outline" className="shrink-0 text-muted-foreground" />
         </div>
-        <Tabs
-          value={group}
+        <Select
+          value={symbol}
           onValueChange={(v) => {
-            setGroup((v as PaperRunRow["strategyType"]) ?? "MFT");
+            setSymbol(v ?? "all");
             setPage(1);
           }}
         >
-          <TabsList>
-            {GROUP_TABS.map((t) => (
-              <TabsTrigger key={t.value} value={t.value}>
-                {t.label}
-              </TabsTrigger>
+          <SelectTrigger className="h-8 w-auto gap-2 rounded-full border-border bg-background px-3 text-xs text-foreground">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All symbols</SelectItem>
+            {symbolOptions.map((s) => (
+              <SelectItem key={s} value={s}>
+                {s}
+              </SelectItem>
             ))}
-          </TabsList>
-        </Tabs>
+          </SelectContent>
+        </Select>
+        <Select
+          value={status}
+          onValueChange={(v) => {
+            setStatus(v ?? "all");
+            setPage(1);
+          }}
+        >
+          <SelectTrigger className="h-8 w-auto gap-2 rounded-full border-border bg-background px-3 text-xs text-foreground">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All status</SelectItem>
+            <SelectItem value="running">Running</SelectItem>
+            <SelectItem value="paused">Paused</SelectItem>
+            <SelectItem value="stopped">Stopped</SelectItem>
+            <SelectItem value="failed">Failed</SelectItem>
+            <SelectItem value="completed">Completed</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       <section className="flex flex-col overflow-hidden rounded-xl border border-border bg-background">

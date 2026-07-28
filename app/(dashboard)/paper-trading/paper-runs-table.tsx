@@ -47,8 +47,7 @@ function MiniRows({ items }: { items: ReactNode[] }) {
 
 const COLS = [
   { key: "id", label: "ID", w: "8%", align: "left" },
-  { key: "name", label: "Strategy Name", w: "12%", align: "left" },
-  { key: "status", label: "Status", w: "8%", align: "left" },
+  { key: "name", label: "Strategy Name", w: "16%", align: "left" },
   { key: "owner", label: "Owner", w: "7%", align: "left" },
   { key: "account", label: "Account", w: "8%", align: "left" },
   { key: "symbol", label: "Symbol/Market", w: "12%", align: "left" },
@@ -98,9 +97,6 @@ export function PaperRunsTable({
                   Shared
                 </span>
               )}
-            </TableCell>
-            <TableCell>
-              <span className={`text-xs ${GRAD_GREEN}`}>Paper Trading</span>
             </TableCell>
             <TableCell className="truncate text-xs text-white" title={r.owner ?? undefined}>
               {r.owner ?? <span className="text-muted-foreground">—</span>}

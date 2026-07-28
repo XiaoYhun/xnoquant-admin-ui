@@ -31,23 +31,13 @@ import type { PaperRunRow } from "@/lib/mock/paper-runs";
 const GRAD_GREEN = "bg-[linear-gradient(162deg,#cff8ea_0%,#67e1c1_100%)] bg-clip-text text-transparent";
 const GRAD_RED = "bg-[linear-gradient(160deg,#ffcce2_0%,#ff135b_100%)] bg-clip-text text-transparent";
 
-const STATUS_CLASS: Record<string, string> = {
-  running: GRAD_GREEN,
-  completed: GRAD_GREEN,
-  paused: "text-[#f1c617]",
-  pending: "text-[#9db2ce]",
-  stopped: "text-[#9db2ce]",
-  failed: GRAD_RED,
-};
-
 // `POST /api/runs/{id}/stop` returns 422 for a run that isn't in a stoppable state — only offer it
 // for the states the engine can actually halt.
 const STOPPABLE = new Set(["running", "paused", "pending"]);
 
 const COLS = [
   { key: "id", label: "ID", w: "10%", align: "left" },
-  { key: "name", label: "Strategy Name", w: "18%", align: "left" },
-  { key: "status", label: "Status", w: "9%", align: "left" },
+  { key: "name", label: "Strategy Name", w: "22%", align: "left" },
   { key: "owner", label: "Owner", w: "9%", align: "left" },
   { key: "symbol", label: "Symbol/Market", w: "14%", align: "left" },
   { key: "pnl", label: "PnL chart", w: "11%", align: "left" },
@@ -122,9 +112,6 @@ export function BacktestRunsTable({
                       Shared
                     </span>
                   )}
-                </TableCell>
-                <TableCell>
-                  <span className={`text-xs capitalize ${STATUS_CLASS[r.status] ?? "text-white"}`}>{r.status}</span>
                 </TableCell>
                 <TableCell className="truncate text-xs text-white" title={r.owner ?? undefined}>
                   {r.owner ?? <span className="text-muted-foreground">—</span>}

@@ -85,3 +85,31 @@ export function useValidateFeatures() {
     },
   });
 }
+
+/**
+ * Whole-script validation (`POST /api/strategies/validate`). Response is UNTYPED in the spec
+ * (`content?: never`), so normalize defensively: an empty error list means the script compiled.
+ * `features` is sent because the server sizes the `features` array from its length, so valid index
+ * accesses don't halt the test-eval early.
+ */
+export function useValidateScript() {
+  return useMutation({
+    mutationFn: async ({
+      code,
+      features,
+      strategyType,
+    }: {
+      code: string;
+      features: FeatureDef[];
+      strategyType?: string;
+    }): Promise<FeatureValidationError[]> => {
+      if (USE_MOCK) return [];
+      const raw = await apiPost<unknown>(`${HFT_API_URL}/api/strategies/validate`, {
+        code,
+        features,
+        ...(strategyType ? { strategy_type: strategyType } : {}),
+      });
+      return normalizeValidationErrors(raw);
+    },
+  });
+}

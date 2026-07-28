@@ -15,6 +15,7 @@ import { toRunDetail, type RunDetail } from "@/lib/transform/runs";
 import type { PaperRunRow, TradeHistoryRow } from "@/lib/mock/paper-runs";
 import { StartLiveTradingDialog } from "./start-live-trading-dialog";
 import { CodeEditor } from "../create-strategy/code-editor";
+import { TradeCycles } from "./trade-cycles";
 
 // Paper Trading run detail — a right-side slide-in with Charts / Trades / Configuration / Code
 // tabs. Figma nodes 13982:131691 (Charts), 13982:133350 (Trades), 14585:34189 (Configuration).
@@ -440,6 +441,12 @@ export function RunDetailPanel({
               {tab === "Trades" && <TradesTab runId={run.id} />}
               {tab === "Configuration" && <ConfigTab run={run} />}
               {tab === "Code" && <CodeView code={run.code} />}
+            </div>
+
+            {/* Trade-cycle console log for this run (Figma 14727:36059). Backtests never journal
+                one, so it renders its own empty state there. */}
+            <div className="shrink-0 border-t border-border p-4">
+              <TradeCycles runId={run.id} isLive={run.status === "running"} />
             </div>
           </>
         )}

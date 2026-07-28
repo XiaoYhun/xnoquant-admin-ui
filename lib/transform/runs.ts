@@ -1,5 +1,4 @@
 import type { EquityPoint, Run, RunSummary, TradeRow } from "@/types/domain";
-import type { LiveRunRow } from "@/lib/mock/live-runs";
 import type { PaperRunRow, TradeHistoryRow } from "@/lib/mock/paper-runs";
 
 // Run (+ RunSummary, EquityPoint[]) → LiveRunRow / PaperRunRow, and TradeRow → TradeHistoryRow.
@@ -151,30 +150,11 @@ function runMaxDrawdownPct(run: Run): number | null {
 // sparkline still needs the per-run equity-curve, deferred to panel open. `startingEquity`
 // is kept so the panel can compute % metrics from the lazily fetched summary without
 // re-fetching the run.
-export function toLiveRunRow(run: Run): LiveRunRow {
-  const { manifest } = run;
-  return {
-    id: run.id,
-    owner_id: run.owner_id,
-    strategyName: manifest.strategy.name,
-    alphaStatus: "Live Trading", // GAP-4: no API field — constant per plan §4.C
-    accounts: accountNames(manifest),
-    symbols: symbolRows(manifest),
-    timeframe: timeframeLabel(manifest.data_kind),
-    status: run.status,
-    owner: run.owner_username ?? null,
-    startingEquity: startingEquity(manifest),
-    pnlSeries: [],
-    returnPct: runReturnPct(run),
-    sharpe: run.sharpe_annualized ?? null,
-    maxDrawdownPct: runMaxDrawdownPct(run),
-  };
-}
-
 export function toPaperRunRow(run: Run): PaperRunRow {
   const { manifest } = run;
   return {
     id: run.id,
+    mode: run.mode,
     owner_id: run.owner_id,
     strategyName: manifest.strategy.name,
     strategyType: strategyGroup(manifest.data_kind),

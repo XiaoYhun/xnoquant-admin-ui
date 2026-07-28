@@ -19,8 +19,8 @@ import {
 import { useLiveRuns } from "@/hooks/api/use-live-runs";
 import { resourceErrorMessage } from "@/lib/api-client";
 import { LiveRunsTable } from "./live-runs-table";
-import { LiveRunDetailPanel } from "./live-run-detail-panel";
-import type { LiveRunRow } from "@/lib/mock/live-runs";
+import { RunDetailPanel } from "../paper-trading/run-detail-panel";
+import type { PaperRunRow } from "@/lib/mock/paper-runs";
 
 const PAGE_SIZE = 9;
 const STATUS_FILTERS = [
@@ -37,7 +37,7 @@ export default function Page() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [page, setPage] = useState(1);
-  const [selectedRun, setSelectedRun] = useState<LiveRunRow | null>(null);
+  const [selectedRun, setSelectedRun] = useState<PaperRunRow | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
 
   const filtered = useMemo(() => {
@@ -149,7 +149,7 @@ export default function Page() {
         )}
       </section>
 
-      <LiveRunDetailPanel open={detailOpen} onOpenChange={setDetailOpen} run={selectedRun} />
+      <RunDetailPanel open={detailOpen} onOpenChange={setDetailOpen} run={selectedRun} />
     </main>
   );
 }

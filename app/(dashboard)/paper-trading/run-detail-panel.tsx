@@ -29,8 +29,13 @@ const GRAD_TAB_BG = "bg-[linear-gradient(163deg,#cff8ea_0%,#67e1c1_100%)]";
 const PILL =
   "inline-flex h-7 shrink-0 items-center rounded-[40px] border border-white/25 bg-[rgba(14,20,42,0.5)] px-3 text-xs font-medium text-white shadow-[inset_0_0_8px_0_rgba(63,216,189,0.15)] backdrop-blur-[2px]";
 
-const TABS = ["Charts", "Trades", "Configuration", "Code"] as const;
+// The panel is shared by Paper Trading, Live Trading and Backtesting — label it from the run.
+const MODE_LABEL: Record<string, string> = { paper: "Paper Trading", live: "Live Trading", backtest: "Backtest" };
+
+const TABS = ["Charts", "Trades", "Trade cycles", "Configuration", "Code"] as const;
 type Tab = (typeof TABS)[number];
+// Backtests never journal a trace, so they don't get the Trade cycles tab at all.
+const tabsFor = (mode?: string): readonly Tab[] => (mode === "backtest" ? TABS.filter((t) => t !== "Trade cycles") : TABS);
 
 // useTradeHistory fetches the first page (this size) in one shot and drops TradePage.total, so a
 // full page is our only "there may be more" signal — a partial page means nothing more to load.
@@ -324,6 +329,8 @@ export function RunDetailPanel({
   run: PaperRunRow | null;
 }) {
   const [tab, setTab] = useState<Tab>("Charts");
+  const visibleTabs = tabsFor(run?.mode);
+  const activeTab: Tab = visibleTabs.includes(tab) ? tab : "Charts";
   // Summary + equity are fetched here — only when the panel is open for a run — not per-row on the
   // list. Skipped in mock mode (synthetic ids the real endpoints can't resolve; the mock row
   // already carries its metrics).
@@ -372,7 +379,7 @@ export function RunDetailPanel({
                 <div className="h-5 w-px shrink-0 bg-[#344054]" />
 
                 <span className="inline-flex h-7 shrink-0 items-center rounded-[40px] border border-white/10 bg-[rgba(103,225,193,0.08)] px-3 text-xs font-medium">
-                  <span className={GRAD_GREEN}>Paper Trading</span>
+                  <span className={GRAD_GREEN}>{MODE_LABEL[run.mode ?? "paper"]}</span>
                 </span>
                 {run.symbols.map((sym) => (
                   <span key={sym.symbol} className={cn(PILL, "gap-2")}>
@@ -385,7 +392,7 @@ export function RunDetailPanel({
               </div>
 
               <div className="flex shrink-0 items-center gap-2">
-                <StartLiveTradingDialog run={run} />
+                {run.mode === "paper" && <StartLiveTradingDialog run={run} />}
                 <Popover>
                   <PopoverTrigger asChild>
                     <button
@@ -410,8 +417,8 @@ export function RunDetailPanel({
             </div>
 
             <div className="flex h-14 shrink-0 items-stretch border-b border-border bg-surface">
-              {TABS.map((t) => {
-                const on = tab === t;
+              {visibleTabs.map((t) => {
+                const on = activeTab === t;
                 return (
                   <button
                     key={t}
@@ -430,7 +437,7 @@ export function RunDetailPanel({
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto">
-              {tab === "Charts" && (
+              {activeTab === "Charts" && (
                 <ChartsTab
                   detail={detail}
                   error={summaryError}
@@ -438,15 +445,14 @@ export function RunDetailPanel({
                   equityLoading={equityLoading}
                 />
               )}
-              {tab === "Trades" && <TradesTab runId={run.id} />}
-              {tab === "Configuration" && <ConfigTab run={run} />}
-              {tab === "Code" && <CodeView code={run.code} />}
-            </div>
-
-            {/* Trade-cycle console log for this run (Figma 14727:36059). Backtests never journal
-                one, so it renders its own empty state there. */}
-            <div className="shrink-0 border-t border-border p-4">
-              <TradeCycles runId={run.id} isLive={run.status === "running"} />
+              {activeTab === "Trades" && <TradesTab runId={run.id} />}
+              {activeTab === "Trade cycles" && (
+                <div className="p-4">
+                  <TradeCycles runId={run.id} isLive={run.status === "running"} />
+                </div>
+              )}
+              {activeTab === "Configuration" && <ConfigTab run={run} />}
+              {activeTab === "Code" && <CodeView code={run.code} />}
             </div>
           </>
         )}

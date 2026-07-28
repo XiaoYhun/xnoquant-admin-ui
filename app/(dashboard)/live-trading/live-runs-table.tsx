@@ -27,7 +27,7 @@ import { FlashValue } from "@/components/ui/flash-value";
 import { cn, formatPercent } from "@/lib/utils";
 import { useStopRun } from "@/hooks/api/use-runs";
 import type { RunStatus } from "@/types/domain";
-import type { LiveRunRow } from "@/lib/mock/live-runs";
+import type { PaperRunRow } from "@/lib/mock/paper-runs";
 
 // Gradient text tokens straight from the Figma design (green / yellow / red).
 const GRAD_GREEN = "bg-[linear-gradient(158deg,#cff8ea_0%,#67e1c1_100%)] bg-clip-text text-transparent";
@@ -88,12 +88,12 @@ export function LiveRunsTable({
   rows,
   onOpenDetail,
 }: {
-  rows: LiveRunRow[];
-  onOpenDetail: (run: LiveRunRow) => void;
+  rows: PaperRunRow[];
+  onOpenDetail: (run: PaperRunRow) => void;
 }) {
   const stopRun = useStopRun();
   const { userId, isAdmin } = useAuth();
-  const [pendingStop, setPendingStop] = useState<LiveRunRow | null>(null);
+  const [pendingStop, setPendingStop] = useState<PaperRunRow | null>(null);
 
   return (
     <>
@@ -132,7 +132,7 @@ export function LiveRunsTable({
                   )}
                 </TableCell>
                 <TableCell>
-                  <span className={`text-xs ${GRAD_YELLOW}`}>{r.alphaStatus}</span>
+                  <span className={`text-xs ${GRAD_YELLOW}`}>{"Live Trading"}</span>
                 </TableCell>
                 <TableCell className="truncate text-xs text-white" title={r.owner ?? undefined}>
                   {r.owner ?? <span className="text-muted-foreground">—</span>}

@@ -37,10 +37,10 @@ const STOPPABLE = new Set(["running", "paused", "pending"]);
 
 const COLS = [
   { key: "id", label: "ID", w: "10%", align: "left" },
-  { key: "name", label: "Strategy Name", w: "22%", align: "left" },
-  { key: "owner", label: "Owner", w: "9%", align: "left" },
-  { key: "symbol", label: "Symbol/Market", w: "14%", align: "left" },
-  { key: "pnl", label: "PnL chart", w: "11%", align: "left" },
+  { key: "name", label: "Strategy Name", w: "25%", align: "left" },
+  { key: "owner", label: "Owner", w: "6%", align: "left" },
+  { key: "symbol", label: "Symbol/Market", w: "17%", align: "left" },
+  { key: "pnl", label: "PnL chart", w: "8%", align: "left" },
   { key: "return", label: "Return", w: "8%", align: "right" },
   { key: "sharpe", label: "Sharpe", w: "6%", align: "right" },
   { key: "mdd", label: "Max drawdown", w: "8%", align: "right" },

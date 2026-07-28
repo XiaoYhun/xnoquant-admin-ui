@@ -45,6 +45,8 @@ export type PaperRunRow = {
   owner_id?: string;
   strategyName: string;
   strategyType: "MFT" | "HFT";
+  /** Run.mode — the Trade cycles panel is paper/live only (backtests never journal a trace). */
+  mode?: "paper" | "live" | "backtest";
   status: RunStatus;
   accounts: string[];
   symbols: { symbol: string; market: string }[];

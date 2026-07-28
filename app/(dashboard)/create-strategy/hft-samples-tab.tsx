@@ -3,13 +3,54 @@
 // Taker/Maker/Arbitrage sub-tabs + static curated sample cards ("View source" expands the code
 // inline, "Use template" loads it into the editor) + a static Script API Reference block.
 import { useState } from "react";
-import { CheckCircle, Code, Database } from "@solar-icons/react";
+import { CheckCircle, Code, Database, NotebookBookmark } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { HFT_SAMPLES, type HftSample } from "@/lib/mock/hft-strategy-samples";
 
 const STRATEGY_TYPES = ["taker", "maker", "arbitrage"] as const;
 type StrategyType = (typeof STRATEGY_TYPES)[number];
 const TYPE_LABEL: Record<StrategyType, string> = { taker: "Taker", maker: "Maker", arbitrage: "Arbitrage" };
+
+
+// Script API Reference — Figma 14562:20713. Each entry is either a heading or a white identifier,
+// followed by the muted prose describing it; rendered as one 12px/18px stack.
+const API_REFERENCE: { text: string; strong?: boolean }[] = [
+  { text: "Runs once per tick. Call return target_pos_intent(...) to act this tick; falling through holds (no order)." },
+  { text: "Function" },
+  { text: "target_pos_intent(symbol: int, qty: float, style: string)", strong: true },
+  {
+    text: 'symbol = engine SymbolId (pass the symbol variable below). qty = signed target position: positive long, negative short, 0.0 flattens. style = "market" (sweep now), "cross" (marketable at touch), "join" (passive at touch), or "mid" (passive at mid).',
+  },
+  { text: "Scope" },
+  { text: "features", strong: true },
+  { text: "this strategy\u2019s feature values, in the order defined above \u2014 features[0], features[1], \u2026 NaN until that feature\u2019s window warms up." },
+  { text: "symbol", strong: true },
+  { text: "this run\u2019s SymbolId \u2014 pass straight to target_pos_intent." },
+  { text: "positions", strong: true },
+  { text: "signed position per symbol, indexed by SymbolId." },
+  { text: "asset_features", strong: true },
+  { text: "features[] per symbol \u2014 cross-sectional access via asset_features[sym_id][feature_idx]." },
+];
+
+function ScriptApiReference() {
+  return (
+    <div className="flex w-full flex-col items-start">
+      <div className="flex h-10 w-full items-center gap-2 rounded overflow-hidden py-3">
+        <NotebookBookmark weight="Outline" className="size-6 shrink-0 text-white" />
+        <span className="min-w-0 flex-1 truncate text-sm text-white">Script API Reference</span>
+      </div>
+      <div className="flex w-full items-center gap-3 rounded-xl border border-[#1d2939] px-3 py-2">
+        <div className="flex min-w-0 flex-1 flex-col justify-center">
+          {API_REFERENCE.map((line, i) => (
+            <p key={i} className={`text-xs leading-[18px] ${line.strong ? "text-white" : "text-[#9db2ce]"}`}>
+              {line.text}
+            </p>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function HftSamplesTab({ onUseTemplate }: { onUseTemplate?: (code: string, features: HftSample["features"]) => void }) {
   const [type, setType] = useState<StrategyType>("taker");
@@ -78,6 +119,8 @@ export function HftSamplesTab({ onUseTemplate }: { onUseTemplate?: (code: string
           );
         })}
       </div>
+
+      <ScriptApiReference />
     </div>
   );
 }

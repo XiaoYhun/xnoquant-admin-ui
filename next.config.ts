@@ -9,7 +9,13 @@ const HFT_UPSTREAM = process.env.NEXT_PUBLIC_HFT_URL ?? "https://hft-dev.xnoquan
 
 const nextConfig: NextConfig = {
   async rewrites() {
-    return [{ source: "/hft/:path*", destination: `${HFT_UPSTREAM}/:path*` }];
+    // `fallback`, not a bare array: a bare array is `afterFiles`, which beats DYNAMIC routes — so the
+    // SSE route handler at app/hft/api/runs/[id]/trace/stream never ran and the stream died in the
+    // buffering proxy ("Failed to proxy … socket hang up" → 503). As a fallback the blanket proxy
+    // only applies when no filesystem route matched.
+    return {
+      fallback: [{ source: "/hft/:path*", destination: `${HFT_UPSTREAM}/:path*` }],
+    };
   },
 };
 

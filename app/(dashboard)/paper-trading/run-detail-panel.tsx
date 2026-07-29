@@ -16,6 +16,7 @@ import type { PaperRunRow, TradeHistoryRow } from "@/lib/mock/paper-runs";
 import { StartLiveTradingDialog } from "./start-live-trading-dialog";
 import { CodeEditor } from "../create-strategy/code-editor";
 import { TradeCycles } from "./trade-cycles";
+import { useRunOpenPositions } from "@/hooks/api/use-run-live";
 
 // Paper Trading run detail — a right-side slide-in with Charts / Trades / Configuration / Code
 // tabs. Figma nodes 13982:131691 (Charts), 13982:133350 (Trades), 14585:34189 (Configuration).
@@ -197,41 +198,94 @@ function TradeRowView({ t }: { t: TradeHistoryRow }) {
   );
 }
 
-function TradesTab({ runId }: { runId: string }) {
-  const { data: trades = [], isLoading } = useTradeHistory(runId);
+// Open position — the run's live snapshot (`/api/runs/{id}/live` → `positions`). Sits above
+// Trading history because it's the "right now" state, whereas the history below is what already
+// happened. Hidden entirely when the run is flat or has no snapshot.
+function OpenPositions({ run }: { run: PaperRunRow }) {
+  // Only running paper/live runs publish a snapshot; a finished run is flat by definition.
+  const { data: positions = [] } = useRunOpenPositions(run.id, run.status === "running");
+  if (positions.length === 0) return null;
+
+  const num = (n?: number, dp = 2) =>
+    n === undefined ? "—" : n.toLocaleString("en-US", { minimumFractionDigits: dp, maximumFractionDigits: dp });
+
   return (
-    <div className="p-4">
+    <div className="overflow-hidden rounded-2xl border border-border bg-surface">
+      <div className="flex items-center justify-between px-4 py-3">
+        <span className="text-sm font-semibold text-white">Open position</span>
+        <Maximize weight="Outline" className="size-4 text-muted-foreground" />
+      </div>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Symbol</TableHead>
+            <TableHead>Side</TableHead>
+            <TableHead className="text-right">Qty</TableHead>
+            <TableHead className="text-right">Avg Price</TableHead>
+            <TableHead className="text-right">Mark</TableHead>
+            <TableHead className="text-right">Unrealized PnL</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {positions.map((pos, i) => {
+            const buy = !!pos.side && /buy|long/i.test(pos.side);
+            const up = (pos.unrealizedPnl ?? 0) >= 0;
+            // symbol_id indexes the run manifest's ordered symbol list.
+            const symbol = pos.symbolId !== undefined ? run.symbols[pos.symbolId]?.symbol : undefined;
+            return (
+              <TableRow key={i}>
+                <TableCell className="text-white">{symbol ?? `#${pos.symbolId ?? "?"}`}</TableCell>
+                <TableCell className={cn("font-medium", buy ? GRAD_GREEN : GRAD_RED)}>{pos.side ?? "—"}</TableCell>
+                <TableCell className="text-right text-white">{num(pos.qty)}</TableCell>
+                <TableCell className="text-right text-white">{num(pos.avgPrice)}</TableCell>
+                <TableCell className="text-right text-white">{num(pos.markPrice)}</TableCell>
+                <TableCell className={cn("text-right", up ? GRAD_GREEN : GRAD_RED)}>{num(pos.unrealizedPnl)}</TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
+function TradesTab({ run }: { run: PaperRunRow }) {
+  const { data: trades = [], isLoading } = useTradeHistory(run.id);
+  return (
+    <div className="flex flex-col gap-4 p-4">
+      <OpenPositions run={run} />
       <div className="overflow-hidden rounded-2xl border border-border bg-surface">
         <div className="flex items-center justify-between px-4 py-3">
           <span className="text-sm font-semibold text-white">Trading history</span>
           <Maximize weight="Outline" className="size-4 text-muted-foreground" />
         </div>
+        {/* Header order follows the cell order in TradeRowView; they had drifted apart, so Latency
+            values sat under the Action heading. The Table primitive already provides an
+            overflow-x-auto container, so there is no extra wrapper here. */}
         {isLoading ? (
           <p className="p-4 text-sm text-muted-foreground">Loading&hellip;</p>
         ) : trades.length === 0 ? (
           <p className="p-4 text-sm text-muted-foreground">No trades yet.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Time</TableHead>
-                  <TableHead>Action</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead className="text-right">Price</TableHead>
-                  <TableHead className="text-right">Size</TableHead>
-                  <TableHead className="text-right">Fee</TableHead>
-                  <TableHead>Latency</TableHead>
-                  <TableHead className="text-right">Equity</TableHead>
-                </TableRow>
-              </TableHeader>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Time</TableHead>
+                <TableHead>Latency</TableHead>
+                <TableHead>Action</TableHead>
+                <TableHead className="text-right">Price</TableHead>
+                <TableHead className="text-right">Size</TableHead>
+                <TableHead className="text-right">Fee</TableHead>
+                <TableHead>Role</TableHead>
+                <TableHead className="text-right">Equity</TableHead>
+              </TableRow>
+            </TableHeader>
               <TableBody>
                 {trades.map((t) => (
                   <TradeRowView key={t.id} t={t} />
                 ))}
               </TableBody>
             </Table>
-          </div>
         )}
         {trades.length >= TRADES_PAGE_SIZE && (
           <div className="flex justify-center py-3">
@@ -445,7 +499,7 @@ export function RunDetailPanel({
                   equityLoading={equityLoading}
                 />
               )}
-              {activeTab === "Trades" && <TradesTab runId={run.id} />}
+              {activeTab === "Trades" && <TradesTab run={run} />}
               {activeTab === "Trade cycles" && (
                 <div className="p-4">
                   <TradeCycles runId={run.id} isLive={run.status === "running"} />

@@ -37,7 +37,7 @@ function toPosition(raw: unknown): OpenPosition | null {
   };
 }
 
-export function useRunOpenPositions(runId: string | undefined, enabled = true) {
+export function useRunOpenPositions(runId: string | undefined) {
   return useQuery({
     queryKey: ["run-live-positions", runId],
     queryFn: async (): Promise<OpenPosition[]> => {
@@ -46,7 +46,7 @@ export function useRunOpenPositions(runId: string | undefined, enabled = true) {
       const list = raw && typeof raw === "object" ? (raw as { positions?: unknown }).positions : undefined;
       return Array.isArray(list) ? list.map(toPosition).filter((p): p is OpenPosition => p !== null) : [];
     },
-    enabled: !!runId && enabled,
+    enabled: !!runId,
     // The snapshot is a live value — keep it fresh while the panel is open.
     refetchInterval: 5000,
     // 404 just means "no snapshot for this run"; don't hammer it.

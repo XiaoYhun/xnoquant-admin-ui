@@ -202,9 +202,9 @@ function TradeRowView({ t }: { t: TradeHistoryRow }) {
 // Trading history because it's the "right now" state, whereas the history below is what already
 // happened. Hidden entirely when the run is flat or has no snapshot.
 function OpenPositions({ run }: { run: PaperRunRow }) {
-  // Only running paper/live runs publish a snapshot; a finished run is flat by definition.
-  const { data: positions = [] } = useRunOpenPositions(run.id, run.status === "running");
-  if (positions.length === 0) return null;
+  // Always rendered so the section is visibly present; /live 404s harmlessly for runs that never
+  // published a snapshot (backtests, finished runs) and the empty state says so.
+  const { data: positions = [], isLoading } = useRunOpenPositions(run.id);
 
   const num = (n?: number, dp = 2) =>
     n === undefined ? "—" : n.toLocaleString("en-US", { minimumFractionDigits: dp, maximumFractionDigits: dp });
@@ -215,6 +215,11 @@ function OpenPositions({ run }: { run: PaperRunRow }) {
         <span className="text-sm font-semibold text-white">Open position</span>
         <Maximize weight="Outline" className="size-4 text-muted-foreground" />
       </div>
+      {isLoading ? (
+        <p className="p-4 text-sm text-muted-foreground">Loading&hellip;</p>
+      ) : positions.length === 0 ? (
+        <p className="p-4 text-sm text-muted-foreground">No open position.</p>
+      ) : (
       <Table>
         <TableHeader>
           <TableRow>
@@ -245,6 +250,7 @@ function OpenPositions({ run }: { run: PaperRunRow }) {
           })}
         </TableBody>
       </Table>
+      )}
     </div>
   );
 }

@@ -35,7 +35,7 @@ function MiniRows({ items }: { items: ReactNode[] }) {
         <div
           key={i}
           className={cn(
-            "flex min-h-[40px] items-center px-4",
+            "flex min-h-[40px] min-w-0 items-center px-4",
             items.length > 1 && "bg-surface",
           )}
         >
@@ -49,9 +49,9 @@ function MiniRows({ items }: { items: ReactNode[] }) {
 const COLS = [
   { key: "status", label: "Status", w: "8%", align: "left" },
   { key: "id", label: "ID", w: "8%", align: "left" },
-  { key: "name", label: "Strategy Name", w: "14%", align: "left" },
+  { key: "name", label: "Strategy Name", w: "12%", align: "left" },
   { key: "owner", label: "Owner", w: "5%", align: "left" },
-  { key: "account", label: "Account", w: "8%", align: "left" },
+  { key: "account", label: "Account", w: "10%", align: "left" },
   { key: "symbol", label: "Symbol/Market", w: "14%", align: "left" },
   { key: "tf", label: "TF", w: "5%", align: "left" },
   { key: "pnl", label: "PnL chart", w: "7%", align: "left" },
@@ -112,8 +112,14 @@ export function PaperRunsTable({
             <TableCell className="truncate text-xs text-white" title={r.owner ?? undefined}>
               {r.owner ?? <span className="text-muted-foreground">—</span>}
             </TableCell>
-            <TableCell className="p-0 align-middle">
-              <MiniRows items={r.accounts.map((a) => <span key={a} className={PILL}>{a}</span>)} />
+            <TableCell className="overflow-hidden p-0 align-middle">
+              <MiniRows
+                items={r.accounts.map((a) => (
+                  <span key={a} title={a} className={cn(PILL, "min-w-0 max-w-full")}>
+                    <span className="truncate">{a}</span>
+                  </span>
+                ))}
+              />
             </TableCell>
             <TableCell className="p-0 align-middle">
               <MiniRows

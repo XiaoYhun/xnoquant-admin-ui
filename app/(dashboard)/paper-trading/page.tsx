@@ -100,7 +100,7 @@ export default function Page() {
         </Select>
       </div>
 
-      <section className="flex flex-col overflow-hidden rounded-xl border border-border bg-background">
+      <section className="flex shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-background">
         <div>
           {isError ? (
             <p className="p-4 text-sm text-destructive">{resourceErrorMessage(error)}</p>

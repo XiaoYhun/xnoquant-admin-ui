@@ -80,14 +80,16 @@ type PaperRunBase = Omit<PaperRunRow, "metrics" | "config" | "code" | "startingE
 // UI-only row for the detail view's "Trade history" table.
 export type TradeHistoryRow = {
   id: string;
+  /** Fill timestamp, ISO. */
   time: string;
-  action: "Buy" | "Sell";
-  role: "Maker" | "Taker";
+  symbol: string;
+  side: string;
   price: number;
-  size: number;
-  fee: number;
-  latencyMs: number;
-  equity: number;
+  qty: number;
+  /** Mid price at the moment of the fill. */
+  mid: number;
+  /** e.g. "Filled". */
+  outcome: string;
 };
 
 // Deterministic pseudo-random walk (no Math.random) with visible intra-series volatility
@@ -178,26 +180,23 @@ function seedFromId(id: string): number {
 function buildTradeHistory(runId: string, count = 24): TradeHistoryRow[] {
   const seed = seedFromId(runId);
   const basePrice = 1300 + (seed % 50);
-  let equity = 1_000_000_000 + seed * 137_000;
+  let mid = 1_000_000_000 + seed * 137_000;
   const rows: TradeHistoryRow[] = [];
   for (let i = 0; i < count; i++) {
     const isBuy = Math.sin(seed + i * 0.9) >= 0;
     const price = Number((basePrice + Math.sin(seed + i * 0.4) * 15).toFixed(2));
-    const size = Number((5 + Math.abs(Math.sin(seed + i * 1.3)) * 20).toFixed(2));
-    const fee = Number((size * price * 0.0005).toFixed(2));
-    const latencyMs = 5 + Math.round(Math.abs(Math.sin(seed + i * 0.6)) * 20);
-    equity += (isBuy ? 1 : -1) * size * price * 0.1;
+    const qty = Number((5 + Math.abs(Math.sin(seed + i * 1.3)) * 20).toFixed(2));
+    mid += (isBuy ? 1 : -1) * qty * price * 0.1;
     const ts = Date.UTC(2026, 5, 11, 9, 20, 0) + i * 5 * 60_000 + Math.round(Math.abs(Math.sin(seed + i)) * 900);
     rows.push({
       id: `${runId}-T${i}`,
       time: new Date(ts).toISOString(),
-      action: isBuy ? "Buy" : "Sell",
-      role: i % 3 === 0 ? "Maker" : "Taker",
+      symbol: "ETHUSDC",
+      side: isBuy ? "Buy" : "Sell",
       price,
-      size,
-      fee,
-      latencyMs,
-      equity: Number(equity.toFixed(2)),
+      qty,
+      mid: Number(mid.toFixed(2)),
+      outcome: "Filled",
     });
   }
   return rows;

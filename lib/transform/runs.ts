@@ -179,32 +179,18 @@ export function toPaperRunRow(run: Run): PaperRunRow {
   };
 }
 
-function mapAction(side: string): "Buy" | "Sell" {
-  const s = side.toLowerCase();
-  return s.includes("sell") || s.includes("ask") ? "Sell" : "Buy";
-}
 
 // GAP-5: TradeRow has no explicit maker/taker flag. Best-effort: sniff the (untyped) `outcome`
-// string for "maker"/"taker"; default to "Taker" (the common case) when it's ambiguous.
-function mapRole(outcome: string): "Maker" | "Taker" {
-  const o = outcome.toLowerCase();
-  if (o.includes("maker")) return "Maker";
-  if (o.includes("taker")) return "Taker";
-  return "Taker";
-}
 
 export function toTradeHistoryRow(t: TradeRow): TradeHistoryRow {
   return {
     id: `${t.order_id}-${t.fill_ts}`,
     time: new Date(t.fill_ts).toISOString(),
-    action: mapAction(t.side),
-    role: mapRole(t.outcome),
+    symbol: t.symbol,
+    side: t.side,
     price: t.fill_price,
-    size: t.fill_qty,
-    // GAP-5: no per-fill fee on TradeRow (only the run-level aggregate SymbolPnlSummary.total_fee)
-    fee: 0,
-    latencyMs: Math.max(0, t.fill_ts - t.submitted_ts),
-    // GAP-5: no per-fill running equity (only the downsampled equity-curve)
-    equity: 0,
+    qty: t.fill_qty,
+    mid: t.mid_at_fill,
+    outcome: t.outcome,
   };
 }

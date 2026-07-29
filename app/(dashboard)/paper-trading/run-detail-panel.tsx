@@ -165,9 +165,9 @@ function ChartsTab({
 
 // ── Trades tab ──────────────────────────────────────────────────────────────
 function TradeRowView({ t }: { t: TradeHistoryRow }) {
-  const buy = t.action === "Buy";
-  const sign = buy ? "+" : "-";
+  const buy = /buy|long/i.test(t.side);
   const [date, rest] = t.time.split("T");
+  // Keep milliseconds — fills within the same second are common at this cadence.
   const time = rest?.replace("Z", "").slice(0, 12) ?? "";
   const num = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return (
@@ -178,22 +178,12 @@ function TradeRowView({ t }: { t: TradeHistoryRow }) {
           <div className="text-muted-foreground">{time}</div>
         </div>
       </TableCell>
-      <TableCell className="text-muted-foreground">{t.latencyMs}ms</TableCell>
-      <TableCell className={cn("font-medium", buy ? GRAD_GREEN : GRAD_RED)}>{t.action}</TableCell>
+      <TableCell className="text-white">{t.symbol}</TableCell>
+      <TableCell className={cn("font-medium", buy ? GRAD_GREEN : GRAD_RED)}>{t.side}</TableCell>
       <TableCell className="text-right text-white">{num(t.price)}</TableCell>
-      <TableCell className={cn("text-right", buy ? GRAD_GREEN : GRAD_RED)}>
-        {sign}
-        {t.size.toFixed(2)}
-      </TableCell>
-      <TableCell className="text-right text-muted-foreground">
-        {sign} {Math.abs(Math.round(t.fee)).toLocaleString()}
-      </TableCell>
-      <TableCell>
-        <span className="inline-flex size-7 items-center justify-center rounded-full bg-secondary text-xs font-medium text-white">
-          {t.role[0]}
-        </span>
-      </TableCell>
-      <TableCell className="text-right text-white">{num(t.equity)}</TableCell>
+      <TableCell className="text-right text-white">{num(t.qty)}</TableCell>
+      <TableCell className="text-right text-white">{num(t.mid)}</TableCell>
+      <TableCell className="text-white">{t.outcome}</TableCell>
     </TableRow>
   );
 }
@@ -265,8 +255,7 @@ function TradesTab({ run }: { run: PaperRunRow }) {
           <span className="text-sm font-semibold text-white">Trading history</span>
           <Maximize weight="Outline" className="size-4 text-muted-foreground" />
         </div>
-        {/* Header order follows the cell order in TradeRowView; they had drifted apart, so Latency
-            values sat under the Action heading. The Table primitive already provides an
+        {/* Columns mirror the API's TradeRow 1:1. The Table primitive already provides an
             overflow-x-auto container, so there is no extra wrapper here. */}
         {isLoading ? (
           <p className="p-4 text-sm text-muted-foreground">Loading&hellip;</p>
@@ -281,13 +270,12 @@ function TradesTab({ run }: { run: PaperRunRow }) {
             <TableHeader>
               <TableRow>
                 <TableHead>Time</TableHead>
-                <TableHead>Latency</TableHead>
-                <TableHead>Action</TableHead>
+                <TableHead>Symbol</TableHead>
+                <TableHead>Side</TableHead>
                 <TableHead className="text-right">Price</TableHead>
-                <TableHead className="text-right">Size</TableHead>
-                <TableHead className="text-right">Fee</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead className="text-right">Equity</TableHead>
+                <TableHead className="text-right">Qty</TableHead>
+                <TableHead className="text-right">Mid</TableHead>
+                <TableHead>Outcome</TableHead>
               </TableRow>
             </TableHeader>
               <TableBody>

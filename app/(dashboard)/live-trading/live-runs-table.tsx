@@ -31,7 +31,6 @@ import type { PaperRunRow } from "@/lib/mock/paper-runs";
 
 // Gradient text tokens straight from the Figma design (green / yellow / red).
 const GRAD_GREEN = "bg-[linear-gradient(158deg,#cff8ea_0%,#67e1c1_100%)] bg-clip-text text-transparent";
-const GRAD_YELLOW = "bg-[linear-gradient(162deg,#fffbd6_0%,#f1c617_100%)] bg-clip-text text-transparent";
 const GRAD_RED = "bg-[linear-gradient(160deg,#ffcce2_0%,#ff135b_100%)] bg-clip-text text-transparent";
 
 // Glassy pill (Account + TF): white/25 border, translucent dark fill, faint green inner glow.
@@ -61,8 +60,7 @@ function MiniRows({ items }: { items: ReactNode[] }) {
 const COLS = [
   { key: "status", label: "Status", w: "8%", align: "left" },
   { key: "id", label: "ID", w: "8%", align: "left" },
-  { key: "name", label: "Strategy Name", w: "9%", align: "left" },
-  { key: "alpha", label: "Alpha Status", w: "6%", align: "left" },
+  { key: "name", label: "Strategy Name", w: "15%", align: "left" },
   { key: "owner", label: "Owner", w: "7%", align: "left" },
   { key: "account", label: "Account", w: "10%", align: "left" },
   { key: "symbols", label: "Symbols/Market", w: "11%", align: "left" },
@@ -118,9 +116,6 @@ export function LiveRunsTable({
                       Shared
                     </span>
                   )}
-                </TableCell>
-                <TableCell>
-                  <span className={`text-xs ${GRAD_YELLOW}`}>{"Live Trading"}</span>
                 </TableCell>
                 <TableCell className="truncate text-xs text-white" title={r.owner ?? undefined}>
                   {r.owner ?? <span className="text-muted-foreground">—</span>}

@@ -9,7 +9,7 @@ import { BaseChart } from "@/components/charts/base-chart";
 import { cn, formatPercent } from "@/lib/utils";
 import { useTradeHistory } from "@/hooks/api/use-paper-runs";
 import { useRunSummary, useRunEquity } from "@/hooks/api/use-runs";
-import { ApiError } from "@/lib/api-client";
+import { ApiError, resourceErrorMessage } from "@/lib/api-client";
 import { USE_MOCK } from "@/lib/constant";
 import { toRunDetail, type RunDetail } from "@/lib/transform/runs";
 import type { PaperRunRow, TradeHistoryRow } from "@/lib/mock/paper-runs";
@@ -256,7 +256,7 @@ function OpenPositions({ run }: { run: PaperRunRow }) {
 }
 
 function TradesTab({ run }: { run: PaperRunRow }) {
-  const { data: trades = [], isLoading } = useTradeHistory(run.id);
+  const { data: trades = [], isLoading, isError, error } = useTradeHistory(run.id);
   return (
     <div className="flex flex-col gap-4 p-4">
       <OpenPositions run={run} />
@@ -270,6 +270,10 @@ function TradesTab({ run }: { run: PaperRunRow }) {
             overflow-x-auto container, so there is no extra wrapper here. */}
         {isLoading ? (
           <p className="p-4 text-sm text-muted-foreground">Loading&hellip;</p>
+        ) : isError ? (
+          // A failed fetch is NOT "no trades" — the run's parquet artifacts can be missing or
+          // zero-length, which the API surfaces as a 500. Say so instead of implying the run is idle.
+          <p className="p-4 text-sm text-destructive">{resourceErrorMessage(error, "this run's trades")}</p>
         ) : trades.length === 0 ? (
           <p className="p-4 text-sm text-muted-foreground">No trades yet.</p>
         ) : (

@@ -20,13 +20,13 @@ import type { Account } from "@/types/domain";
 type OtpFeedback = "sending" | "sent" | "error";
 
 const COLS = [
-  { key: "name", label: "Name", w: "18%" },
-  { key: "venue", label: "Venue", w: "16%" },
+  { key: "name", label: "Name", w: "16%" },
+  { key: "venue", label: "Venue", w: "15%" },
   { key: "owner", label: "Owner", w: "12%" },
-  { key: "capital", label: "Capital", w: "16%" },
-  { key: "strategy", label: "Strategy", w: "16%" },
-  { key: "asset", label: "Asset", w: "14%" },
-  { key: "action", label: "", w: "8%" },
+  { key: "capital", label: "Capital", w: "14%" },
+  { key: "strategy", label: "Strategy", w: "14%" },
+  { key: "asset", label: "Asset", w: "13%" },
+  { key: "action", label: "", w: "16%" },
 ] as const;
 
 export function AccountList({
@@ -81,11 +81,16 @@ export function AccountList({
           </div>
         )}
         {!isLoading && !isError && accounts.length > 0 && (
-          <Table className="table-fixed">
+          <Table className="table-fixed min-w-[1000px]">
             <TableHeader>
               <TableRow>
-                {COLS.map((c) => (
-                  <TableHead key={c.key} style={{ width: c.w }} className="bg-surface">
+                {COLS.map((c, i) => (
+                  <TableHead
+                    key={c.key}
+                    style={{ width: c.w }}
+                    sticky={i === 0 ? "left" : i === COLS.length - 1 ? "right" : undefined}
+                    className="bg-surface"
+                  >
                     {c.label}
                   </TableHead>
                 ))}
@@ -93,8 +98,8 @@ export function AccountList({
             </TableHeader>
             <TableBody>
               {accounts.map((a) => (
-                <TableRow key={a.id}>
-                  <TableCell className="truncate text-sm text-foreground" title={a.name}>
+                <TableRow opaque key={a.id}>
+                  <TableCell sticky="left" className="truncate text-sm text-foreground" title={a.name}>
                     {a.name}
                   </TableCell>
                   <TableCell className="truncate text-sm text-foreground">{venueName(a.venue_id)}</TableCell>

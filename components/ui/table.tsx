@@ -2,6 +2,19 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
+// Opt-in frozen columns (first/last), so wide lists scroll their middle while the identifying
+// and action columns stay in view. Positioning + edge rule ONLY — deliberately no background:
+// the header keeps whatever bg the call site gave it (bg-secondary, or bg-surface on the
+// accounts list) and body cells inherit the row's.
+//
+// The edge rule is an inset box-shadow, NOT border-r/border-l: preflight sets
+// `border-collapse: collapse`, which hands cell borders to the table's border grid, so a real
+// border slides out from under the frozen column as you scroll.
+const STICKY_COL = {
+  left: "sticky left-0 shadow-[inset_-1px_0_0_0_var(--border)]",
+  right: "sticky right-0 shadow-[inset_1px_0_0_0_var(--border)]",
+} as const
+
 function Table({ className, ...props }: React.ComponentProps<"table">) {
   return (
     <div data-slot="table-container" className="relative w-full overflow-x-auto">
@@ -47,12 +60,21 @@ function TableFooter({ className, ...props }: React.ComponentProps<"tfoot">) {
   )
 }
 
-function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
+function TableRow({
+  className,
+  opaque,
+  ...props
+}: React.ComponentProps<"tr"> & { opaque?: boolean }) {
   return (
     <tr
       data-slot="table-row"
       className={cn(
         "border-b border-border transition-colors hover:bg-secondary/40 data-[state=selected]:bg-secondary",
+        // Required on any row holding `sticky` cells: those use bg-inherit, so the row has to
+        // paint an OPAQUE colour or the scrolled middle columns show through. The hover colour is
+        // the exact composite of bg-secondary/40 over bg-background, so this is a visual no-op.
+        opaque &&
+          "bg-background hover:bg-[color-mix(in_srgb,var(--secondary)_40%,var(--background))]",
         className
       )}
       {...props}
@@ -60,12 +82,17 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
   )
 }
 
-function TableHead({ className, ...props }: React.ComponentProps<"th">) {
+function TableHead({
+  className,
+  sticky,
+  ...props
+}: React.ComponentProps<"th"> & { sticky?: "left" | "right" }) {
   return (
     <th
       data-slot="table-head"
       className={cn(
         "h-12 bg-secondary px-4 text-left align-middle text-xs font-medium text-white whitespace-nowrap [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+        sticky && `z-20 ${STICKY_COL[sticky]}`,
         className
       )}
       {...props}
@@ -73,12 +100,18 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
   )
 }
 
-function TableCell({ className, ...props }: React.ComponentProps<"td">) {
+function TableCell({
+  className,
+  sticky,
+  ...props
+}: React.ComponentProps<"td"> & { sticky?: "left" | "right" }) {
   return (
     <td
       data-slot="table-cell"
       className={cn(
         "px-4 py-3 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+        // bg-inherit pairs with <TableRow opaque> — see the note there.
+        sticky && `z-10 bg-inherit ${STICKY_COL[sticky]}`,
         className
       )}
       {...props}

@@ -65,19 +65,27 @@ export function useRunTraceHistory(runId: string | undefined) {
   });
 }
 
+/** Connection state of the SSE tail, so the UI can tell "connected but idle" from "broken". */
+export type TraceStreamState = "off" | "connecting" | "open" | "error";
+
 /**
  * Tails `/trace/stream` while the run is live. `EventSource` can't send an Authorization header,
  * so the SSE frames are read off a fetch body and parsed by hand.
  */
 export function useRunTraceStream(runId: string | undefined, enabled: boolean) {
+  const streamKey = runId && enabled && !USE_MOCK ? runId : undefined;
   const [live, setLive] = useState<TraceEvent[]>([]);
+  // Seeded from streamKey, NOT a flat "off": on first mount prevKey is initialised equal to
+  // streamKey, so the reset branch below never runs and the state would stay "off" for the whole
+  // life of the panel — the socket would be genuinely open while the UI showed nothing.
+  const [state, setState] = useState<TraceStreamState>(() => (streamKey ? "connecting" : "off"));
   // Reset during render (not in the effect) when the tailed run changes, so events from a
   // previously-open run never bleed into the next one.
-  const streamKey = runId && enabled && !USE_MOCK ? runId : undefined;
   const [prevKey, setPrevKey] = useState(streamKey);
   if (prevKey !== streamKey) {
     setPrevKey(streamKey);
     setLive([]);
+    setState(streamKey ? "connecting" : "off");
   }
 
   useEffect(() => {
@@ -92,7 +100,11 @@ export function useRunTraceStream(runId: string | undefined, enabled: boolean) {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
           signal: controller.signal,
         });
-        if (!res.ok || !res.body) return;
+        if (!res.ok || !res.body) {
+          setState("error");
+          return;
+        }
+        setState("open");
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
@@ -100,8 +112,10 @@ export function useRunTraceStream(runId: string | undefined, enabled: boolean) {
           const { done, value } = await reader.read();
           if (done) break;
           buffer += decoder.decode(value, { stream: true });
-          // SSE frames are separated by a blank line; each `data:` line carries one JSON event.
-          const frames = buffer.split("\n\n");
+          // SSE frames are separated by a blank line. Split on CRLF *or* LF: an \r\n\r\n
+          // separator contains no "\n\n", so splitting on LF alone would never yield a frame and
+          // every event would sit in the buffer unparsed.
+          const frames = buffer.split(/\r?\n\r?\n/);
           buffer = frames.pop() ?? "";
           for (const frame of frames) {
             for (const line of frame.split("\n")) {
@@ -117,6 +131,7 @@ export function useRunTraceStream(runId: string | undefined, enabled: boolean) {
         }
       } catch {
         // Aborted on unmount, or the stream dropped — the replayed history still stands.
+        if (!cancelled) setState("error");
       }
     })();
 
@@ -126,5 +141,5 @@ export function useRunTraceStream(runId: string | undefined, enabled: boolean) {
     };
   }, [runId, streamKey]);
 
-  return live;
+  return { events: live, state };
 }

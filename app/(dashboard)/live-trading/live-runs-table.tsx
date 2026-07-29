@@ -97,11 +97,16 @@ export function LiveRunsTable({
 
   return (
     <>
-      <Table className="table-fixed">
+      <Table className="table-fixed min-w-[1600px]">
         <TableHeader>
           <TableRow>
-            {COLS.map((c) => (
-              <TableHead key={c.key} style={{ width: c.w }} className={c.align === "right" ? "text-right" : undefined}>
+            {COLS.map((c, i) => (
+              <TableHead
+                key={c.key}
+                style={{ width: c.w }}
+                sticky={i === 0 ? "left" : i === COLS.length - 1 ? "right" : undefined}
+                className={c.align === "right" ? "text-right" : undefined}
+              >
                 {c.label}
               </TableHead>
             ))}
@@ -111,8 +116,8 @@ export function LiveRunsTable({
           {rows.map((r) => {
             const s = STATUS_META[r.status];
             return (
-              <TableRow key={r.id} className="cursor-pointer" onClick={() => onOpenDetail(r)}>
-                <TableCell>
+              <TableRow opaque key={r.id} className="cursor-pointer" onClick={() => onOpenDetail(r)}>
+                <TableCell sticky="left">
                   <span
                     className="inline-flex items-center gap-2 rounded-[20px] px-2 py-1 text-xs"
                     style={{ backgroundColor: s.bg }}
@@ -186,7 +191,7 @@ export function LiveRunsTable({
                     </FlashValue>
                   )}
                 </TableCell>
-                <TableCell className="text-right">
+                <TableCell sticky="right" className="text-right">
                   {/* Hide write controls for runs the caller can't mutate (e.g. a lab-mate's run). */}
                   {!canMutate(r, { userId, isAdmin }) ? null : r.status === "running" ? (
                     <button

@@ -82,11 +82,16 @@ export function BacktestRunsTable({
 
   return (
     <>
-      <Table className="table-fixed">
+      <Table className="table-fixed min-w-[1400px]">
         <TableHeader>
           <TableRow>
-            {COLS.map((c) => (
-              <TableHead key={c.key} style={{ width: c.w }} className={c.align === "right" ? "text-right" : undefined}>
+            {COLS.map((c, i) => (
+              <TableHead
+                key={c.key}
+                style={{ width: c.w }}
+                sticky={i === 0 ? "left" : i === COLS.length - 1 ? "right" : undefined}
+                className={c.align === "right" ? "text-right" : undefined}
+              >
                 {c.label}
               </TableHead>
             ))}
@@ -99,12 +104,13 @@ export function BacktestRunsTable({
             const writable = canMutate(r, { userId, isAdmin });
             return (
               <TableRow
+                opaque
                 key={r.id}
                 data-state={r.id === selectedId ? "selected" : undefined}
                 onClick={() => onSelect(r.id)}
                 className="cursor-pointer"
               >
-                <TableCell className="truncate text-sm text-white">{r.id}</TableCell>
+                <TableCell sticky="left" className="truncate text-sm text-white">{r.id}</TableCell>
                 <TableCell className="flex items-center text-sm font-semibold text-white">
                   <span className="truncate" title={r.strategyName}>{r.strategyName}</span>
                   {isShared(r, userId) && (
@@ -154,7 +160,7 @@ export function BacktestRunsTable({
                     <span className={GRAD_RED}>{formatPercent(r.maxDrawdownPct)}</span>
                   )}
                 </TableCell>
-                <TableCell className="text-right">
+                <TableCell sticky="right" className="text-right">
                   {!writable ? (
                     <span className="text-xs text-muted-foreground">—</span>
                   ) : (

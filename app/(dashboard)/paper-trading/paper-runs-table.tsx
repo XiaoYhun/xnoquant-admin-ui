@@ -70,11 +70,16 @@ export function PaperRunsTable({
 }) {
   const { userId } = useAuth();
   return (
-    <Table className="table-fixed">
+    <Table className="table-fixed min-w-[1500px]">
       <TableHeader>
         <TableRow>
-          {COLS.map((c) => (
-            <TableHead key={c.key} style={{ width: c.w }} className={c.align === "right" ? "text-right" : undefined}>
+          {COLS.map((c, i) => (
+            <TableHead
+              key={c.key}
+              style={{ width: c.w }}
+              sticky={i === 0 ? "left" : i === COLS.length - 1 ? "right" : undefined}
+              className={c.align === "right" ? "text-right" : undefined}
+            >
               {c.label}
             </TableHead>
           ))}
@@ -83,12 +88,13 @@ export function PaperRunsTable({
       <TableBody>
         {rows.map((r) => (
           <TableRow
+            opaque
             key={r.id}
             data-state={r.id === selectedId ? "selected" : undefined}
             onClick={() => onSelect(r.id)}
             className="cursor-pointer"
           >
-            <TableCell className="truncate text-sm text-white">{r.id}</TableCell>
+            <TableCell sticky="left" className="truncate text-sm text-white">{r.id}</TableCell>
             <TableCell className="flex items-center text-sm font-semibold text-white">
               <span className="truncate" title={r.strategyName}>{r.strategyName}</span>
               {/* RBAC plan: a lab-mate's paper run is a read-only share, not owned by the caller. */}
@@ -150,7 +156,7 @@ export function PaperRunsTable({
                 </FlashValue>
               )}
             </TableCell>
-            <TableCell className="text-right">
+            <TableCell sticky="right" className="text-right">
               <button
                 type="button"
                 aria-label={`Start live trading for ${r.strategyName}`}

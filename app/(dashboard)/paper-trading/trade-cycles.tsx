@@ -147,17 +147,29 @@ function CycleRow({ cycle, defaultOpen }: { cycle: Cycle; defaultOpen: boolean }
 
 export function TradeCycles({ runId, isLive }: { runId?: string; isLive?: boolean }) {
   const { data: history = [], isLoading, isError } = useRunTraceHistory(runId);
-  const streamed = useRunTraceStream(runId, !!isLive);
+  const { events: streamed, state: streamState } = useRunTraceStream(runId, !!isLive);
   const cycles = useMemo(() => groupCycles([...history, ...streamed]), [history, streamed]);
 
   return (
     <div className="flex w-full flex-col overflow-hidden rounded-lg border border-[#1d2939]">
       <div className="flex w-full shrink-0 items-center justify-between border-b border-[#1d2939] bg-[#151a24] px-4 py-3">
         <span className="text-sm leading-5 font-medium text-white">Trade cycles ({cycles.length})</span>
-        {isLive && (
-          <span className="flex items-center gap-1 rounded-[20px] bg-[rgba(103,225,193,0.1)] px-2 py-1">
-            <Record weight="Bold" className="size-4 text-[#67e1c1]" />
-            <span className={cn("text-xs leading-[18px]", GRAD_GREEN)}>Live</span>
+        {/* Reflect the ACTUAL socket state — a run can be "running" while the tail is still
+            connecting or has dropped, and a permanently-green pill made that indistinguishable. */}
+        {streamState !== "off" && (
+          <span
+            className={cn(
+              "flex items-center gap-1 rounded-[20px] px-2 py-1",
+              streamState === "open" ? "bg-[rgba(103,225,193,0.1)]" : "bg-[rgba(157,178,206,0.1)]",
+            )}
+          >
+            <Record
+              weight="Bold"
+              className={cn("size-4", streamState === "open" ? "text-[#67e1c1]" : "text-[#9db2ce]")}
+            />
+            <span className={cn("text-xs leading-[18px]", streamState === "open" ? GRAD_GREEN : "text-[#9db2ce]")}>
+              {streamState === "open" ? "Live" : streamState === "connecting" ? "Connecting…" : "Disconnected"}
+            </span>
           </span>
         )}
       </div>
@@ -166,7 +178,11 @@ export function TradeCycles({ runId, isLive }: { runId?: string; isLive?: boolea
       ) : isLoading ? (
         <p className="p-4 text-xs text-[#9db2ce]">Loading trade cycles&hellip;</p>
       ) : cycles.length === 0 ? (
-        <p className="p-4 text-xs text-[#9db2ce]">No trade cycles — this run never journaled one.</p>
+        <p className="p-4 text-xs text-[#9db2ce]">
+          {streamState === "open"
+            ? "Connected — waiting for this run's first trade."
+            : "No trade cycles — this run never journaled one."}
+        </p>
       ) : (
         cycles.map((c, i) => <CycleRow key={c.key} cycle={c} defaultOpen={i === 0} />)
       )}

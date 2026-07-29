@@ -3,16 +3,12 @@ import * as React from "react"
 import { cn } from "@/lib/utils"
 
 // Opt-in frozen columns (first/last), so wide lists scroll their middle while the identifying
-// and action columns stay in view. Positioning + edge rule ONLY — deliberately no background:
-// the header keeps whatever bg the call site gave it (bg-secondary, or bg-surface on the
+// and action columns stay in view. Positioning ONLY — deliberately no background and no edge
+// rule: the header keeps whatever bg the call site gave it (bg-secondary, or bg-surface on the
 // accounts list) and body cells inherit the row's.
-//
-// The edge rule is an inset box-shadow, NOT border-r/border-l: preflight sets
-// `border-collapse: collapse`, which hands cell borders to the table's border grid, so a real
-// border slides out from under the frozen column as you scroll.
 const STICKY_COL = {
-  left: "sticky left-0 shadow-[inset_-1px_0_0_0_var(--border)]",
-  right: "sticky right-0 shadow-[inset_1px_0_0_0_var(--border)]",
+  left: "sticky left-0",
+  right: "sticky right-0",
 } as const
 
 function Table({ className, ...props }: React.ComponentProps<"table">) {

@@ -4,6 +4,7 @@ import { Pause, Play } from "@solar-icons/react";
 import { resourceErrorMessage } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
 import { canMutate, isShared } from "@/lib/rbac";
+import { RunStatusPill } from "@/components/run-status-pill";
 import {
   Table,
   TableBody,
@@ -26,7 +27,6 @@ import { Sparkline } from "@/components/charts/sparkline";
 import { FlashValue } from "@/components/ui/flash-value";
 import { cn, formatPercent } from "@/lib/utils";
 import { useStopRun } from "@/hooks/api/use-runs";
-import type { RunStatus } from "@/types/domain";
 import type { PaperRunRow } from "@/lib/mock/paper-runs";
 
 // Gradient text tokens straight from the Figma design (green / yellow / red).
@@ -57,16 +57,6 @@ function MiniRows({ items }: { items: ReactNode[] }) {
     </div>
   );
 }
-
-// Status pill: tinted background + coloured dot + gradient (or muted) label.
-const STATUS_META: Record<RunStatus, { label: string; dot: string; bg: string; text: string }> = {
-  running: { label: "Running", dot: "#67e1c1", bg: "rgba(103,225,193,0.1)", text: GRAD_GREEN },
-  paused: { label: "Paused", dot: "#f1c617", bg: "rgba(241,198,23,0.1)", text: GRAD_YELLOW },
-  failed: { label: "Failed", dot: "#ff135b", bg: "rgba(255,19,91,0.1)", text: GRAD_RED },
-  stopped: { label: "Stopped", dot: "#9db2ce", bg: "rgba(157,178,206,0.1)", text: "text-[#9db2ce]" },
-  completed: { label: "Completed", dot: "#9db2ce", bg: "rgba(157,178,206,0.1)", text: "text-[#9db2ce]" },
-  pending: { label: "Pending", dot: "#9db2ce", bg: "rgba(157,178,206,0.1)", text: "text-[#9db2ce]" },
-};
 
 const COLS = [
   { key: "status", label: "Status", w: "8%", align: "left" },
@@ -114,17 +104,10 @@ export function LiveRunsTable({
         </TableHeader>
         <TableBody>
           {rows.map((r) => {
-            const s = STATUS_META[r.status];
             return (
               <TableRow opaque key={r.id} className="cursor-pointer" onClick={() => onOpenDetail(r)}>
                 <TableCell sticky="left">
-                  <span
-                    className="inline-flex items-center gap-2 rounded-[20px] px-2 py-1 text-xs"
-                    style={{ backgroundColor: s.bg }}
-                  >
-                    <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: s.dot }} />
-                    <span className={s.text}>{s.label}</span>
-                  </span>
+                  <RunStatusPill status={r.status} showDot />
                 </TableCell>
                 <TableCell className="truncate text-sm text-white">{r.id}</TableCell>
                 <TableCell className="flex items-center text-sm font-semibold text-white">

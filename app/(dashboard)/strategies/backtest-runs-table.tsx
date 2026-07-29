@@ -24,6 +24,7 @@ import { formatPercent } from "@/lib/utils";
 import { resourceErrorMessage } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
 import { canMutate, isShared } from "@/lib/rbac";
+import { RunStatusPill } from "@/components/run-status-pill";
 import { useStopRun, useDeleteRun } from "@/hooks/api/use-backtest-runs";
 import { useConsoleLog } from "@/store/console-log-store";
 import type { PaperRunRow } from "@/lib/mock/paper-runs";
@@ -36,8 +37,9 @@ const GRAD_RED = "bg-[linear-gradient(160deg,#ffcce2_0%,#ff135b_100%)] bg-clip-t
 const STOPPABLE = new Set(["running", "paused", "pending"]);
 
 const COLS = [
+  { key: "status", label: "Status", w: "8%", align: "left" },
   { key: "id", label: "ID", w: "10%", align: "left" },
-  { key: "name", label: "Strategy Name", w: "25%", align: "left" },
+  { key: "name", label: "Strategy Name", w: "20%", align: "left" },
   { key: "owner", label: "Owner", w: "6%", align: "left" },
   { key: "symbol", label: "Symbol/Market", w: "17%", align: "left" },
   { key: "pnl", label: "PnL chart", w: "8%", align: "left" },
@@ -82,7 +84,7 @@ export function BacktestRunsTable({
 
   return (
     <>
-      <Table className="table-fixed min-w-[1400px]">
+      <Table className="table-fixed min-w-[1500px]">
         <TableHeader>
           <TableRow>
             {COLS.map((c, i) => (
@@ -110,7 +112,10 @@ export function BacktestRunsTable({
                 onClick={() => onSelect(r.id)}
                 className="cursor-pointer"
               >
-                <TableCell sticky="left" className="truncate text-sm text-white">{r.id}</TableCell>
+                <TableCell sticky="left">
+                  <RunStatusPill status={r.status} />
+                </TableCell>
+                <TableCell className="truncate text-sm text-white">{r.id}</TableCell>
                 <TableCell className="flex items-center text-sm font-semibold text-white">
                   <span className="truncate" title={r.strategyName}>{r.strategyName}</span>
                   {isShared(r, userId) && (

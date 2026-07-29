@@ -8,6 +8,8 @@ import { OverviewView } from "./overview-view";
 import { PerformanceView } from "./performance-view";
 import { RiskView } from "./risk-view";
 import { MftResultsView } from "./mft-results-view";
+import { RunHistoryPicker } from "./run-history-picker";
+import type { Run } from "@/types/domain";
 
 const PERIODS = ["Train", "Test", "Simulate", "Paper Trade"] as const;
 const VIEWS = ["Overview", "Performance", "Risk"] as const;
@@ -21,6 +23,8 @@ export function ResultsTab({
 }) {
   const [period, setPeriod] = useState<string>("Train");
   const [view, setView] = useState<string>("Overview");
+  // Which run the views describe. Undefined = the picker's default (the newest run).
+  const [selectedRun, setSelectedRun] = useState<Run | undefined>(undefined);
 
   if (variant === "mft") return <MftResultsView strategyId={strategyId} />;
 
@@ -37,6 +41,9 @@ export function ResultsTab({
             ))}
           </TabsList>
         </Tabs>
+        <div className="ml-auto">
+          <RunHistoryPicker strategyId={strategyId} selectedRunId={selectedRun?.id} onSelect={setSelectedRun} />
+        </div>
       </div>
 
       <Tabs value={view} onValueChange={(v) => v && setView(v)}>

@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Settings, SidebarCode, Copy, SkipNext } from "@solar-icons/react";
+import { Settings, SidebarCode, Copy, SkipNext, AltArrowDown } from "@solar-icons/react";
 import type { ComponentType } from "react";
 import type { IconProps } from "@solar-icons/react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -349,9 +349,11 @@ export function Toolbar({
     }
   };
 
+  const [validateOpen, setValidateOpen] = useState(false);
   const validateScript = useValidateScript();
   const validateFeatures = useValidateFeatures();
   const strategyFeatures = hftStrategy?.features ?? [];
+  const validating = validateScript.isPending || validateFeatures.isPending;
 
   // Both validate endpoints are unscoped (no :id in the path), so they also work on a lab-mate's
   // script — useful for reviewing a shared strategy you cannot save.
@@ -520,24 +522,42 @@ export function Toolbar({
         <IconButton icon={SidebarCode} label="Toggle console" onClick={onToggleConsole} />
         <IconButton icon={Copy} label="Duplicate" />
         {type === "hft" && (
-          <>
-            <button
-              type="button"
-              onClick={() => runValidation("script")}
-              disabled={validateScript.isPending}
-              className="inline-flex h-[34px] shrink-0 cursor-pointer items-center rounded-full border border-border px-3 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {validateScript.isPending ? "Validating…" : "Validate script"}
-            </button>
-            <button
-              type="button"
-              onClick={() => runValidation("features")}
-              disabled={validateFeatures.isPending}
-              className="inline-flex h-[34px] shrink-0 cursor-pointer items-center rounded-full border border-border px-3 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {validateFeatures.isPending ? "Validating…" : "Validate features"}
-            </button>
-          </>
+          <Popover open={validateOpen} onOpenChange={setValidateOpen}>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                disabled={validating}
+                className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-2 rounded-[40px] border border-border bg-background px-3 text-xs text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {validating ? "Validating…" : "Validate"}
+                <AltArrowDown weight="Outline" className="size-4" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-44 p-1">
+              <button
+                type="button"
+                disabled={validating}
+                onClick={() => {
+                  setValidateOpen(false);
+                  runValidation("script");
+                }}
+                className={"flex w-full cursor-pointer items-center rounded-md px-3 py-2 text-left text-xs text-white transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"}
+              >
+                Validate script
+              </button>
+              <button
+                type="button"
+                disabled={validating}
+                onClick={() => {
+                  setValidateOpen(false);
+                  runValidation("features");
+                }}
+                className={"flex w-full cursor-pointer items-center rounded-md px-3 py-2 text-left text-xs text-white transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"}
+              >
+                Validate features
+              </button>
+            </PopoverContent>
+          </Popover>
         )}
         {/* Save/Simulate both PUT the strategy, which 404s for a lab-mate's share — hide them there. */}
         {canWrite && (
@@ -546,7 +566,7 @@ export function Toolbar({
               type="button"
               onClick={handleSaveClick}
               disabled={!isDirty || saving}
-              className="inline-flex h-[34px] shrink-0 cursor-pointer items-center rounded-full border border-border px-3 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+              className="inline-flex h-8 shrink-0 cursor-pointer items-center rounded-[32px] border border-border bg-background px-3 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {saving ? "Saving…" : "Save"}
             </button>
@@ -554,7 +574,7 @@ export function Toolbar({
               type="button"
               onClick={handleSimulateClick}
               disabled={mftSimStatus === "running"}
-              className="inline-flex h-[34px] shrink-0 cursor-pointer items-center gap-1 rounded-full bg-[linear-gradient(164deg,#cff8ea_0%,var(--primary)_100%)] px-3 text-xs font-medium text-black transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-1 rounded-[32px] bg-[linear-gradient(161deg,#cff8ea_0%,#67e1c1_100%)] px-3 text-xs font-medium text-black transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <SkipNext weight="Outline" className="size-3.5" />
               {simulateLabel}

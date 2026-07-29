@@ -14,6 +14,7 @@ import { FlashValue } from "@/components/ui/flash-value";
 import { cn, formatPercent } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { isShared } from "@/lib/rbac";
+import { RunStatusPill } from "@/components/run-status-pill";
 import type { PaperRunRow } from "@/lib/mock/paper-runs";
 
 // Gradient text tokens from the Figma design.
@@ -46,8 +47,9 @@ function MiniRows({ items }: { items: ReactNode[] }) {
 }
 
 const COLS = [
+  { key: "status", label: "Status", w: "8%", align: "left" },
   { key: "id", label: "ID", w: "8%", align: "left" },
-  { key: "name", label: "Strategy Name", w: "19%", align: "left" },
+  { key: "name", label: "Strategy Name", w: "14%", align: "left" },
   { key: "owner", label: "Owner", w: "5%", align: "left" },
   { key: "account", label: "Account", w: "8%", align: "left" },
   { key: "symbol", label: "Symbol/Market", w: "14%", align: "left" },
@@ -70,7 +72,7 @@ export function PaperRunsTable({
 }) {
   const { userId } = useAuth();
   return (
-    <Table className="table-fixed min-w-[1500px]">
+    <Table className="table-fixed min-w-[1600px]">
       <TableHeader>
         <TableRow>
           {COLS.map((c, i) => (
@@ -94,7 +96,10 @@ export function PaperRunsTable({
             onClick={() => onSelect(r.id)}
             className="cursor-pointer"
           >
-            <TableCell sticky="left" className="truncate text-sm text-white">{r.id}</TableCell>
+            <TableCell sticky="left">
+              <RunStatusPill status={r.status} />
+            </TableCell>
+            <TableCell className="truncate text-sm text-white">{r.id}</TableCell>
             <TableCell className="flex items-center text-sm font-semibold text-white">
               <span className="truncate" title={r.strategyName}>{r.strategyName}</span>
               {/* RBAC plan: a lab-mate's paper run is a read-only share, not owned by the caller. */}

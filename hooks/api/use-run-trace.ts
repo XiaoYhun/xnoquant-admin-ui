@@ -95,7 +95,14 @@ export type TraceStreamState = "off" | "connecting" | "open" | "error";
  * so the SSE frames are read off a fetch body and parsed by hand.
  */
 export function useRunTraceStream(runId: string | undefined, enabled: boolean) {
-  const streamKey = runId && enabled && !USE_MOCK ? runId : undefined;
+  // SUBSCRIBE to the token rather than reading it once inside the effect. On a fresh page load the
+  // panel mounts before AuthProvider has exchanged the Firebase session for an access token, so a
+  // one-shot read sent NO Authorization header and upstream answered 401 — with nothing to
+  // re-trigger the effect, the tail stayed dead for the life of the panel. Subscribing also
+  // reconnects the stream when the token is refreshed mid-session.
+  const accessToken = useAuthStore((st) => st.accessToken);
+  // No token yet means "not ready", not "off" — don't burn a connection on a guaranteed 401.
+  const streamKey = runId && enabled && !USE_MOCK && accessToken ? runId : undefined;
   const [live, setLive] = useState<TraceEvent[]>([]);
   // Seeded from streamKey, NOT a flat "off": on first mount prevKey is initialised equal to
   // streamKey, so the reset branch below never runs and the state would stay "off" for the whole
@@ -117,9 +124,8 @@ export function useRunTraceStream(runId: string | undefined, enabled: boolean) {
 
     (async () => {
       try {
-        const token = useAuthStore.getState().accessToken;
         const res = await fetch(`${HFT_API_URL}/api/runs/${runId}/trace/stream`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          headers: { Authorization: `Bearer ${accessToken}` },
           signal: controller.signal,
         });
         if (!res.ok || !res.body) {
@@ -161,7 +167,7 @@ export function useRunTraceStream(runId: string | undefined, enabled: boolean) {
       cancelled = true;
       controller.abort();
     };
-  }, [runId, streamKey]);
+  }, [runId, streamKey, accessToken]);
 
   return { events: live, state };
 }

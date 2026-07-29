@@ -10,37 +10,59 @@ import { USE_MOCK, HFT_API_URL } from "@/lib/constant";
 // server uses. Backtests never journal a trace — the history is simply empty for them.
 
 export type TraceEvent = {
-  /** Raw ISO/epoch timestamp as sent; formatting is the view's job. */
-  at?: string;
-  /** Lifecycle stage, e.g. "Entry", "Order submitted", "Filled". */
+  /** Epoch millis. The API sends `ts_ms` as a NUMBER — formatting is the view's job. */
+  at?: number;
+  /** Raw lifecycle stage as sent, e.g. "cycle_opened" / "order_submitted" / "order_filled". */
   stage: string;
-  /** Human-readable detail line, e.g. "BUY 0.01 @ 63,212.97". */
+  /** Server's own message, used as a fallback when a line can't be composed from the fields. */
   detail?: string;
   symbol?: string;
+  /** Index into the run manifest's ordered symbol list; the name is resolved by the view. */
+  symbolId?: number;
   side?: string;
   qty?: number;
   price?: number;
-  /** Groups events into one trade cycle when the server provides it. */
+  /** Why the cycle opened, e.g. "signal" — rendered as the "(Signal)" suffix. */
+  reason?: string;
+  /** Groups events into one trade cycle. Sent as a NUMBER (`cycle_id`). */
   cycleId?: string;
 };
 
 const str = (v: unknown): string | undefined => (typeof v === "string" && v.trim() ? v : undefined);
 const num = (v: unknown): number | undefined => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
 
+/** Timestamps arrive as epoch millis (`ts_ms`); tolerate an ISO string too. */
+function toEpochMs(r: Record<string, unknown>): number | undefined {
+  const n = num(r.ts_ms) ?? num(r.ts) ?? num(r.at) ?? num(r.timestamp);
+  if (n !== undefined) return n;
+  const iso = str(r.at) ?? str(r.ts) ?? str(r.time) ?? str(r.timestamp) ?? str(r.created_at);
+  if (!iso) return undefined;
+  const parsed = Date.parse(iso);
+  return Number.isNaN(parsed) ? undefined : parsed;
+}
+
+/** `cycle_id` is a number (often 0), so it can't go through the string helper. */
+function toIdString(v: unknown): string | undefined {
+  if (typeof v === "number" && Number.isFinite(v)) return String(v);
+  return str(v);
+}
+
 export function toTraceEvent(raw: unknown): TraceEvent | null {
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;
-  const stage = str(r.stage) ?? str(r.event) ?? str(r.kind) ?? str(r.status) ?? str(r.type) ?? str(r.message);
+  const stage = str(r.kind) ?? str(r.stage) ?? str(r.event) ?? str(r.status) ?? str(r.type) ?? str(r.message);
   if (!stage) return null;
   return {
-    at: str(r.at) ?? str(r.ts) ?? str(r.time) ?? str(r.timestamp) ?? str(r.created_at),
+    at: toEpochMs(r),
     stage,
-    detail: str(r.detail) ?? str(r.message) ?? str(r.description) ?? str(r.text),
+    detail: str(r.message) ?? str(r.detail) ?? str(r.description) ?? str(r.text),
     symbol: str(r.symbol) ?? str(r.symbol_name) ?? str(r.instrument),
+    symbolId: num(r.symbol_id) ?? num(r.symbolId),
     side: str(r.side) ?? str(r.direction),
     qty: num(r.qty) ?? num(r.quantity) ?? num(r.size),
     price: num(r.price) ?? num(r.fill_price) ?? num(r.avg_price),
-    cycleId: str(r.cycle_id) ?? str(r.cycleId) ?? str(r.trade_id) ?? str(r.cycle),
+    reason: str(r.reason),
+    cycleId: toIdString(r.cycle_id) ?? toIdString(r.cycleId) ?? toIdString(r.trade_id) ?? toIdString(r.cycle),
   };
 }
 

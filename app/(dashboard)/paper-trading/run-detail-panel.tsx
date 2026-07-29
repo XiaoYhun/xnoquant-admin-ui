@@ -512,7 +512,7 @@ export function RunDetailPanel({
               {activeTab === "Trades" && <TradesTab run={run} />}
               {activeTab === "Trade cycles" && (
                 <div className="p-4">
-                  <TradeCycles runId={run.id} isLive={run.status === "running"} />
+                  <TradeCycles runId={run.id} isLive={run.status === "running"} symbols={run.symbols} />
                 </div>
               )}
               {activeTab === "Configuration" && <ConfigTab run={run} />}

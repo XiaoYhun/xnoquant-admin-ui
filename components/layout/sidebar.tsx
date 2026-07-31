@@ -95,7 +95,7 @@ export function Sidebar() {
             return (
               <Fragment key={`group-${i}`}>
                 {items.map((item) => (
-                  <NavRow key={item.href} item={item} active={isActive(item.href)} collapsed={collapsed} />
+                  <NavEntry key={item.href} item={item} collapsed={collapsed} isActive={isActive} />
                 ))}
               </Fragment>
             );
@@ -110,7 +110,7 @@ export function Sidebar() {
               collapsed={collapsed}
             >
               {items.map((item) => (
-                <NavRow key={item.href} item={item} active={isActive(item.href)} collapsed={collapsed} />
+                <NavEntry key={item.href} item={item} collapsed={collapsed} isActive={isActive} />
               ))}
             </Section>
           );
@@ -249,6 +249,52 @@ function Section({
         </span>
       </button>
       {open && <div className="flex flex-col gap-2">{children}</div>}
+    </div>
+  );
+}
+
+// A nav item plus, when it is the active section, its indented sub-routes (Figma 13964:56847).
+// Sub-routes are hidden while collapsed — the rail only has room for icons.
+function NavEntry({
+  item,
+  collapsed,
+  isActive,
+}: {
+  item: NavItem;
+  collapsed: boolean;
+  isActive: (href: string) => boolean;
+}) {
+  const parentActive = isActive(item.href);
+  const children = item.children ?? [];
+  return (
+    <div className="flex flex-col gap-2">
+      <NavRow item={item} active={parentActive} collapsed={collapsed} />
+      {children.length > 0 && parentActive && !collapsed && (
+        // Each sub-route carries its own 40px left rule (Figma 14756:46805 / 14773:24424):
+        // active = green gradient rule + gradient label, inactive = #1d2939 rule + #9db2ce label.
+        <div className="flex flex-col">
+          {children.map((child) => {
+            const on = isActive(child.href);
+            return (
+              <Link key={child.href} href={child.href} title={child.label} className="group flex h-10 items-center pl-3">
+                <span
+                  className="h-10 w-px shrink-0"
+                  style={{ background: on ? ACTIVE_GRADIENT : "#1d2939" }}
+                />
+                <span
+                  className={cn(
+                    "ml-4 text-sm",
+                    on ? "bg-clip-text text-transparent" : "text-[#9db2ce] group-hover:text-white",
+                  )}
+                  style={on ? { backgroundImage: ACTIVE_GRADIENT } : undefined}
+                >
+                  {child.label}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

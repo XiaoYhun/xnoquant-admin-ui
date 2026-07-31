@@ -10,7 +10,10 @@ type IconComponent = React.ForwardRefExoticComponent<Omit<IconProps, "ref"> & Re
 // This is the hook for future HFT-only / MFT-only pages — set e.g. `modes: ["hft"]`.
 // `requiresAccess` hides the item for a None-scoped caller (RBAC-gated resource family);
 // `adminOnly` hides it for non-admins (for future admin-only surfaces). See lib/rbac.ts.
-export type NavItem = { label: string; href: string; icon: IconComponent; modes?: Mode[]; requiresAccess?: boolean; adminOnly?: boolean };
+// `children` are nested sub-routes rendered indented under the parent (Figma 13964:56847); they
+// carry no icon and inherit the parent's mode/RBAC gating.
+export type NavChild = { label: string; href: string };
+export type NavItem = { label: string; href: string; icon: IconComponent; modes?: Mode[]; requiresAccess?: boolean; adminOnly?: boolean; children?: NavChild[] };
 export type NavGroup = { heading?: string; items: NavItem[] };
 
 export const NAV_GROUPS: NavGroup[] = [
@@ -27,7 +30,16 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Venue", href: "/venues", icon: EmptyWalletTime },
       { label: "Live account", href: "/accounts", icon: Translation, requiresAccess: true },
-      { label: "Live trading", href: "/live-trading", icon: DiagramUp, requiresAccess: true },
+      {
+        label: "Live trading",
+        href: "/live-trading",
+        icon: DiagramUp,
+        requiresAccess: true,
+        children: [
+          { label: "Alpha pool", href: "/live-trading/alpha-pool" },
+          { label: "Live trade", href: "/live-trading/live-trade" },
+        ],
+      },
     ],
   },
 ];

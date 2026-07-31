@@ -38,6 +38,15 @@ export function fetchRunEquity(id: string): Promise<EquityPoint[]> {
   return apiGet<EquityPoint[]>(`${HFT_API_URL}/api/runs/${id}/equity-curve`);
 }
 
+// All runs, unfiltered — the Alpha pool joins each live-basket member to the run named by its
+// `based_on_run_id` (a paper *or* backtest run), so it can't use the mode-filtered hooks.
+export function useRuns() {
+  return useQuery({
+    queryKey: ["runs"],
+    queryFn: () => (USE_MOCK ? Promise.resolve<Run[]>([]) : fetchRuns()),
+  });
+}
+
 // Exposed for future row-level/lazy loading. The current live/paper tables consume
 // fully-composed rows from useLiveRuns/usePaperRuns instead (their UI contract is frozen —
 // see hooks/api/use-live-runs.ts), so nothing calls these yet.
@@ -101,6 +110,8 @@ export function useLaunchRun() {
           started_at: now,
           stopped_at: null,
           error: null,
+          in_session_blackout: false,
+          needs_otp: false,
           manifest: {
             account: {
               id: req.account_id,

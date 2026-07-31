@@ -1,6 +1,6 @@
 "use client";
 import { useState, type ReactNode } from "react";
-import { Pause, Play } from "@solar-icons/react";
+import { Pause, CloseCircle } from "@solar-icons/react";
 import { resourceErrorMessage } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
 import { canMutate, isShared } from "@/lib/rbac";
@@ -27,6 +27,7 @@ import { Sparkline } from "@/components/charts/sparkline";
 import { FlashValue } from "@/components/ui/flash-value";
 import { cn, formatPercent } from "@/lib/utils";
 import { useStopRun } from "@/hooks/api/use-runs";
+import { useDemoteStrategy } from "@/hooks/api/use-live-basket";
 import type { PaperRunRow } from "@/lib/mock/paper-runs";
 
 // Gradient text tokens straight from the Figma design (green / yellow / red).
@@ -80,8 +81,10 @@ export function LiveRunsTable({
   onOpenDetail: (run: PaperRunRow) => void;
 }) {
   const stopRun = useStopRun();
+  const demoteStrategy = useDemoteStrategy();
   const { userId, isAdmin } = useAuth();
   const [pendingStop, setPendingStop] = useState<PaperRunRow | null>(null);
+  const [pendingDemote, setPendingDemote] = useState<PaperRunRow | null>(null);
 
   return (
     <>
@@ -177,6 +180,8 @@ export function LiveRunsTable({
                 </TableCell>
                 <TableCell sticky="right" className="text-right">
                   {/* Hide write controls for runs the caller can't mutate (e.g. a lab-mate's run). */}
+                  {/* Design 14773:24424: a running bot can be stopped; anything already halted can be
+                      demoted out of the live basket. Demote is admin-only (DELETE /api/live-basket). */}
                   {!canMutate(r, { userId, isAdmin }) ? null : r.status === "running" ? (
                     <button
                       type="button"
@@ -189,19 +194,19 @@ export function LiveRunsTable({
                       <Pause weight="Bold" className="size-4" />
                       Stop Bot
                     </button>
-                  ) : (
-                    // GAP-7: HFT has no start/resume endpoint (only POST /api/runs/{id}/stop) — see
-                    // hooks/api/use-runs.ts. Disabled until the backend adds one.
+                  ) : isAdmin ? (
                     <button
                       type="button"
-                      disabled
-                      title="Start/resume isn't supported by the backend yet"
-                      className="inline-flex cursor-not-allowed items-center gap-1 rounded-[20px] border border-[#1d2939] bg-[#151a24] px-2 py-1 text-xs text-primary opacity-50"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setPendingDemote(r);
+                      }}
+                      className="inline-flex cursor-pointer items-center gap-1 rounded-[20px] border border-[#ff135b]/40 bg-[#ff135b]/10 px-2 py-1 text-xs text-[#ff135b] transition-colors hover:bg-[#ff135b]/20"
                     >
-                      <Play weight="Bold" className="size-4" />
-                      Start Bot
+                      <CloseCircle weight="Bold" className="size-4" />
+                      Demote
                     </button>
-                  )}
+                  ) : null}
                 </TableCell>
               </TableRow>
             );
@@ -244,6 +249,48 @@ export function LiveRunsTable({
               }}
             >
               {stopRun.isPending ? "Stopping…" : "Stop Bot"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!pendingDemote}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingDemote(null);
+            demoteStrategy.reset();
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Demote to paper trading</DialogTitle>
+            <DialogDescription>
+              Remove &ldquo;{pendingDemote?.strategyName}&rdquo; from the live basket. It goes back to paper trading
+              only — no new live runs can be launched until an admin promotes it again.
+            </DialogDescription>
+          </DialogHeader>
+          {demoteStrategy.isError && (
+            <p className="text-xs text-destructive">
+              {resourceErrorMessage(demoteStrategy.error, "the live basket")}
+            </p>
+          )}
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Cancel</Button>
+            </DialogClose>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={demoteStrategy.isPending}
+              onClick={() => {
+                if (pendingDemote?.strategyId) {
+                  demoteStrategy.mutate(pendingDemote.strategyId, { onSuccess: () => setPendingDemote(null) });
+                }
+              }}
+            >
+              {demoteStrategy.isPending ? "Demoting…" : "Demote"}
             </Button>
           </DialogFooter>
         </DialogContent>

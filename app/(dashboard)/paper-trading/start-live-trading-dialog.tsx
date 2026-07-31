@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { DangerTriangle, Rocket } from "@solar-icons/react";
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -49,7 +49,16 @@ function AccountSelect({
   );
 }
 
-export function StartLiveTradingDialog({ run }: { run: PaperRunRow }) {
+export function StartLiveTradingDialog({
+  run,
+  trigger,
+  onSuccess,
+}: {
+  run: PaperRunRow;
+  /** Custom launcher — the Alpha pool row action is a bolt icon, not the default gradient button. */
+  trigger?: ReactNode;
+  onSuccess?: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const { data: accounts } = useAccounts();
 
@@ -83,20 +92,27 @@ export function StartLiveTradingDialog({ run }: { run: PaperRunRow }) {
       mode: "live",
       live_condition: null, // live runs use the live pipeline, not the backtest cost model
     };
-    launchRun.mutate(req, { onSuccess: () => setOpen(false) });
+    launchRun.mutate(req, {
+      onSuccess: () => {
+        setOpen(false);
+        onSuccess?.();
+      },
+    });
   };
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button
-          type="button"
-          size="sm"
-          className="h-[34px] gap-1.5 rounded-full bg-gradient-to-b from-[#fffbd6] to-[#f1c617] text-[#0d0d0d] hover:opacity-90"
-        >
-          <Rocket weight="Bold" className="size-3.5" />
-          Start live trading
-        </Button>
+        {trigger ?? (
+          <Button
+            type="button"
+            size="sm"
+            className="h-[34px] gap-1.5 rounded-full bg-gradient-to-b from-[#fffbd6] to-[#f1c617] text-[#0d0d0d] hover:opacity-90"
+          >
+            <Rocket weight="Bold" className="size-3.5" />
+            Start live trading
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="max-w-[480px] gap-0 rounded-[20px] border-border bg-background p-0">
         <div className="bg-surface px-4 py-2.5">

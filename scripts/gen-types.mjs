@@ -31,6 +31,32 @@ function stripOperationIds(specPath) {
   writeFileSync(specPath, JSON.stringify(spec));
 }
 
+// Second upstream spec defect: some operations $ref component schemas that were never emitted
+// (e.g. `DnseOtpRequest` on POST /api/accounts/{id}/dnse/otp). openapi-typescript refuses to
+// bundle a spec with dangling refs, so we stub the missing schemas as unconstrained objects.
+// The affected request/response bodies generate as `unknown` instead of failing the whole run;
+// every other path keeps its real shape. Remove a stub once upstream defines the schema.
+function stubDanglingSchemaRefs(specPath) {
+  const spec = JSON.parse(readFileSync(specPath, "utf8"));
+  const schemas = (spec.components ??= {}).schemas ??= {};
+  const missing = new Set();
+  const walk = (node) => {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) return node.forEach(walk);
+    const ref = node.$ref;
+    if (typeof ref === "string" && ref.startsWith("#/components/schemas/")) {
+      const name = ref.slice("#/components/schemas/".length);
+      if (!(name in schemas)) missing.add(name);
+    }
+    for (const value of Object.values(node)) walk(value);
+  };
+  walk(spec.paths);
+  walk(schemas);
+  for (const name of missing) schemas[name] = { type: "object" };
+  if (missing.size) console.warn(`  stubbed dangling $refs: ${[...missing].join(", ")}`);
+  writeFileSync(specPath, JSON.stringify(spec));
+}
+
 for (const s of specs) {
   let input = s.url;
   if (!s.oas3) {
@@ -45,6 +71,7 @@ for (const s of specs) {
     if (!res.ok) throw new Error(`Failed to fetch ${s.name} spec (${s.url}): HTTP ${res.status}`);
     writeFileSync(local, await res.text());
     stripOperationIds(local);
+    stubDanglingSchemaRefs(local);
     input = local;
   }
   console.log(`Generating types/api/${s.name}.ts ...`);

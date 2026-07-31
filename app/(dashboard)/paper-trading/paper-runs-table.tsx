@@ -1,6 +1,9 @@
 "use client";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { Bolt } from "@solar-icons/react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { PromoteToLiveDialog } from "./promote-to-live-dialog";
 import {
   Table,
   TableBody,
@@ -70,8 +73,11 @@ export function PaperRunsTable({
   selectedId?: string;
   onSelect: (id: string) => void;
 }) {
-  const { userId } = useAuth();
+  const { userId, isAdmin } = useAuth();
+  const router = useRouter();
+  const [pendingPromote, setPendingPromote] = useState<PaperRunRow | null>(null);
   return (
+    <>
     <Table className="table-fixed min-w-[1600px]">
       <TableHeader>
         <TableRow>
@@ -168,24 +174,43 @@ export function PaperRunsTable({
               )}
             </TableCell>
             <TableCell sticky="right" className="text-right">
-              <button
-                type="button"
-                aria-label={`Start live trading for ${r.strategyName}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onSelect(r.id);
-                }}
-                className="group inline-flex cursor-pointer items-center justify-center rounded-lg bg-surface p-2 transition-all hover:bg-[linear-gradient(135deg,#fffbd6_0%,#f1c617_100%)] active:scale-95 active:brightness-90"
-              >
-                <Bolt
-                  weight="Bold"
-                  className="size-5 text-[#f1c617] transition-colors group-hover:text-[#151a24]"
-                />
-              </button>
+              {/* Promotion is admin-only (POST /api/live-basket/{strategy_id}). */}
+              {isAdmin && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label={`Promote ${r.strategyName} to live`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setPendingPromote(r);
+                      }}
+                      className="group inline-flex cursor-pointer items-center justify-center rounded-lg bg-surface p-2 transition-all hover:bg-[linear-gradient(135deg,#fffbd6_0%,#f1c617_100%)] active:scale-95 active:brightness-90"
+                    >
+                      <Bolt
+                        weight="Bold"
+                        className="size-5 text-[#f1c617] transition-colors group-hover:text-[#151a24]"
+                      />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>Promote to Live</TooltipContent>
+                </Tooltip>
+              )}
             </TableCell>
           </TableRow>
         ))}
       </TableBody>
     </Table>
+
+    <PromoteToLiveDialog
+      run={pendingPromote}
+      open={!!pendingPromote}
+      onOpenChange={(open) => !open && setPendingPromote(null)}
+      onPromoted={() => {
+        setPendingPromote(null);
+        router.push("/live-trading/alpha-pool");
+      }}
+    />
+    </>
   );
 }

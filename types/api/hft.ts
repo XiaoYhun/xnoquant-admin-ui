@@ -267,6 +267,88 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/accounts/{id}/dnse/otp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * POST /api/accounts/:id/dnse/otp — redeem an OTP (smart or email) for a fresh
+         * @description 8h DNSE trading token and hand it straight to Redis, where any already-running
+         *     strategy for this account will pick it up (see `DnseAdapter::refresh_token_from_redis`
+         *     in the engine). Independent of any specific run — this is what makes a daily
+         *     re-auth not require restarting the strategy.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Account ID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["DnseOtpRequest"];
+                };
+            };
+            responses: {
+                /** @description Trading token refreshed */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Invalid otp_type or empty passcode */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Caller's role has no access to this resource family */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description DNSE request failed or Redis unavailable */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/accounts/{id}/dnse/send-otp": {
         parameters: {
             query?: never;
@@ -373,6 +455,177 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/live-basket": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * GET /api/live-basket — list every strategy currently promoted to the live basket
+         * @description (admin-only). Includes strategies whose approval has gone stale (`current_version !=
+         *     approved_version`) because they were edited after promotion.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Live basket members, most recently promoted first */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["LiveBasketMember"][];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Admin only */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/live-basket/{strategy_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * POST /api/live-basket/:strategy_id — promote (or re-promote) a strategy into the live
+         * @description basket, pinned to its current version (admin-only). Re-promoting after an edit updates the
+         *     pinned version, `based_on_run_id` and `note`.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Strategy ID */
+                    strategy_id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["PromoteRequest"];
+                };
+            };
+            responses: {
+                /** @description Strategy promoted */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["LiveBasketMember"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Admin only */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Strategy (or based_on_run_id) not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description based_on_run_id belongs to a different strategy */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        /** DELETE /api/live-basket/:strategy_id — demote a strategy from the live basket (admin-only). */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Strategy ID */
+                    strategy_id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Strategy demoted */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Admin only */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Strategy is not a live basket member */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
         options?: never;
         head?: never;
         patch?: never;
@@ -744,7 +997,10 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        /** @example data: {"run_id":"3fa85f64-5717-4562-b3fc-2c963f66afa6","net_pnl":128.5,"total_fee":4.2,"total_trades":17,"sharpe":1.42,"sharpe_annualized":3.11,"max_drawdown":32.0,"max_drawdown_pct":0.0032,"return_pct":0.0128,"win_rate":0.588,"equity":[],"symbols":[],"recent_trades":[],"positions":[],"updated_at_ms":1753600000000} */
+                        "text/event-stream": string;
+                    };
                 };
                 /** @description Unauthorized */
                 401: {
@@ -1055,7 +1311,10 @@ export interface paths {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        /** @example data: {"run_id":"3fa85f64-5717-4562-b3fc-2c963f66afa6","ts_ms":1753600000000,"cycle_id":42,"symbol_id":1,"account_id":1,"kind":"OrderFilled","side":"Buy","qty":10.0,"price":101.25,"reason":null,"order_id":98765,"client_order_id":"abc-123","message":"filled 10 @ 101.25"} */
+                        "text/event-stream": string;
+                    };
                 };
                 /** @description Unauthorized */
                 401: {
@@ -1273,6 +1532,53 @@ export interface paths {
             requestBody?: never;
             responses: {
                 /** @description Available fields and functions for feature DSL expressions */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/strategies/script-api": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * GET /api/strategies/script-api — the Rhai scripting surface (functions + in-scope
+         * @description variables) for every strategy type. Sourced from `common::strategy_script_api`, the
+         *     same table `strategy_check::build_engine`'s validator stub is generated from — so
+         *     this can't drift from what the "Check" button actually accepts. See
+         *     `data/strategies/CLAUDE.md`.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Rhai script API reference, one entry per strategy type */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -1534,6 +1840,66 @@ export interface paths {
                 };
             };
         };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/strategies/{id}/last-run-config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * GET /api/strategies/:id/last-run-config — the manifest of the caller's own most recent run
+         * @description of this strategy, used by the launch dialog to prepopulate its fields (account, symbols,
+         *     mode, execution settings, etc.) so relaunching a familiar strategy doesn't start from
+         *     scratch. Scoped to `[caller, strategy]` regardless of RBAC scope — this is a personal
+         *     convenience, not a lab-shared read, so a lab-mate's runs of the same strategy never leak
+         *     through here even under `Lab`/`All` scope. `null` if the caller has never run this strategy.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Strategy ID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Manifest of the caller's most recent run of this strategy, or null if none */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["RunManifest"] | null;
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Caller's role has no access to this resource family */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2058,6 +2424,12 @@ export interface components {
         LaunchRequest: {
             /** Format: uuid */
             account_id: string;
+            /**
+             * @description DNSE VN30F1M option: force-flat before ATC and withhold new orders through
+             *     ATC/overnight/ATO, resuming once continuous trading reopens. Off by default —
+             *     the run trades straight through auctions.
+             */
+            avoid_auction_sessions?: boolean;
             backtest_range?: components["schemas"]["BacktestDateRange"] | null;
             data_kind?: components["schemas"]["MarketDataKind"];
             execution?: components["schemas"]["ExecutionSettings"] | null;
@@ -2066,6 +2438,12 @@ export interface components {
              *     by the caller, like `account_id`. Empty for single-account strategies.
              */
             extra_account_ids?: string[];
+            /**
+             * Format: int64
+             * @description How long before ATC start (14:30 Asia/Ho_Chi_Minh) the one-shot flatten fires.
+             *     Ignored unless `avoid_auction_sessions` is set; defaults to 300s (5 min) when omitted.
+             */
+            flatten_buffer_secs?: number | null;
             live_condition?: components["schemas"]["LiveConditionSettings"] | null;
             mode: components["schemas"]["RunMode"];
             /**
@@ -2073,11 +2451,44 @@ export interface components {
              *     token. Omit when a valid token is already cached (Redis). Never persisted.
              */
             otp_passcode?: string | null;
+            /**
+             * @description DNSE live runs only: which mechanism `otp_passcode` was read with — "smart_otp"
+             *     (default) or "email_otp". Ignored when `otp_passcode` is omitted. Never persisted.
+             */
+            otp_type?: string | null;
             params?: Record<string, never> | null;
             starting_balances?: components["schemas"]["StartingBalances"] | null;
             /** Format: uuid */
             strategy_id: string;
             symbol_ids: string[];
+        };
+        /**
+         * @description A strategy's live-trading approval. There is a single global basket — a strategy is either
+         *     a member (eligible to launch `live` runs) or not, pinned to the exact `strategies.version`
+         *     an admin reviewed. Editing the strategy's Rhai code bumps `version`, which immediately
+         *     revokes eligibility (`current_version != approved_version`) until an admin re-promotes.
+         */
+        LiveBasketMember: {
+            /** Format: int32 */
+            approved_version: number;
+            /** Format: uuid */
+            based_on_run_id?: string | null;
+            /**
+             * Format: int32
+             * @description The strategy's current version. Differs from `approved_version` when the strategy has
+             *     been edited since promotion — still listed here (stale) until an admin demotes or
+             *     re-promotes it.
+             */
+            current_version: number;
+            note?: string | null;
+            owner_id: string;
+            owner_username?: string | null;
+            /** Format: date-time */
+            promoted_at: string;
+            promoted_by: string;
+            /** Format: uuid */
+            strategy_id: string;
+            strategy_name: string;
         };
         /**
          * @description Virtual-channel cost model + queue sizing (mirrors the engine `LiveConditionConfig`).
@@ -2211,6 +2622,19 @@ export interface components {
             venue_type: components["schemas"]["VenueType"];
         };
         /**
+         * @description Request body for `POST /api/live-basket/:strategy_id` — promotes (or re-promotes) a
+         *     strategy into the live basket, pinned to its current version.
+         */
+        PromoteRequest: {
+            /**
+             * Format: uuid
+             * @description The paper/backtest run whose results justified this promotion, if the admin promoted
+             *     from a specific run's result page. Must belong to the strategy being promoted.
+             */
+            based_on_run_id?: string | null;
+            note?: string | null;
+        };
+        /**
          * @description Per-account risk policy. Tagged by `type` (snake_case) to mirror the engine's `RiskConfig`
          *     enum so the run-manifest bridge maps it straight into `RunConfig.accounts[].risk`. `None`
          *     means no limits. Stored as JSONB on the account; applies to every run of that account.
@@ -2249,10 +2673,22 @@ export interface components {
             error?: string | null;
             /** Format: uuid */
             id: string;
+            /**
+             * @description True while the run is inside its auction-avoidance blackout window (only
+             *     meaningful when the manifest set `avoid_auction_sessions`). Orthogonal to
+             *     `status` — a run can be `running` and `in_session_blackout` at the same time.
+             */
+            in_session_blackout: boolean;
             manifest: components["schemas"]["RunManifest"];
             /** Format: double */
             max_drawdown_pct?: number | null;
             mode: components["schemas"]["RunMode"];
+            /**
+             * @description DNSE live only: true while the run's trading token is invalid/expired and it
+             *     needs a fresh OTP from the account owner. Orthogonal to `status` — a run can
+             *     be `running` and `needs_otp` at the same time.
+             */
+            needs_otp: boolean;
             /**
              * @description The run's owner (external auth service user id). Only informative to callers who can
              *     see other users' resources (admin, or a quant-lab peer on a backtest/paper run) — an
@@ -2294,6 +2730,8 @@ export interface components {
          */
         RunManifest: {
             account: components["schemas"]["ManifestAccount"];
+            /** @description Mirrors [`LaunchRequest::avoid_auction_sessions`]. */
+            avoid_auction_sessions?: boolean;
             backtest_range?: components["schemas"]["BacktestDateRange"] | null;
             data_kind?: components["schemas"]["MarketDataKind"];
             /**
@@ -2310,6 +2748,11 @@ export interface components {
              *     manifests persisted before this field existed.
              */
             extra_accounts?: components["schemas"]["ManifestAccount"][];
+            /**
+             * Format: int64
+             * @description Mirrors [`LaunchRequest::flatten_buffer_secs`].
+             */
+            flatten_buffer_secs?: number | null;
             live_condition?: components["schemas"]["LiveConditionSettings"] | null;
             mode: components["schemas"]["RunMode"];
             /** @description Strategy parameters (free-form). Empty until params are wired through the UI. */
@@ -2438,6 +2881,15 @@ export interface components {
             features: components["schemas"]["FeatureDef"][];
             /** Format: uuid */
             id: string;
+            /**
+             * Format: int32
+             * @description The live basket's pinned version for this strategy, if it's currently a member (see
+             *     `domain::live_basket`). `None` if never promoted. Compare against `version` to tell
+             *     whether the approval is still current or has gone stale from a later edit.
+             */
+            live_approved_version?: number | null;
+            /** Format: date-time */
+            live_promoted_at?: string | null;
             name: string;
             /**
              * @description The strategy's owner (external auth service user id). Only informative to callers who
@@ -2628,6 +3080,7 @@ export interface components {
          * @enum {string}
          */
         VenueType: "binance_spot" | "binance_futures" | "tcbs" | "dnse";
+        DnseOtpRequest: Record<string, never>;
     };
     responses: never;
     parameters: never;

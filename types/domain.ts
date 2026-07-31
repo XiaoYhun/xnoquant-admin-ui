@@ -42,3 +42,8 @@ export type SymbolPnlSummary = HftComponents["schemas"]["SymbolPnlSummary"];
 export type TradeRow = HftComponents["schemas"]["TradeRow"];
 export type TradePage = HftComponents["schemas"]["TradePage"];
 export type EquityPoint = HftComponents["schemas"]["EquityPoint"];
+
+// --- Live basket (the "Alpha pool" screen) ---
+// A strategy's live-trading approval, pinned to the strategy version an admin reviewed.
+export type LiveBasketMember = HftComponents["schemas"]["LiveBasketMember"];
+export type PromoteRequest = HftComponents["schemas"]["PromoteRequest"];

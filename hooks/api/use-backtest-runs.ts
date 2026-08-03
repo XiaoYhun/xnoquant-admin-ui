@@ -3,20 +3,23 @@ import { apiDelete, apiPost } from "@/lib/api-client";
 import { USE_MOCK, HFT_API_URL } from "@/lib/constant";
 import type { Run } from "@/types/domain";
 import type { PaperRunRow } from "@/lib/mock/paper-runs";
-import { fetchRuns } from "./use-runs";
+import { fetchRuns, type RunsQuery } from "./use-runs";
 import { toPaperRunRow } from "@/lib/transform/runs";
 
-// GAP-2: `GET /api/runs` has no `mode` filter — fetch all, keep `mode==="backtest"`. Same shape as
-// the paper list (toPaperRunRow), so the Strategy List reuses the paper-trading row contract.
+// GAP-2: `GET /api/runs` has no `mode` filter — fetch a page, keep `mode==="backtest"`. Same shape
+// as the paper list (toPaperRunRow), so the Strategy List reuses the paper-trading row contract.
 // Per-run summary + equity stay deferred to the detail panel.
-async function fetchBacktestRunRows(): Promise<PaperRunRow[]> {
-  return (await fetchRuns()).filter((r) => r.mode === "backtest").map(toPaperRunRow);
+async function fetchBacktestRunRows(query: RunsQuery): Promise<PaperRunRow[]> {
+  return (await fetchRuns(query)).filter((r) => r.mode === "backtest").map(toPaperRunRow);
 }
 
-export function useBacktestRuns() {
+// `query` goes to the server (`q` = strategy-name search, `status` = exact match). Paging stays
+// client-side — see the GAP-2 note in use-runs.ts.
+export function useBacktestRuns(query: RunsQuery = {}) {
   return useQuery({
-    queryKey: ["backtest-runs"],
-    queryFn: () => (USE_MOCK ? Promise.resolve<PaperRunRow[]>([]) : fetchBacktestRunRows()),
+    queryKey: ["backtest-runs", query.q ?? "", query.status ?? ""],
+    queryFn: () => (USE_MOCK ? Promise.resolve<PaperRunRow[]>([]) : fetchBacktestRunRows(query)),
+    placeholderData: (prev) => prev, // keep rows on screen while a new search resolves
   });
 }
 

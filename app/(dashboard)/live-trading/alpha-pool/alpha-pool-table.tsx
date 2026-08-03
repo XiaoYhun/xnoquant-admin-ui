@@ -90,20 +90,24 @@ export function AlphaPoolTable({
             >
               <TableCell sticky="left">{run ? <RunStatusPill status={run.status} /> : DASH}</TableCell>
               <TableCell className="truncate text-sm text-white">{run?.id ?? DASH}</TableCell>
-              <TableCell className="flex items-center text-sm font-semibold text-white">
-                <span className="truncate" title={member.strategy_name}>
-                  {member.strategy_name}
-                </span>
-                {/* current_version has moved past the reviewed one — the strategy stays listed but
-                    can't launch live runs until an admin re-promotes it. */}
-                {stale && (
-                  <span
-                    title={`Approved v${member.approved_version}, now at v${member.current_version}`}
-                    className="ml-2 inline-flex shrink-0 items-center rounded-[20px] border border-[#f1c617]/40 bg-[#f1c617]/10 px-2 py-0.5 text-[10px] font-normal text-[#f1c617]"
-                  >
-                    Needs re-approval
+              {/* Keep the cell a table-cell so it inherits `align-middle` — a `flex` class here
+                  would override display and top-align the name on the taller two-band rows. */}
+              <TableCell className="text-sm font-semibold text-white">
+                <span className="flex min-w-0 items-center">
+                  <span className="truncate" title={member.strategy_name}>
+                    {member.strategy_name}
                   </span>
-                )}
+                  {/* current_version has moved past the reviewed one — the strategy stays listed but
+                      can't launch live runs until an admin re-promotes it. */}
+                  {stale && (
+                    <span
+                      title={`Approved v${member.approved_version}, now at v${member.current_version}`}
+                      className="ml-2 inline-flex shrink-0 items-center rounded-[20px] border border-[#f1c617]/40 bg-[#f1c617]/10 px-2 py-0.5 text-[10px] font-normal text-[#f1c617]"
+                    >
+                      Needs re-approval
+                    </span>
+                  )}
+                </span>
               </TableCell>
               <TableCell className="overflow-hidden p-0 align-middle">
                 {run ? (

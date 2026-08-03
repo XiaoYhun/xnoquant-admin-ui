@@ -22,7 +22,7 @@ import { useRuns } from "@/hooks/api/use-runs";
 import { toPaperRunRow } from "@/lib/transform/runs";
 import { resourceErrorMessage } from "@/lib/api-client";
 import { AlphaPoolTable } from "./alpha-pool-table";
-import { MarketTabs, matchesMarket, marketFromParam, marketOf, type Market } from "../market-tabs";
+import { MarketTabs, matchesMarket, marketFromParam, marketOf, type Market } from "@/components/market-tabs";
 import { RunDetailPanel } from "../../paper-trading/run-detail-panel";
 import type { PaperRunRow } from "@/lib/mock/paper-runs";
 import type { LiveBasketMember } from "@/types/domain";

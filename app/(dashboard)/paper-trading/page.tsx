@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/pagination";
 import { usePaperRuns } from "@/hooks/api/use-paper-runs";
 import { useDebounced } from "@/hooks/use-debounced";
+import { MarketTabs, matchesMarket, DEFAULT_MARKET, type Market } from "@/components/market-tabs";
 import { resourceErrorMessage } from "@/lib/api-client";
 import { PaperRunsTable } from "./paper-runs-table";
 import { RunDetailPanel } from "./run-detail-panel";
@@ -19,6 +20,7 @@ import { RunDetailPanel } from "./run-detail-panel";
 const PAGE_SIZE = 9;
 
 export default function Page() {
+  const [market, setMarket] = useState<Market>(DEFAULT_MARKET);
   const [search, setSearch] = useState("");
   const [symbol, setSymbol] = useState("all");
   const [status, setStatus] = useState("all");
@@ -33,14 +35,21 @@ export default function Page() {
     status: status === "all" ? undefined : status,
   });
 
+  // Symbol options follow the selected market tab, like Alpha pool.
   const symbolOptions = useMemo(
-    () => Array.from(new Set(runs.flatMap((r) => r.symbols.map((s) => s.symbol)))).sort(),
-    [runs],
+    () =>
+      Array.from(
+        new Set(runs.filter((r) => matchesMarket(r, market)).flatMap((r) => r.symbols.map((s) => s.symbol))),
+      ).sort(),
+    [runs, market],
   );
 
   const filtered = useMemo(
-    () => runs.filter((r) => symbol === "all" || r.symbols.some((s) => s.symbol === symbol)),
-    [runs, symbol],
+    () =>
+      runs.filter(
+        (r) => (symbol === "all" || r.symbols.some((s) => s.symbol === symbol)) && matchesMarket(r, market),
+      ),
+    [runs, symbol, market],
   );
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
@@ -50,6 +59,14 @@ export default function Page() {
 
   return (
     <main className="relative flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4 bg-surface">
+      <MarketTabs
+        value={market}
+        onChange={(m) => {
+          setMarket(m);
+          setPage(1);
+        }}
+      />
+
       <div className="flex items-center gap-3">
         <div className="flex h-8 w-64 items-center gap-2 rounded-[20px] border border-border px-3">
           <input

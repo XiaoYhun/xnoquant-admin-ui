@@ -17,7 +17,7 @@ import { toRunDetail, type RunDetail } from "@/lib/transform/runs";
 import type { PaperRunRow, TradeHistoryRow } from "@/lib/mock/paper-runs";
 import { PromoteToLiveDialog } from "./promote-to-live-dialog";
 import { useAuth } from "@/hooks/use-auth";
-import { marketOf } from "../live-trading/market-tabs";
+import { marketOf } from "@/components/market-tabs";
 import { CodeEditor } from "../create-strategy/code-editor";
 import { TradeCycles } from "./trade-cycles";
 import { useRunOpenPositions } from "@/hooks/api/use-run-live";

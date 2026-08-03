@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { SYMBOLS_BY_MARKET, defaultSymbolFor, orderbookFor } from "@/lib/mock/orderbook";
-import type { Market } from "../market-tabs";
+import type { Market } from "@/components/market-tabs";
 
 // Right rail of the Live trade screen (Figma 14779:27408). Opens on the market tab's default
 // symbol — nothing to search or select first — and follows the tab when it changes.

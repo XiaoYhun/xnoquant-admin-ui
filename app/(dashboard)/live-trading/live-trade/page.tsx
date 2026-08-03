@@ -23,7 +23,7 @@ import { resourceErrorMessage } from "@/lib/api-client";
 import { cn, formatPercent } from "@/lib/utils";
 import { LiveRunsTable } from "./live-runs-table";
 import { OrderbookPanel } from "./orderbook-panel";
-import { MarketTabs, matchesMarket, marketFromParam, type Market } from "../market-tabs";
+import { MarketTabs, matchesMarket, marketFromParam, type Market } from "@/components/market-tabs";
 import { RunDetailPanel } from "../../paper-trading/run-detail-panel";
 import type { PaperRunRow } from "@/lib/mock/paper-runs";
 

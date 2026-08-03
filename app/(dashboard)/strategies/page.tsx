@@ -11,13 +11,15 @@ import {
 } from "@/components/ui/pagination";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useBacktestRuns } from "@/hooks/api/use-backtest-runs";
+import { useDebounced } from "@/hooks/use-debounced";
+import { MarketTabs, matchesMarket, DEFAULT_MARKET, type Market } from "@/components/market-tabs";
 import { resourceErrorMessage } from "@/lib/api-client";
 import { BacktestRunsTable } from "./backtest-runs-table";
 import { RunDetailPanel } from "../paper-trading/run-detail-panel";
 
 const PAGE_SIZE = 10;
 const STATUS_FILTERS = [
-  { value: "all", label: "All statuses" },
+  { value: "all", label: "All status" },
   { value: "running", label: "Running" },
   { value: "completed", label: "Completed" },
   { value: "stopped", label: "Stopped" },
@@ -28,20 +30,37 @@ const STATUS_FILTERS = [
 // Backtesting is a list of backtest runs (`GET /api/runs`, mode==="backtest"), laid out like the
 // Paper Trading page. Rows share the paper row contract, so the paper detail panel is reused.
 export default function Page() {
-  const { data: runs = [], isLoading, isError, error } = useBacktestRuns();
+  const [market, setMarket] = useState<Market>(DEFAULT_MARKET);
   const [search, setSearch] = useState("");
+  const [symbol, setSymbol] = useState("all");
   const [status, setStatus] = useState("all");
   const [page, setPage] = useState(1);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return runs.filter((r) => {
-      const matchesSearch = !q || r.id.toLowerCase().includes(q) || r.strategyName.toLowerCase().includes(q);
-      const matchesStatus = status === "all" || r.status === status;
-      return matchesSearch && matchesStatus;
-    });
-  }, [runs, search, status]);
+  // Search and status are served by `GET /api/runs` (`q`, `status`); market, symbol and paging
+  // stay client-side — the API filters on none of those.
+  const debouncedSearch = useDebounced(search.trim());
+  const { data: runs = [], isLoading, isError, error } = useBacktestRuns({
+    q: debouncedSearch || undefined,
+    status: status === "all" ? undefined : status,
+  });
+
+  // Symbol options follow the selected market tab, like Alpha pool.
+  const symbolOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(runs.filter((r) => matchesMarket(r, market)).flatMap((r) => r.symbols.map((s) => s.symbol))),
+      ).sort(),
+    [runs, market],
+  );
+
+  const filtered = useMemo(
+    () =>
+      runs.filter(
+        (r) => (symbol === "all" || r.symbols.some((s) => s.symbol === symbol)) && matchesMarket(r, market),
+      ),
+    [runs, symbol, market],
+  );
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount);
@@ -50,6 +69,14 @@ export default function Page() {
 
   return (
     <main className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4 bg-surface">
+      <MarketTabs
+        value={market}
+        onChange={(m) => {
+          setMarket(m);
+          setPage(1);
+        }}
+      />
+
       <div className="flex items-center gap-3">
         <div className="flex h-8 w-64 items-center gap-2 rounded-[20px] border border-border px-3">
           <input
@@ -58,11 +85,30 @@ export default function Page() {
               setSearch(e.target.value);
               setPage(1);
             }}
-            placeholder="Search by ID or strategy..."
+            placeholder="Search by strategy name..."
             className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
           />
           <MinimalisticMagnifer size={20} weight="Outline" className="shrink-0 text-muted-foreground" />
         </div>
+        <Select
+          value={symbol}
+          onValueChange={(v) => {
+            setSymbol(v ?? "all");
+            setPage(1);
+          }}
+        >
+          <SelectTrigger className="h-8 w-auto gap-2 rounded-full border-border bg-background px-3 text-xs text-foreground">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All symbols</SelectItem>
+            {symbolOptions.map((s) => (
+              <SelectItem key={s} value={s}>
+                {s}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Select
           value={status}
           onValueChange={(v) => {

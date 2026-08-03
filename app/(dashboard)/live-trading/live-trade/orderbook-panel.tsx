@@ -114,11 +114,13 @@ export function OrderbookPanel({ market }: { market: Market }) {
             {book.levels.map((level, i) => (
               <div key={i} className="flex h-7 w-full shrink-0 items-center px-2 text-sm leading-5">
                 <div className="flex h-full min-w-0 flex-1 items-center px-4 text-white">{level.amountBuy}</div>
-                {/* Depth bar grows inward from the outer edge, proportional to size. */}
+                {/* Depth bar grows inward from the spread, proportional to size. The anchored end
+                    (where the two sides meet) stays square; the growing end is rounded. Figma has
+                    both ends square — rounding is a deliberate refinement, keep it. */}
                 <div className="relative flex h-full min-w-0 flex-1 items-center justify-end px-4">
                   <span
                     aria-hidden
-                    className="absolute inset-y-0 right-0 bg-[rgba(103,225,193,0.2)]"
+                    className="absolute inset-y-0 right-0 rounded-l-[4px] bg-[rgba(103,225,193,0.2)]"
                     style={{ width: `${(level.amountBuy / maxAmount) * 100}%` }}
                   />
                   <span className="relative text-[#67e1c1]">{ladderNum.format(level.priceBuy)}</span>
@@ -126,7 +128,7 @@ export function OrderbookPanel({ market }: { market: Market }) {
                 <div className="relative flex h-full min-w-0 flex-1 items-center px-4">
                   <span
                     aria-hidden
-                    className="absolute inset-y-0 left-0 bg-[rgba(229,17,82,0.2)]"
+                    className="absolute inset-y-0 left-0 rounded-r-[4px] bg-[rgba(229,17,82,0.2)]"
                     style={{ width: `${(level.amountSell / maxAmount) * 100}%` }}
                   />
                   <span className="relative text-[#67e1c1]">{ladderNum.format(level.priceSell)}</span>

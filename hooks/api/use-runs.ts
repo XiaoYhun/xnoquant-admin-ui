@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiGet, apiPost } from "@/lib/api-client";
+import { apiGet, apiPost, retryUnlessForbidden } from "@/lib/api-client";
 import { HFT_API_URL, USE_MOCK } from "@/lib/constant";
 import type { EquityPoint, Run, RunPage, RunSummary } from "@/types/domain";
 import type { components } from "@/types/api/hft";
@@ -81,8 +81,8 @@ export function useRunSummary(id: string | undefined) {
     enabled: !!id,
     // The dev summary/equity endpoints 500 intermittently; keep retries (they recover) but with a
     // short fixed backoff so the detail panel's "Loading results…" settles in ~1s rather than the
-    // default exponential ~7s.
-    retry: 3,
+    // default exponential ~7s. A 403 still fails fast — see retryUnlessForbidden.
+    retry: retryUnlessForbidden,
     retryDelay: 400,
   });
 }
@@ -92,7 +92,7 @@ export function useRunEquity(id: string | undefined) {
     queryKey: ["run-equity", id],
     queryFn: () => fetchRunEquity(id as string),
     enabled: !!id,
-    retry: 3,
+    retry: retryUnlessForbidden,
     retryDelay: 400,
   });
 }

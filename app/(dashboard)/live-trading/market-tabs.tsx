@@ -31,3 +31,13 @@ export function MarketTabs({ value, onChange }: { value: Market; onChange: (mark
 export function matchesMarket(row: { symbols: { market: string }[] }, market: Market): boolean {
   return row.symbols.some((s) => s.market === market);
 }
+
+/** The tab a row belongs to, or null when its symbols map to no known market. */
+export function marketOf(row: { symbols: { market: string }[] }): Market | null {
+  return MARKETS.find((m) => matchesMarket(row, m.value))?.value ?? null;
+}
+
+/** Narrows a `?market=` query value to a tab, falling back to the default. */
+export function marketFromParam(value: string | null | undefined): Market {
+  return MARKETS.find((m) => m.value === value)?.value ?? DEFAULT_MARKET;
+}

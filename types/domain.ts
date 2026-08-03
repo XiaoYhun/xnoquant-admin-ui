@@ -31,6 +31,7 @@ export type Portfolio = {
 // (source of truth: types/api/hft.ts). `Instrument` aliases the HFT `Symbol`
 // schema to avoid shadowing the global `Symbol` type.
 export type Run = HftComponents["schemas"]["Run"];
+export type RunPage = HftComponents["schemas"]["RunPage"];
 export type RunSummary = HftComponents["schemas"]["RunSummary"];
 export type RunStatus = HftComponents["schemas"]["RunStatus"];
 export type RunMode = HftComponents["schemas"]["RunMode"];

@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPost } from "@/lib/api-client";
 import { HFT_API_URL, USE_MOCK } from "@/lib/constant";
-import type { EquityPoint, Run, RunSummary } from "@/types/domain";
+import type { EquityPoint, Run, RunPage, RunSummary } from "@/types/domain";
 import type { components } from "@/types/api/hft";
 
 // Request body for `POST /api/runs` (simulate-modal's launch form).
@@ -26,8 +26,32 @@ export type LaunchRequest = Omit<components["schemas"]["LaunchRequest"], "execut
 // EquityPoint[] → LiveRunRow/PaperRunRow via lib/transform/runs.ts — see
 // docs/plans/api-integration.md §4.C). Raw HFT payloads — no envelope, use apiGet/apiPost.
 
-export function fetchRuns(): Promise<Run[]> {
-  return apiGet<Run[]>(`${HFT_API_URL}/api/runs`);
+// `GET /api/runs` is paged: it returns `RunPage { runs, total, page, size }`, and supports
+// `q` (case-insensitive strategy-NAME search), `status` (exact), `page` (0-indexed) and
+// `size` (default 100, max 200).
+export const RUNS_MAX_PAGE_SIZE = 200;
+
+export type RunsQuery = { q?: string; status?: string; page?: number; size?: number };
+
+export async function fetchRunsPage(params: RunsQuery = {}): Promise<RunPage> {
+  const search = new URLSearchParams();
+  if (params.q) search.set("q", params.q);
+  if (params.status) search.set("status", params.status);
+  if (params.page != null) search.set("page", String(params.page));
+  if (params.size != null) search.set("size", String(params.size));
+  const qs = search.toString();
+  const page = await apiGet<RunPage>(`${HFT_API_URL}/api/runs${qs ? `?${qs}` : ""}`);
+  // Guard the contract: callers map over `runs` immediately, so a malformed payload should
+  // render empty rather than take the page down.
+  return { runs: Array.isArray(page?.runs) ? page.runs : [], total: page?.total ?? 0, page: page?.page ?? 0, size: page?.size ?? 0 };
+}
+
+// GAP-2 (still open): `/api/runs` has no `mode` filter, so the Paper/Live screens must split
+// modes client-side and therefore can't page server-side — a server page would mix modes and
+// report a `total` for both. They request the largest page instead and paginate locally.
+export async function fetchRuns(params: RunsQuery = {}): Promise<Run[]> {
+  const page = await fetchRunsPage({ size: RUNS_MAX_PAGE_SIZE, ...params });
+  return page.runs;
 }
 
 export function fetchRunSummary(id: string): Promise<RunSummary> {

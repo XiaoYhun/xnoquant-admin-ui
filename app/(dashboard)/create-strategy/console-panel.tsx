@@ -1,7 +1,6 @@
 "use client";
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { AltArrowDown, AltArrowUp, TrashBinTrash } from "@solar-icons/react";
-import { CloseIcon } from "@/components/icons/close";
 import { cn } from "@/lib/utils";
 import { useConsoleLog, type ConsoleLogType } from "@/store/console-log-store";
 
@@ -18,7 +17,6 @@ const LOG_COLORS: Record<ConsoleLogType, string> = {
 export function ConsolePanel({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const logs = useConsoleLog((s) => s.logs);
   const clearLogs = useConsoleLog((s) => s.clearLogs);
-  const [expanded, setExpanded] = useState(false);
   const [bodyHeight, setBodyHeight] = useState(180);
   const drag = useRef<{ startY: number; startH: number } | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -45,24 +43,26 @@ export function ConsolePanel({ open, onOpenChange }: { open: boolean; onOpenChan
   // Auto-scroll to the newest log line (matches xno-builder's Console).
   useLayoutEffect(() => {
     if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
-  }, [logs.length, expanded]);
+  }, [logs.length, open]);
 
-  if (!open) return null;
-
+  // The header bar always renders — the arrow beside it is the only console toggle now, so
+  // hiding the whole panel would leave no way back.
   const startDrag = (e: ReactMouseEvent) => {
-    if (!expanded) setExpanded(true);
-    drag.current = { startY: e.clientY, startH: expanded ? bodyHeight : 180 };
+    if (!open) onOpenChange(true);
+    drag.current = { startY: e.clientY, startH: open ? bodyHeight : 180 };
     document.body.style.cursor = "row-resize";
     document.body.style.userSelect = "none";
   };
 
   return (
     <div className="shrink-0 border-t border-border bg-background">
-      <div
-        onMouseDown={startDrag}
-        aria-label="Resize console"
-        className="h-1.5 shrink-0 cursor-row-resize bg-border/40 transition-colors hover:bg-primary/40"
-      />
+      {open && (
+        <div
+          onMouseDown={startDrag}
+          aria-label="Resize console"
+          className="h-1.5 shrink-0 cursor-row-resize bg-border/40 transition-colors hover:bg-primary/40"
+        />
+      )}
       <div className="flex items-center justify-between border-b border-border px-4 py-2">
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold text-white">Console</span>
@@ -85,27 +85,21 @@ export function ConsolePanel({ open, onOpenChange }: { open: boolean; onOpenChan
           )}
           <button
             type="button"
-            aria-label={expanded ? "Collapse console" : "Expand console"}
-            onClick={() => setExpanded((e) => !e)}
+            aria-label={open ? "Collapse console" : "Expand console"}
+            onClick={() => onOpenChange(!open)}
             className="cursor-pointer text-muted-foreground transition-colors hover:text-foreground"
           >
-            {expanded ? (
-              <AltArrowUp weight="Outline" className="size-5" />
-            ) : (
+            {/* Panel sits at the bottom: open shows a down arrow (collapse it away), closed
+                shows an up arrow (pull it back up). */}
+            {open ? (
               <AltArrowDown weight="Outline" className="size-5" />
+            ) : (
+              <AltArrowUp weight="Outline" className="size-5" />
             )}
-          </button>
-          <button
-            type="button"
-            aria-label="Close console"
-            onClick={() => onOpenChange(false)}
-            className="cursor-pointer text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <CloseIcon className="size-5" />
           </button>
         </div>
       </div>
-      {expanded && (
+      {open && (
         <div ref={bodyRef} style={{ height: bodyHeight }} className="overflow-y-auto px-4 py-2 font-mono text-xs">
           {logs.length === 0 ? (
             <p className="py-2 text-muted-foreground">No logs yet. Run a simulation to see output.</p>

@@ -1,6 +1,6 @@
 "use client";
-import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { MinimalisticMagnifer } from "@solar-icons/react";
 import {
   Select,
@@ -22,7 +22,7 @@ import { useRuns } from "@/hooks/api/use-runs";
 import { toPaperRunRow } from "@/lib/transform/runs";
 import { resourceErrorMessage } from "@/lib/api-client";
 import { AlphaPoolTable } from "./alpha-pool-table";
-import { MarketTabs, matchesMarket, DEFAULT_MARKET, type Market } from "../market-tabs";
+import { MarketTabs, matchesMarket, marketFromParam, marketOf, type Market } from "../market-tabs";
 import { RunDetailPanel } from "../../paper-trading/run-detail-panel";
 import type { PaperRunRow } from "@/lib/mock/paper-runs";
 import type { LiveBasketMember } from "@/types/domain";
@@ -42,12 +42,23 @@ const STATUS_FILTERS = [
   { value: "completed", label: "Completed" },
 ];
 
+// `useSearchParams` needs a Suspense boundary in the App Router.
 export default function Page() {
+  return (
+    <Suspense fallback={null}>
+      <AlphaPool />
+    </Suspense>
+  );
+}
+
+function AlphaPool() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { data: members = [], isLoading, isError, error } = useLiveBasket();
   const { data: runs = [] } = useRuns();
 
-  const [market, setMarket] = useState<Market>(DEFAULT_MARKET);
+  // Promotion links here with `?market=` so the promoted run's tab opens selected.
+  const [market, setMarket] = useState<Market>(() => marketFromParam(searchParams.get("market")));
   const [search, setSearch] = useState("");
   const [symbolFilter, setSymbolFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -172,7 +183,10 @@ export default function Page() {
                 setSelectedRun(run);
                 setDetailOpen(true);
               }}
-              onStarted={() => router.push("/live-trading/live-trade")}
+              onStarted={(run) => {
+                const started = marketOf(run);
+                router.push(`/live-trading/live-trade${started ? `?market=${started}` : ""}`);
+              }}
             />
           )}
         </div>

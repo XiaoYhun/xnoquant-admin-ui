@@ -30,7 +30,8 @@ export function OrderbookPanel({ market }: { market: Market }) {
 
   return (
     <aside className="flex w-[400px] shrink-0 flex-col overflow-hidden rounded-lg border border-border bg-background">
-      <div className="flex w-full shrink-0 items-center border-b border-border bg-secondary px-4 py-3">
+      {/* h-12 matches the table's header row (TableHead) so the two bars line up side by side. */}
+      <div className="flex h-12 w-full shrink-0 items-center border-b border-border bg-secondary px-4">
         <h2 className="text-base font-semibold leading-5 text-white">Orderbook</h2>
       </div>
 

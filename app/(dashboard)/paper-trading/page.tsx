@@ -11,6 +11,7 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { usePaperRuns } from "@/hooks/api/use-paper-runs";
+import { useDebounced } from "@/hooks/use-debounced";
 import { resourceErrorMessage } from "@/lib/api-client";
 import { PaperRunsTable } from "./paper-runs-table";
 import { RunDetailPanel } from "./run-detail-panel";
@@ -18,27 +19,29 @@ import { RunDetailPanel } from "./run-detail-panel";
 const PAGE_SIZE = 9;
 
 export default function Page() {
-  const { data: runs = [], isLoading, isError, error } = usePaperRuns();
   const [search, setSearch] = useState("");
   const [symbol, setSymbol] = useState("all");
   const [status, setStatus] = useState("all");
   const [page, setPage] = useState(1);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
+  // Search and status are served by `GET /api/runs` (`q`, `status`); symbol and paging stay
+  // client-side — the API offers no symbol filter, and no `mode` filter to page paper runs by.
+  const debouncedSearch = useDebounced(search.trim());
+  const { data: runs = [], isLoading, isError, error } = usePaperRuns({
+    q: debouncedSearch || undefined,
+    status: status === "all" ? undefined : status,
+  });
+
   const symbolOptions = useMemo(
     () => Array.from(new Set(runs.flatMap((r) => r.symbols.map((s) => s.symbol)))).sort(),
     [runs],
   );
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return runs.filter((r) => {
-      const matchesSearch = !q || r.id.toLowerCase().includes(q) || r.strategyName.toLowerCase().includes(q);
-      const matchesSymbol = symbol === "all" || r.symbols.some((s) => s.symbol === symbol);
-      const matchesStatus = status === "all" || r.status === status;
-      return matchesSearch && matchesSymbol && matchesStatus;
-    });
-  }, [runs, search, symbol, status]);
+  const filtered = useMemo(
+    () => runs.filter((r) => symbol === "all" || r.symbols.some((s) => s.symbol === symbol)),
+    [runs, symbol],
+  );
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount);
@@ -55,7 +58,7 @@ export default function Page() {
               setSearch(e.target.value);
               setPage(1);
             }}
-            placeholder="Search by ID or strategy..."
+            placeholder="Search by strategy name..."
             className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
           />
           <MinimalisticMagnifer size={20} weight="Outline" className="shrink-0 text-muted-foreground" />

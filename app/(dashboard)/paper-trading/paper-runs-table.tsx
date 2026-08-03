@@ -3,6 +3,7 @@ import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { Bolt } from "@solar-icons/react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { marketOf } from "../live-trading/market-tabs";
 import { PromoteToLiveDialog } from "./promote-to-live-dialog";
 import {
   Table,
@@ -207,8 +208,11 @@ export function PaperRunsTable({
       open={!!pendingPromote}
       onOpenChange={(open) => !open && setPendingPromote(null)}
       onPromoted={() => {
+        // Land on the tab that actually contains the promoted run — Alpha pool otherwise opens
+        // on Stocks and the new row looks missing.
+        const market = pendingPromote ? marketOf(pendingPromote) : null;
         setPendingPromote(null);
-        router.push("/live-trading/alpha-pool");
+        router.push(`/live-trading/alpha-pool${market ? `?market=${market}` : ""}`);
       }}
     />
     </>

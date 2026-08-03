@@ -208,7 +208,6 @@ function StrategyBuilder({ mode, initialEditors }: { mode: Mode; initialEditors:
         canWrite={canWrite}
         isDirty={!!active && active.code !== (savedCodes[active.id] ?? "")}
         onSave={handleSave}
-        onToggleConsole={() => setConsoleOpen((v) => !v)}
         onSimulate={handleSimulate}
         onSettingsSaved={handleSettingsSaved}
         onRenamed={(nextName) =>
@@ -230,7 +229,7 @@ function StrategyBuilder({ mode, initialEditors }: { mode: Mode; initialEditors:
 
   return (
     <div className="p-3 bg-surface flex-1 min-h-0">
-      <main className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-surface rounded-[16px] border border-border/20">
+      <main className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-surface rounded-[16px] border border-border">
         <EditorsBar editors={editors} activeId={activeId} onSelect={setActiveId} onClose={closeEditor} onAdd={() => setCreateOpen(true)} />
         {active ? (
           <div className="flex min-h-0 min-w-0 flex-1">

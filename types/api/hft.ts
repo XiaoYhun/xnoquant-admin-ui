@@ -638,23 +638,35 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** GET /api/runs — list the caller's runs, newest first. */
+        /**
+         * GET /api/runs — page through the caller's runs, newest first, optionally filtered by exact
+         * @description `status` and/or a case-insensitive strategy-name substring search.
+         */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description Page number (0-indexed, default 0) */
+                    page?: number | null;
+                    /** @description Page size (default 100, max 200) */
+                    size?: number | null;
+                    /** @description Exact run status filter */
+                    status?: string | null;
+                    /** @description Case-insensitive strategy name search */
+                    q?: string | null;
+                };
                 header?: never;
                 path?: never;
                 cookie?: never;
             };
             requestBody?: never;
             responses: {
-                /** @description List of runs (caller's own, plus lab roster's backtest/paper runs — never live — for lab roles; admins see all) */
+                /** @description Page of runs (caller's own, plus lab roster's backtest/paper runs — never live — for lab roles; admins see all) */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["Run"][];
+                        "application/json": components["schemas"]["RunPage"];
                     };
                 };
                 /** @description Unauthorized */
@@ -998,7 +1010,7 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        /** @example data: {"run_id":"3fa85f64-5717-4562-b3fc-2c963f66afa6","net_pnl":128.5,"total_fee":4.2,"total_trades":17,"sharpe":1.42,"sharpe_annualized":3.11,"max_drawdown":32.0,"max_drawdown_pct":0.0032,"return_pct":0.0128,"win_rate":0.588,"equity":[],"symbols":[],"recent_trades":[],"positions":[],"updated_at_ms":1753600000000} */
+                        /** @example data: {"run_id":"3fa85f64-5717-4562-b3fc-2c963f66afa6","net_pnl":128.5,"total_fee":4.2,"total_trades":17,"sharpe":1.42,"sharpe_annualized":3.11,"max_drawdown":32.0,"max_drawdown_pct":0.0032,"return_pct":0.0128,"win_rate":0.588,"equity":[],"symbols":[],"recent_trades":[],"positions":[],"orderbooks":[{"symbol_id":0,"bids":[{"price":100.1,"qty":2.5}],"asks":[{"price":100.2,"qty":1.8}]}],"alpha_timing":{"feature_eval_ns_avg":0.0,"feature_eval_ns_max":0,"feature_eval_ns_last":0,"rhai_eval_ns_avg":0.0,"rhai_eval_ns_max":0,"rhai_eval_ns_last":0,"samples":0},"updated_at_ms":1753600000000} */
                         "text/event-stream": string;
                     };
                 };
@@ -2771,6 +2783,19 @@ export interface components {
          * @enum {string}
          */
         RunMode: "paper" | "live" | "backtest";
+        /**
+         * @description A page of `GET /api/runs` results plus the total row count (across all pages, matching the
+         *     same status/search filters) for the pager.
+         */
+        RunPage: {
+            /** Format: int64 */
+            page: number;
+            runs: components["schemas"]["Run"][];
+            /** Format: int64 */
+            size: number;
+            /** Format: int64 */
+            total: number;
+        };
         /**
          * @description Lifecycle of a [`Run`]. `Pending` is reserved for future async launches; the current
          *     record-only launch path goes straight to `Running`. Snake_case is the storage/wire form.

@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Settings, SidebarCode, Copy, SkipNext, AltArrowDown } from "@solar-icons/react";
+import { Settings, Copy, SkipNext, AltArrowDown } from "@solar-icons/react";
 import type { ComponentType } from "react";
 import type { IconProps } from "@solar-icons/react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -237,6 +237,7 @@ function SettingsMenu({
   market,
   universe,
   trainRatio,
+  pillItems,
   onSettingsSaved,
 }: {
   type: "mft" | "hft";
@@ -245,6 +246,8 @@ function SettingsMenu({
   market?: string;
   universe?: string;
   trainRatio?: number;
+  /** Market/type labels shown on the trigger — these are what the popover edits. */
+  pillItems: string[];
   onSettingsSaved?: (changes: { market?: string; universe?: string; train_ratio?: number }) => void;
   onRenamed?: (name: string) => void;
 }) {
@@ -253,12 +256,25 @@ function SettingsMenu({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
+        {/* The market/type pill is the Settings trigger — it displays exactly the fields the
+            popover edits. Flat border/background, matching the Validate dropdown beside it.
+            Falls back to the cog before the strategy's values have loaded. */}
         <button
           type="button"
           aria-label="Settings"
-          className="inline-flex shrink-0 cursor-pointer items-center justify-center rounded-full border border-border bg-surface p-1.5 text-muted-foreground transition-colors hover:text-white data-[state=open]:text-white"
+          className="inline-flex h-8 shrink-0 cursor-pointer items-center justify-center gap-3 rounded-[40px] border border-border bg-background px-3 text-xs text-white transition-opacity hover:opacity-90"
         >
-          <Settings className="size-5" />
+          {pillItems.length > 0 ? (
+            pillItems.map((label) => (
+              <span key={label} className="inline-flex items-center gap-1.5">
+                <span className="size-1.5 shrink-0 rounded-full bg-white" />
+                {label}
+              </span>
+            ))
+          ) : (
+            <Settings className="size-4" />
+          )}
+          <AltArrowDown weight="Outline" className="size-4" />
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" sideOffset={8} className="w-[300px] rounded-lg border-border bg-surface p-4">
@@ -292,7 +308,6 @@ export function Toolbar({
   canWrite = true,
   isDirty = false,
   onSave,
-  onToggleConsole,
   onSimulate,
   onSettingsSaved,
   onRenamed,
@@ -308,7 +323,6 @@ export function Toolbar({
   canWrite?: boolean;
   isDirty?: boolean;
   onSave?: () => Promise<void>;
-  onToggleConsole?: () => void;
   onSimulate?: (editorId: string) => Promise<void>;
   onSettingsSaved?: (changes: { market?: string; universe?: string; train_ratio?: number }) => void;
   onRenamed?: (name: string) => void;
@@ -414,6 +428,12 @@ export function Toolbar({
   const simulateLabel =
     mftSimStatus === "running" ? "Simulating…" : mftSimStatus === "done" ? "Simulated" : mftSimStatus === "error" ? "Failed" : "Simulate";
 
+  // Shown on the Settings trigger: HFT reads market + strategy type, MFT market + universe.
+  const pillItems =
+    type === "hft"
+      ? [HFT_MARKET_LABEL[hftMarket] ?? hftMarket, ...(hftType ? [HFT_TYPE_LABEL[hftType]] : [])]
+      : [market, universe].filter((v): v is string => !!v);
+
   return (
     <div className="flex h-12 shrink-0 items-center justify-between gap-4 border-b border-border px-4 bg-surface">
       <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -469,44 +489,6 @@ export function Toolbar({
             {type.toUpperCase()}
           </span>
         </span>
-        <div className="h-5 w-px shrink-0 bg-[#344054]" />
-
-        <span className="inline-flex shrink-0 items-center gap-2 rounded-full border border-border bg-surface px-2 py-1">
-          <span className="size-2 shrink-0 rounded-full bg-muted-foreground" />
-          <span className="text-xs text-muted-foreground">In sample</span>
-        </span>
-
-        {type === "mft" && (market || universe) && (
-          <span className="inline-flex shrink-0 items-center gap-3 rounded-3xl border border-white/20 bg-gradient-to-b from-[rgba(123,97,255,0.8)] to-[rgba(123,97,255,0.2)] py-1 pl-2 pr-2 text-xs text-white backdrop-blur-[2px]">
-            {market && (
-              <span className="inline-flex items-center gap-1.5">
-                <span className="size-1.5 shrink-0 rounded-full bg-white" />
-                {market}
-              </span>
-            )}
-            {universe && (
-              <span className="inline-flex items-center gap-1.5">
-                <span className="size-1.5 shrink-0 rounded-full bg-white" />
-                {universe}
-              </span>
-            )}
-          </span>
-        )}
-
-        {type === "hft" && (
-          <span className="inline-flex shrink-0 items-center gap-3 rounded-3xl border border-white/20 bg-gradient-to-b from-[rgba(103,225,193,0.8)] to-[rgba(103,225,193,0.2)] py-1 pr-2 pl-2 text-xs text-white backdrop-blur-[2px]">
-            <span className="inline-flex items-center gap-1.5">
-              <span className="size-1.5 shrink-0 rounded-full bg-white" />
-              {HFT_MARKET_LABEL[hftMarket] ?? hftMarket}
-            </span>
-            {hftType && (
-              <span className="inline-flex items-center gap-1.5">
-                <span className="size-1.5 shrink-0 rounded-full bg-white" />
-                {HFT_TYPE_LABEL[hftType]}
-              </span>
-            )}
-          </span>
-        )}
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
@@ -517,9 +499,9 @@ export function Toolbar({
           market={market}
           universe={universe}
           trainRatio={trainRatio}
+          pillItems={pillItems}
           onSettingsSaved={onSettingsSaved}
         />
-        <IconButton icon={SidebarCode} label="Toggle console" onClick={onToggleConsole} />
         <IconButton icon={Copy} label="Duplicate" />
         {type === "hft" && (
           <Popover open={validateOpen} onOpenChange={setValidateOpen}>

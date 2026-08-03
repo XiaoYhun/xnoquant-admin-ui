@@ -15,6 +15,7 @@ import { RunStatusPill } from "@/components/run-status-pill";
 import { StartLiveTradingDialog } from "../../paper-trading/start-live-trading-dialog";
 import { isApprovalStale } from "@/hooks/api/use-live-basket";
 import { cn, formatPercent } from "@/lib/utils";
+import type { PaperRunRow } from "@/lib/mock/paper-runs";
 import type { AlphaPoolRow } from "./page";
 
 // Gradient text tokens from the Figma design — same metric styling as the paper/live tables.
@@ -59,7 +60,7 @@ export function AlphaPoolTable({
 }: {
   rows: AlphaPoolRow[];
   onOpenDetail: (row: AlphaPoolRow) => void;
-  onStarted: () => void;
+  onStarted: (run: PaperRunRow) => void;
 }) {
   return (
     <Table className="table-fixed min-w-[1600px]">
@@ -174,7 +175,7 @@ export function AlphaPoolTable({
                   <Tooltip>
                     <StartLiveTradingDialog
                       run={run}
-                      onSuccess={onStarted}
+                      onSuccess={() => onStarted(run)}
                       trigger={
                         <TooltipTrigger asChild>
                           <button

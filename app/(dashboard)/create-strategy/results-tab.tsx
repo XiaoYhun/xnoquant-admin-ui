@@ -7,12 +7,13 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { OverviewView } from "./overview-view";
 import { PerformanceView } from "./performance-view";
 import { RiskView } from "./risk-view";
+import { LatencyView } from "./latency-view";
 import { MftResultsView } from "./mft-results-view";
 import { RunHistoryPicker } from "./run-history-picker";
 import type { Run } from "@/types/domain";
 
 const PERIODS = ["Train", "Test", "Simulate", "Paper Trade"] as const;
-const VIEWS = ["Overview", "Performance", "Risk"] as const;
+const VIEWS = ["Overview", "Performance", "Risk", "Latency"] as const;
 
 export function ResultsTab({
   variant = "hft",
@@ -60,6 +61,7 @@ export function ResultsTab({
         {view === "Overview" && <OverviewView />}
         {view === "Performance" && <PerformanceView />}
         {view === "Risk" && <RiskView />}
+        {view === "Latency" && <LatencyView />}
       </div>
     </div>
   );

@@ -1,8 +1,10 @@
 "use client";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import type { EChartsOption } from "echarts";
-import { AltArrowDown, Maximize, MenuDots } from "@solar-icons/react";
+import { AltArrowDown, Maximize, MenuDots, Rocket } from "@solar-icons/react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BaseChart } from "@/components/charts/base-chart";
@@ -13,7 +15,9 @@ import { ApiError, resourceErrorMessage } from "@/lib/api-client";
 import { USE_MOCK } from "@/lib/constant";
 import { toRunDetail, type RunDetail } from "@/lib/transform/runs";
 import type { PaperRunRow, TradeHistoryRow } from "@/lib/mock/paper-runs";
-import { StartLiveTradingDialog } from "./start-live-trading-dialog";
+import { PromoteToLiveDialog } from "./promote-to-live-dialog";
+import { useAuth } from "@/hooks/use-auth";
+import { marketOf } from "../live-trading/market-tabs";
 import { CodeEditor } from "../create-strategy/code-editor";
 import { TradeCycles } from "./trade-cycles";
 import { useRunOpenPositions } from "@/hooks/api/use-run-live";
@@ -381,6 +385,9 @@ export function RunDetailPanel({
   run: PaperRunRow | null;
 }) {
   const [tab, setTab] = useState<Tab>("Charts");
+  const [promoteOpen, setPromoteOpen] = useState(false);
+  const router = useRouter();
+  const { isAdmin } = useAuth();
   const visibleTabs = tabsFor(run?.mode);
   const activeTab: Tab = visibleTabs.includes(tab) ? tab : "Charts";
   // Summary + equity are fetched here — only when the panel is open for a run — not per-row on the
@@ -444,7 +451,19 @@ export function RunDetailPanel({
               </div>
 
               <div className="flex shrink-0 items-center gap-2">
-                {run.mode === "paper" && <StartLiveTradingDialog run={run} />}
+                {/* Paper runs are promoted into the live basket, not launched from here — the
+                    launch step lives on Alpha pool once an admin has approved the strategy. */}
+                {run.mode === "paper" && isAdmin && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => setPromoteOpen(true)}
+                    className="h-[34px] gap-1.5 rounded-full bg-[linear-gradient(168deg,#cff8ea_0%,#67e1c1_100%)] text-[#0d0d0d] hover:opacity-90"
+                  >
+                    <Rocket weight="Bold" className="size-3.5" />
+                    Promote to Live
+                  </Button>
+                )}
                 <Popover>
                   <PopoverTrigger asChild>
                     <button
@@ -509,6 +528,18 @@ export function RunDetailPanel({
           </>
         )}
       </DialogContent>
+
+      <PromoteToLiveDialog
+        run={run}
+        open={promoteOpen}
+        onOpenChange={setPromoteOpen}
+        onPromoted={() => {
+          const market = run ? marketOf(run) : null;
+          setPromoteOpen(false);
+          onOpenChange(false);
+          router.push(`/live-trading/alpha-pool${market ? `?market=${market}` : ""}`);
+        }}
+      />
     </Dialog>
   );
 }

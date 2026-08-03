@@ -12,10 +12,12 @@ import type { LiveBasketMember, PromoteRequest } from "@/types/domain";
 export function useLiveBasket() {
   return useQuery({
     queryKey: ["live-basket"],
-    queryFn: () =>
-      USE_MOCK
-        ? Promise.resolve<LiveBasketMember[]>([])
-        : apiGet<LiveBasketMember[]>(`${HFT_API_URL}/api/live-basket`),
+    queryFn: async (): Promise<LiveBasketMember[]> => {
+      if (USE_MOCK) return [];
+      const data = await apiGet<LiveBasketMember[]>(`${HFT_API_URL}/api/live-basket`);
+      // Same contract guard as fetchRuns — the Alpha pool maps this straight into rows.
+      return Array.isArray(data) ? data : [];
+    },
   });
 }
 

@@ -1,5 +1,6 @@
 "use client";
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { MinimalisticMagnifer } from "@solar-icons/react";
 import {
   Select,
@@ -17,11 +18,12 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { useLiveRuns } from "@/hooks/api/use-live-runs";
+import { useDebounced } from "@/hooks/use-debounced";
 import { resourceErrorMessage } from "@/lib/api-client";
 import { cn, formatPercent } from "@/lib/utils";
 import { LiveRunsTable } from "./live-runs-table";
 import { OrderbookPanel } from "./orderbook-panel";
-import { MarketTabs, matchesMarket, DEFAULT_MARKET, type Market } from "../market-tabs";
+import { MarketTabs, matchesMarket, marketFromParam, type Market } from "../market-tabs";
 import { RunDetailPanel } from "../../paper-trading/run-detail-panel";
 import type { PaperRunRow } from "@/lib/mock/paper-runs";
 
@@ -84,12 +86,30 @@ function OnlyRunningToggle({ on, onChange }: { on: boolean; onChange: (next: boo
   );
 }
 
+// `useSearchParams` needs a Suspense boundary in the App Router.
 export default function Page() {
-  const { data: runs = [], isLoading, isError, error } = useLiveRuns();
-  const [market, setMarket] = useState<Market>(DEFAULT_MARKET);
+  return (
+    <Suspense fallback={null}>
+      <LiveTrade />
+    </Suspense>
+  );
+}
+
+function LiveTrade() {
+  const searchParams = useSearchParams();
+  // Starting a run from Alpha pool links here with `?market=` so its tab opens selected.
+  const [market, setMarket] = useState<Market>(() => marketFromParam(searchParams.get("market")));
   const [search, setSearch] = useState("");
   const [symbolFilter, setSymbolFilter] = useState<string>("all");
   const [onlyRunning, setOnlyRunning] = useState(false);
+
+  // Search and "Only Running" are served by `GET /api/runs` (`q`, `status`); market, symbol and
+  // paging stay client-side — the API filters on neither market/symbol nor run mode.
+  const debouncedSearch = useDebounced(search.trim());
+  const { data: runs = [], isLoading, isError, error } = useLiveRuns({
+    q: debouncedSearch || undefined,
+    status: onlyRunning ? "running" : undefined,
+  });
   const [page, setPage] = useState(1);
   const [selectedRun, setSelectedRun] = useState<PaperRunRow | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -101,16 +121,15 @@ export default function Page() {
     return [...set].sort();
   }, [runs, market]);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return runs.filter((r) => {
-      const matchesSearch =
-        !q || r.id.toLowerCase().includes(q) || r.strategyName.toLowerCase().includes(q);
-      const matchesSymbol = symbolFilter === "all" || r.symbols.some((s) => s.symbol === symbolFilter);
-      const matchesRunning = !onlyRunning || r.status === "running";
-      return matchesSearch && matchesSymbol && matchesRunning && matchesMarket(r, market);
-    });
-  }, [runs, search, symbolFilter, onlyRunning, market]);
+  const filtered = useMemo(
+    () =>
+      runs.filter(
+        (r) =>
+          (symbolFilter === "all" || r.symbols.some((s) => s.symbol === symbolFilter)) &&
+          matchesMarket(r, market),
+      ),
+    [runs, symbolFilter, market],
+  );
 
   // Headline numbers describe the current market tab, not the search/status narrowing.
   const kpis = useMemo(() => {
@@ -152,7 +171,7 @@ export default function Page() {
               setSearch(e.target.value);
               resetPage();
             }}
-            placeholder="Search by ID or strategy..."
+            placeholder="Search by strategy name..."
             className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
           />
           <MinimalisticMagnifer size={20} weight="Outline" className="shrink-0 text-muted-foreground" />

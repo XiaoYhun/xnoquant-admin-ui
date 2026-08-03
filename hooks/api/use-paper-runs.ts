@@ -4,21 +4,24 @@ import { apiGet } from "@/lib/api-client";
 import { USE_MOCK, HFT_API_URL } from "@/lib/constant";
 import type { PaperRunRow, TradeHistoryRow } from "@/lib/mock/paper-runs";
 import type { TradePage } from "@/types/domain";
-import { fetchRuns } from "./use-runs";
+import { fetchRuns, type RunsQuery } from "./use-runs";
 import { toPaperRunRow, toTradeHistoryRow } from "@/lib/transform/runs";
 
 // GAP-2: `GET /api/runs` has no `mode` filter — fetch all, keep `mode==="paper"`. Per-run summary
 // + equity are NOT fetched here; they're deferred to the detail panel (useRunSummary/useRunEquity
 // on open), so the list is a single call and the table's metric columns show "—" until a run is
 // opened.
-async function fetchPaperRunRows(): Promise<PaperRunRow[]> {
-  return (await fetchRuns()).filter((r) => r.mode === "paper").map(toPaperRunRow);
+async function fetchPaperRunRows(query: RunsQuery): Promise<PaperRunRow[]> {
+  return (await fetchRuns(query)).filter((r) => r.mode === "paper").map(toPaperRunRow);
 }
 
-export function usePaperRuns() {
+// `query` goes to the server (`q` = strategy-name search, `status` = exact match). Paging stays
+// client-side — see the GAP-2 note in use-runs.ts.
+export function usePaperRuns(query: RunsQuery = {}) {
   return useQuery({
-    queryKey: ["paper-runs"],
-    queryFn: () => (USE_MOCK ? mockApi.listPaperRuns() : fetchPaperRunRows()),
+    queryKey: ["paper-runs", query.q ?? "", query.status ?? ""],
+    queryFn: () => (USE_MOCK ? mockApi.listPaperRuns() : fetchPaperRunRows(query)),
+    placeholderData: (prev) => prev, // keep rows on screen while a new search resolves
   });
 }
 

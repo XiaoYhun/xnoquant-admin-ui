@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { AltArrowDown } from "@solar-icons/react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
+import { cn, shortRunId } from "@/lib/utils";
 import { useStrategyRuns } from "@/hooks/api/use-strategy-runs";
 import type { Run } from "@/types/domain";
 
@@ -23,11 +23,22 @@ function statusBadge(status: string): { label: string; bg: string; text: string 
   };
 }
 
-/** Design shows `2026-07-23T02:02:06` — trim the fractional seconds and trailing Z. */
-const shortTime = (iso: string) => iso.slice(0, 19);
+const pad = (n: number) => String(n).padStart(2, "0");
 
-/** Short, readable handle for a run — the design shows `#XfPfqf36LY`, not a full uuid. */
-export const shortRunId = (id: string) => `#${id.replace(/-/g, "").slice(-10)}`;
+/**
+ * `2026-08-03 16:33:16` in the reader's own timezone. `created_at` is RFC3339 UTC, so slicing the
+ * raw string (what this used to do) printed a UTC clock with no marker — seven hours off for a
+ * reader in Vietnam, and silently wrong rather than obviously wrong.
+ */
+function formatRunTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return (
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ` +
+    `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+  );
+}
+
 
 export function RunHistoryPicker({
   strategyId,
@@ -80,7 +91,7 @@ export function RunHistoryPicker({
                   >
                     <span className="flex min-w-0 flex-col gap-1">
                       <span className="truncate text-xs text-white">{shortRunId(r.id)}</span>
-                      <span className="truncate text-xs text-[#9db2ce]">{shortTime(r.created_at)}</span>
+                      <span className="truncate text-xs text-[#9db2ce]">{formatRunTime(r.created_at)}</span>
                     </span>
                     <span className="flex shrink-0 flex-col items-end gap-1">
                       <span

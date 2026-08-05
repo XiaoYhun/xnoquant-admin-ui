@@ -20,7 +20,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Sparkline } from "@/components/charts/sparkline";
-import { formatPercent } from "@/lib/utils";
+import { formatPercent, shortRunId } from "@/lib/utils";
 import { resourceErrorMessage } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
 import { canMutate, isShared } from "@/lib/rbac";
@@ -115,7 +115,9 @@ export function BacktestRunsTable({
                 <TableCell sticky="left">
                   <RunStatusPill status={r.status} />
                 </TableCell>
-                <TableCell className="truncate text-sm text-white">{r.id}</TableCell>
+                <TableCell className="truncate text-sm text-white" title={r.id}>
+                  {shortRunId(r.id)}
+                </TableCell>
                 {/* Keep the cell a table-cell so it inherits `align-middle` — a `flex` class here
                     would override display and top-align the name on the taller two-band rows. */}
                 <TableCell className="text-sm font-semibold text-white">

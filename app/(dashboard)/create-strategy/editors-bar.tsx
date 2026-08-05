@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CloseIcon } from "@/components/icons/close";
 import { PlusIcon } from "@/components/icons/plus";
 import {
@@ -13,13 +13,81 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { AltArrowDown, MinimalisticMagnifer } from "@solar-icons/react";
+import { MinimalisticMagnifer } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { canMutate, isShared } from "@/lib/rbac";
 import type { EditorTab } from "@/lib/mock/strategy-builder";
 
 // Browser-style strip of open editors: click to switch, × to close, + to add a new one.
+// The strip never scrolls — it renders only the tabs that fit before the + button, and folds
+// the remainder into a "+N" menu.
+
+// Space to keep for the "+N" chip while deciding the cut. It isn't in the DOM yet at that point
+// (it only exists once something overflows), so its width can't be measured: px-6 either side
+// plus a 2–3 digit count. Keep this in step with the chip's padding below, or the cut
+// under-reserves and the chip gets clipped at the right edge.
+const OVERFLOW_CHIP_WIDTH = 76;
+
+function SharedBadge() {
+  return (
+    <span className="shrink-0 rounded-[20px] border border-[#1d2939] bg-[#151a24] px-1.5 py-0.5 text-[10px] font-normal text-[#9db2ce]">
+      Shared
+    </span>
+  );
+}
+
+function Tab({
+  editor,
+  active,
+  shared,
+  closable,
+  grow,
+  onSelect,
+  onRequestClose,
+}: {
+  editor: EditorTab;
+  active: boolean;
+  shared: boolean;
+  closable: boolean;
+  /** Share the leftover width so the strip runs flush to the pinned "+N" chip. */
+  grow?: boolean;
+  onSelect?: () => void;
+  onRequestClose?: () => void;
+}) {
+  return (
+    <div
+      role="tab"
+      aria-selected={active}
+      onClick={onSelect}
+      className={cn(
+        "group relative flex h-[56px] shrink-0 cursor-pointer items-center gap-2 border-r border-border px-5 text-xs whitespace-nowrap",
+        grow && "grow justify-center",
+        active ? "text-primary bg-surface" : "text-muted-foreground hover:text-white bg-background border-b",
+      )}
+    >
+      <span>{editor.name}</span>
+      {/* RBAC plan: a lab-mate's HFT strategy is a read-only share. */}
+      {shared && <SharedBadge />}
+      {/* Closing an HFT tab DELETEs the strategy server-side, which 404s for a strategy the
+          caller doesn't own — hide the × for those. */}
+      {closable && (
+        <button
+          type="button"
+          aria-label={`Close ${editor.name}`}
+          onClick={(ev) => {
+            ev.stopPropagation();
+            onRequestClose?.();
+          }}
+          className="flex size-4 items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-white cursor-pointer -mr-2"
+        >
+          <CloseIcon className="size-3.5" />
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function EditorsBar({
   editors,
   activeId,
@@ -38,53 +106,96 @@ export function EditorsBar({
   const [query, setQuery] = useState("");
   const { userId, isAdmin } = useAuth();
 
-  // The strip scrolls horizontally once there are more strategies than fit, which makes finding
-  // one a hunt. This picker lists them all, searchable, so any strategy is two clicks away.
+  const barRef = useRef<HTMLDivElement>(null);
+  const measureRef = useRef<HTMLDivElement>(null);
+  const plusRef = useRef<HTMLButtonElement>(null);
+  const [visibleCount, setVisibleCount] = useState(editors.length);
+
+  // Decide how many tabs fit. An off-screen copy of the full strip gives each tab's true width,
+  // so this still works for tabs that aren't currently rendered.
+  useEffect(() => {
+    const bar = barRef.current;
+    const measure = measureRef.current;
+    if (!bar || !measure) return;
+
+    const recompute = () => {
+      const widths = Array.from(measure.children).map((c) => (c as HTMLElement).offsetWidth);
+      const plusWidth = plusRef.current?.offsetWidth ?? 0;
+
+      const fit = (reserved: number) => {
+        let used = 0;
+        let count = 0;
+        for (const w of widths) {
+          if (used + w > bar.clientWidth - reserved) break;
+          used += w;
+          count += 1;
+        }
+        return count;
+      };
+
+      // Two passes: the "+N" chip only takes space when something actually overflows.
+      let count = fit(plusWidth);
+      if (count < widths.length) count = fit(plusWidth + OVERFLOW_CHIP_WIDTH);
+      setVisibleCount(Math.max(1, Math.min(count, widths.length)));
+    };
+
+    recompute();
+    const observer = new ResizeObserver(recompute);
+    observer.observe(bar);
+    return () => observer.disconnect();
+  }, [editors]);
+
+  const canClose = (e: EditorTab) => !(e.type === "hft" && e.owner_id && !canMutate(e, { userId, isAdmin }));
+  const sharedFor = (e: EditorTab) => e.type === "hft" && isShared(e, userId);
+
+  // Keep the active tab on the strip: if it falls past the cut, it takes the last visible slot.
+  const visible = editors.slice(0, visibleCount);
+  const activeIndex = editors.findIndex((e) => e.id === activeId);
+  if (activeIndex >= visibleCount && visibleCount > 0) {
+    visible[visibleCount - 1] = editors[activeIndex];
+  }
+  const visibleIds = new Set(visible.map((e) => e.id));
+  const hidden = editors.filter((e) => !visibleIds.has(e.id));
+  const hasOverflow = hidden.length > 0;
+
   const q = query.trim().toLowerCase();
-  const picked = q ? editors.filter((e) => e.name.toLowerCase().includes(q)) : editors;
+  const picked = q ? hidden.filter((e) => e.name.toLowerCase().includes(q)) : hidden;
+
   return (
-    <div className="flex h-14 shrink-0 items-stretch border-b border-border bg-background overflow-y-hidden">
-      <div className="flex min-w-0 items-stretch overflow-x-auto overflow-y-hidden">
-        {editors.map((e) => {
-          const active = e.id === activeId;
-          return (
-            <div
-              key={e.id}
-              role="tab"
-              aria-selected={active}
-              onClick={() => onSelect(e.id)}
-              className={cn(
-                "group relative flex h-[56px] shrink-0 cursor-pointer items-center gap-2 border-r border-border px-5 text-xs whitespace-nowrap",
-                active ? "text-primary bg-surface" : "text-muted-foreground hover:text-white bg-background border-b",
-              )}
-            >
-              <span>{e.name}</span>
-              {/* RBAC plan: a lab-mate's HFT strategy is a read-only share. */}
-              {e.type === "hft" && isShared(e, userId) && (
-                <span className="shrink-0 rounded-[20px] border border-[#1d2939] bg-[#151a24] px-1.5 py-0.5 text-[10px] font-normal text-[#9db2ce]">
-                  Shared
-                </span>
-              )}
-              {/* Closing an HFT tab DELETEs the strategy server-side, which 404s for a
-                  strategy the caller doesn't own — hide the × for those. */}
-              {!(e.type === "hft" && e.owner_id && !canMutate(e, { userId, isAdmin })) && (
-                <button
-                  type="button"
-                  aria-label={`Close ${e.name}`}
-                  onClick={(ev) => {
-                    ev.stopPropagation();
-                    setPendingClose(e);
-                  }}
-                  className="flex size-4 items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-white cursor-pointer -mr-2"
-                >
-                  <CloseIcon className="size-3.5" />
-                </button>
-              )}
-            </div>
-          );
-        })}
+    <div ref={barRef} className="relative flex h-14 shrink-0 items-stretch overflow-hidden border-b border-border bg-background">
+      {/* Off-screen measuring copy — never visible, never interactive. */}
+      <div
+        ref={measureRef}
+        aria-hidden
+        className="pointer-events-none absolute top-0 left-0 flex items-stretch opacity-0"
+        style={{ visibility: "hidden" }}
+      >
+        {editors.map((e) => (
+          <Tab key={e.id} editor={e} active={e.id === activeId} shared={sharedFor(e)} closable={canClose(e)} />
+        ))}
       </div>
+
+      {/* When tabs overflow, the strip takes the remaining width and the visible tabs share the
+          slack, so the pinned "+N" chip sits flush at the right with no dead space before it.
+          With no overflow the tabs keep their natural width — otherwise a single open editor
+          would stretch across the whole bar. */}
+      <div className={cn("flex items-stretch", hasOverflow && "min-w-0 flex-1")}>
+        {visible.map((e) => (
+          <Tab
+            key={e.id}
+            editor={e}
+            active={e.id === activeId}
+            shared={sharedFor(e)}
+            closable={canClose(e)}
+            grow={hasOverflow}
+            onSelect={() => onSelect(e.id)}
+            onRequestClose={() => setPendingClose(e)}
+          />
+        ))}
+      </div>
+
       <button
+        ref={plusRef}
         type="button"
         aria-label="New editor"
         onClick={onAdd}
@@ -93,59 +204,62 @@ export function EditorsBar({
         <PlusIcon className="size-4" />
       </button>
 
-      <Popover open={pickerOpen} onOpenChange={(o) => { setPickerOpen(o); if (!o) setQuery(""); }}>
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            aria-label="All strategies"
-            title="All strategies"
-            className="flex shrink-0 items-center gap-1 border-l border-border px-3 text-xs text-muted-foreground transition-colors hover:bg-surface/50 hover:text-foreground cursor-pointer"
-          >
-            <span className="tabular-nums">{editors.length}</span>
-            <AltArrowDown weight="Outline" className="size-4" />
-          </button>
-        </PopoverTrigger>
-        <PopoverContent align="end" className="w-72 p-0">
-          <div className="flex items-center gap-2 border-b border-border px-3 py-2">
-            <MinimalisticMagnifer size={16} weight="Outline" className="shrink-0 text-muted-foreground" />
-            <input
-              autoFocus
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search strategies..."
-              className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
-            />
-          </div>
-          <div className="max-h-72 overflow-y-auto py-1">
-            {picked.length === 0 ? (
-              <p className="px-3 py-2 text-xs text-muted-foreground">No strategies match.</p>
-            ) : (
-              picked.map((e) => (
-                <button
-                  key={e.id}
-                  type="button"
-                  onClick={() => {
-                    onSelect(e.id);
-                    setPickerOpen(false);
-                    setQuery("");
-                  }}
-                  className={cn(
-                    "flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-xs transition-colors hover:bg-surface",
-                    e.id === activeId ? "text-primary" : "text-foreground",
-                  )}
-                >
-                  <span className="min-w-0 flex-1 truncate">{e.name}</span>
-                  {e.type === "hft" && isShared(e, userId) && (
-                    <span className="shrink-0 rounded-[20px] border border-[#1d2939] bg-[#151a24] px-1.5 py-0.5 text-[10px] font-normal text-[#9db2ce]">
-                      Shared
-                    </span>
-                  )}
-                </button>
-              ))
-            )}
-          </div>
-        </PopoverContent>
-      </Popover>
+      {hidden.length > 0 && (
+        <Popover
+          open={pickerOpen}
+          onOpenChange={(o) => {
+            setPickerOpen(o);
+            if (!o) setQuery("");
+          }}
+        >
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              aria-label={`${hidden.length} more strategies`}
+              title={`${hidden.length} more strategies`}
+              className="flex shrink-0 items-center border-l border-border px-6 text-xs text-muted-foreground transition-colors hover:bg-surface/50 hover:text-foreground cursor-pointer"
+            >
+              <span className="tabular-nums">+{hidden.length}</span>
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-72 p-0">
+            <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+              <MinimalisticMagnifer size={16} weight="Outline" className="shrink-0 text-muted-foreground" />
+              <input
+                autoFocus
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search strategies..."
+                className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
+              />
+            </div>
+            <div className="max-h-72 overflow-y-auto py-1">
+              {picked.length === 0 ? (
+                <p className="px-3 py-2 text-xs text-muted-foreground">No strategies match.</p>
+              ) : (
+                picked.map((e) => (
+                  <button
+                    key={e.id}
+                    type="button"
+                    onClick={() => {
+                      onSelect(e.id);
+                      setPickerOpen(false);
+                      setQuery("");
+                    }}
+                    className={cn(
+                      "flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-xs transition-colors hover:bg-surface",
+                      e.id === activeId ? "text-primary" : "text-foreground",
+                    )}
+                  >
+                    <span className="min-w-0 flex-1 truncate">{e.name}</span>
+                    {sharedFor(e) && <SharedBadge />}
+                  </button>
+                ))
+              )}
+            </div>
+          </PopoverContent>
+        </Popover>
+      )}
 
       <Dialog open={!!pendingClose} onOpenChange={(o) => !o && setPendingClose(null)}>
         <DialogContent>

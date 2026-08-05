@@ -1,4 +1,5 @@
 "use client";
+import { useState } from "react";
 import { AltArrowDown } from "@solar-icons/react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
@@ -39,11 +40,13 @@ export function RunHistoryPicker({
 }) {
   const { data: runs = [], isLoading } = useStrategyRuns(strategyId);
   const selected = runs.find((r) => r.id === selectedRunId) ?? runs[0];
+  // Controlled so picking a run dismisses the list — the results below have already changed.
+  const [open, setOpen] = useState(false);
 
   return (
     <div className="flex shrink-0 items-center gap-2">
       <span className="text-sm font-medium text-white">Run history:</span>
-      <Popover>
+      <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <button
             type="button"
@@ -66,7 +69,10 @@ export function RunHistoryPicker({
                   <button
                     key={r.id}
                     type="button"
-                    onClick={() => onSelect(r)}
+                    onClick={() => {
+                      onSelect(r);
+                      setOpen(false);
+                    }}
                     className={cn(
                       "flex w-full cursor-pointer items-start justify-between gap-3 border-b border-border px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-surface",
                       on && "bg-surface",

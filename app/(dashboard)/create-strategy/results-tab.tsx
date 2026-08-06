@@ -1,19 +1,29 @@
 "use client";
-// Create Strategy "Results" tab shell — Period sub-tabs + Overview/Performance/Risk views.
-// Each view lives in its own file (owned by a subagent). Everything here stays width-responsive:
+// Create Strategy "Results" tab shell — Figma 14876:146505. One row: pill view-tabs on the left,
+// the run-history picker on the right. The old "Period:" row (Train/Test/Simulate/Paper Trade) is
+// gone from the design. Each view lives in its own file. Everything here stays width-responsive:
 // min-w-0 so the panel never forces horizontal overflow.
 import { useState } from "react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { OverviewView } from "./overview-view";
 import { PerformanceView } from "./performance-view";
 import { RiskView } from "./risk-view";
+import { ExecutionView } from "./execution-view";
+import { CostCapacityView } from "./cost-capacity-view";
 import { LatencyView } from "./latency-view";
 import { MftResultsView } from "./mft-results-view";
 import { RunHistoryPicker } from "./run-history-picker";
 import type { Run } from "@/types/domain";
 
-const PERIODS = ["Train", "Test", "Simulate", "Paper Trade"] as const;
-const VIEWS = ["Overview", "Performance", "Risk", "Latency"] as const;
+// The Figma tab bar (14876:146506) shows five; Latency is kept on the end as a sixth — its
+// per-stage AVG/LAST/MAX cards have no home in the Execution design, which covers latency only as
+// a summary metric plus a distribution.
+const VIEWS = ["Overview", "Performance", "Risk", "Execution", "Cost & Capacity", "Latency"] as const;
+
+// Figma pills (14876:146506): no track behind the row, 8px gap, active pill = Neutral/Black 800.
+const TAB_LIST = "gap-2 rounded-none bg-transparent p-0";
+const TAB_TRIGGER =
+  "rounded-[40px] px-3 py-2 text-sm text-[#9db2ce] data-[state=active]:bg-[#1d2939] data-[state=active]:text-white data-[state=active]:shadow-none";
 
 export function ResultsTab({
   variant = "hft",
@@ -22,7 +32,6 @@ export function ResultsTab({
   variant?: "mft" | "hft";
   strategyId?: string;
 }) {
-  const [period, setPeriod] = useState<string>("Train");
   const [view, setView] = useState<string>("Overview");
   // Which run the views describe. Undefined = the picker's default (the newest run).
   const [selectedRun, setSelectedRun] = useState<Run | undefined>(undefined);
@@ -31,36 +40,25 @@ export function ResultsTab({
 
   return (
     <div className="flex min-w-0 flex-col gap-4 p-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="shrink-0 text-sm font-medium text-white">Period:</span>
-        <Tabs value={period} onValueChange={(v) => v && setPeriod(v)}>
-          <TabsList>
-            {PERIODS.map((p) => (
-              <TabsTrigger key={p} value={p}>
-                {p}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Tabs value={view} onValueChange={(v) => v && setView(v)}>
+          <TabsList className={TAB_LIST}>
+            {VIEWS.map((v) => (
+              <TabsTrigger key={v} value={v} className={TAB_TRIGGER}>
+                {v}
               </TabsTrigger>
             ))}
           </TabsList>
         </Tabs>
-        <div className="ml-auto">
-          <RunHistoryPicker strategyId={strategyId} selectedRunId={selectedRun?.id} onSelect={setSelectedRun} />
-        </div>
+        <RunHistoryPicker strategyId={strategyId} selectedRunId={selectedRun?.id} onSelect={setSelectedRun} />
       </div>
-
-      <Tabs value={view} onValueChange={(v) => v && setView(v)}>
-        <TabsList>
-          {VIEWS.map((v) => (
-            <TabsTrigger key={v} value={v}>
-              {v}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
 
       <div className="min-w-0">
         {view === "Overview" && <OverviewView />}
         {view === "Performance" && <PerformanceView />}
         {view === "Risk" && <RiskView />}
+        {view === "Execution" && <ExecutionView />}
+        {view === "Cost & Capacity" && <CostCapacityView runId={selectedRun?.id} />}
         {view === "Latency" && <LatencyView />}
       </div>
     </div>

@@ -160,3 +160,24 @@ export function useLaunchRun() {
     },
   });
 }
+
+// `GET /api/runs/{id}/turnover-curve` is undocumented: it is absent from the OpenAPI spec, so
+// `gen:types` can't emit a type for it, but it is live on the API. Verified against dev — it
+// returns 200 with a JSON array and reads the same `pnl-*.parquet` the equity curve does (a run
+// with a zero-byte parquet fails both with an identical error). Every run currently answers `[]`,
+// so callers must be able to fall back.
+export type TurnoverPoint = { ts: number; turnover: number };
+
+export function fetchRunTurnover(id: string): Promise<TurnoverPoint[]> {
+  return apiGet<TurnoverPoint[]>(`${HFT_API_URL}/api/runs/${id}/turnover-curve`);
+}
+
+export function useRunTurnover(id: string | undefined) {
+  return useQuery({
+    queryKey: ["run-turnover", id],
+    queryFn: () => fetchRunTurnover(id as string),
+    enabled: !!id,
+    retry: retryUnlessForbidden,
+    retryDelay: 400,
+  });
+}

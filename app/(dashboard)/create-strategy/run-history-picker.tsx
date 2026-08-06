@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AltArrowDown } from "@solar-icons/react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn, shortRunId } from "@/lib/utils";
@@ -53,6 +53,13 @@ export function RunHistoryPicker({
   const selected = runs.find((r) => r.id === selectedRunId) ?? runs[0];
   // Controlled so picking a run dismisses the list — the results below have already changed.
   const [open, setOpen] = useState(false);
+
+  // The trigger falls back to the newest run when nothing is picked yet, but the owner holds the
+  // id the result views query with. Without this the label reads "#abc123" while the views get
+  // `undefined` and render an all-"—" shell. Announce the fallback so both agree.
+  useEffect(() => {
+    if (!selectedRunId && runs.length > 0) onSelect(runs[0]);
+  }, [selectedRunId, runs, onSelect]);
 
   return (
     <div className="flex shrink-0 items-center gap-2">

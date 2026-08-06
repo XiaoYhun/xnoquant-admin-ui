@@ -66,3 +66,33 @@ export function useSendDnseOtp() {
       USE_MOCK ? Promise.resolve() : apiPost<void>(`${HFT_API_URL}/api/accounts/${id}/dnse/send-otp`, undefined),
   });
 }
+
+/** Which mechanism the passcode was read with. "smart_otp" is DNSE's authenticator app. */
+export type DnseOtpType = "smart_otp" | "email_otp";
+
+/**
+ * `POST /api/accounts/{id}/dnse/otp` — redeem an OTP for a fresh 8-hour DNSE trading token.
+ * The server writes the token to Redis, so strategies already running on this account pick it
+ * up without a restart; the daily re-auth doesn't interrupt them.
+ *
+ * The spec references a `DnseOtpRequest` schema it never defines, so the body is written out
+ * here. Field names follow `LaunchRequest.otp_type`/`otp_passcode`, which the endpoint's own
+ * 400 ("Invalid otp_type or empty passcode") names.
+ */
+export function useRefreshDnseToken() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, otpType, passcode }: { id: string; otpType: DnseOtpType; passcode: string }) =>
+      USE_MOCK
+        ? Promise.resolve()
+        : apiPost<void>(`${HFT_API_URL}/api/accounts/${id}/dnse/otp`, {
+            otp_type: otpType,
+            otp_passcode: passcode,
+          }),
+    // A refreshed token clears `needs_otp` on that account's live runs.
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["live-runs"] });
+      qc.invalidateQueries({ queryKey: ["runs"] });
+    },
+  });
+}

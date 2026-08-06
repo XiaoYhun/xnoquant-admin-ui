@@ -122,7 +122,9 @@ function distributionOption(labels: string[], counts: number[]): EChartsOption {
   return {
     grid: { left: 8, right: 8, top: 16, bottom: 24, containLabel: true },
     tooltip: { trigger: "axis" },
-    xAxis: { type: "category", data: labels, axisTick: { show: false }, axisLabel: { interval: 3 } },
+    // hideOverlap rather than a fixed stride: these cards sit at roughly half the 793px width the
+    // design assumes, where a fixed interval collides.
+    xAxis: { type: "category", data: labels, axisTick: { show: false }, axisLabel: { hideOverlap: true } },
     yAxis: { type: "value" },
     series: [
       { type: "bar", data: counts, barMaxWidth: 14, itemStyle: { color: BAR_FILL, borderRadius: [2, 2, 0, 0] } },
@@ -133,7 +135,7 @@ function distributionOption(labels: string[], counts: number[]): EChartsOption {
 const FILL_RATE_OPTION: EChartsOption = {
   grid: { left: 8, right: 8, top: 16, bottom: 24, containLabel: true },
   tooltip: { trigger: "axis", valueFormatter: (v: unknown) => `${Number(v).toFixed(2)}%` },
-  xAxis: { type: "category", data: FILL_RATE_LABELS, boundaryGap: false, axisLabel: { interval: 7 } },
+  xAxis: { type: "category", data: FILL_RATE_LABELS, boundaryGap: false, axisLabel: { hideOverlap: true } },
   yAxis: { type: "value", min: 90, max: 100, axisLabel: { formatter: "{value}%" } },
   series: [
     {

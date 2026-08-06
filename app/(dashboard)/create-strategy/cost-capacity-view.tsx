@@ -182,19 +182,13 @@ export function CostCapacityView({ runId }: { runId?: string }) {
 
   const cumulativeOption = useMemo<EChartsOption>(
     () => ({
-      // The five-item legend wraps to two rows at this card width; reserve room for it or it
-      // lands on top of the x-axis labels.
-      grid: { left: 8, right: 8, top: 16, bottom: 44, containLabel: true },
+      // No ECharts legend — five labels can't lay out inside a ~180px plot without colliding, and
+      // its wrapping isn't controllable. Rendered as HTML beneath the chart instead.
+      grid: { left: 8, right: 8, top: 16, bottom: 8, containLabel: true },
       tooltip: { trigger: "axis", valueFormatter: (v: unknown) => `${Number(v).toFixed(2)}%` },
-      legend: {
-        bottom: 0,
-        itemWidth: 10,
-        itemHeight: 10,
-        icon: "roundRect",
-        textStyle: { color: "#9db2ce", fontSize: 10 },
-        data: COST_SERIES.map((s) => s.key),
-      },
-      xAxis: { type: "category", data: CUM_LABELS, boundaryGap: false, axisLabel: { interval: 7 } },
+      // hideOverlap rather than a fixed interval: this card is ~340px wide in the side panel,
+      // less than half the 793px it was designed at, and a fixed stride collides there.
+      xAxis: { type: "category", data: CUM_LABELS, boundaryGap: false, axisLabel: { hideOverlap: true } },
       yAxis: { type: "value", axisLabel: { formatter: "{value}%" } },
       series: COST_SERIES.map((s, i) => ({
         name: s.key,
@@ -230,7 +224,7 @@ export function CostCapacityView({ runId }: { runId?: string }) {
         type: "category",
         data: turnoverSeries.map((d) => d.label),
         axisTick: { show: false },
-        axisLabel: { interval: 5 },
+        axisLabel: { hideOverlap: true },
       },
       yAxis: { type: "value" },
       series: [
@@ -253,7 +247,7 @@ export function CostCapacityView({ runId }: { runId?: string }) {
         type: "category",
         boundaryGap: false,
         data: CAPACITY_SERIES.map((_, i) => CAPACITY_LABELS[Math.floor((i / CAPACITY_SERIES.length) * CAPACITY_LABELS.length)]),
-        axisLabel: { interval: 7 },
+        axisLabel: { hideOverlap: true },
       },
       yAxis: { type: "value", min: 0, max: 4, interval: 1 },
       series: [
@@ -295,7 +289,9 @@ export function CostCapacityView({ runId }: { runId?: string }) {
 
       <div className="grid min-w-0 gap-4 lg:grid-cols-2">
         <ChartCard title="Cost Breakdown (USDT)" controls={<MockNote>Split is placeholder</MockNote>}>
-          <div className="flex min-w-0 items-center gap-4">
+          {/* Wraps rather than crushing the legend: the design lays this out at 388px, but in the
+              side panel the card can be under 340px, where ring + legend don't fit on one line. */}
+          <div className="flex min-w-0 flex-wrap items-center justify-center gap-4">
             <div className="relative size-[148px] shrink-0">
               <BaseChart option={donutOption} style={{ height: 148 }} />
               {/* Centre label sits above the ring rather than inside the canvas, so it stays crisp. */}
@@ -304,7 +300,7 @@ export function CostCapacityView({ runId }: { runId?: string }) {
                 <span className="text-sm leading-[18px] font-semibold text-white">{money(totalCost ?? 60_125)}</span>
               </div>
             </div>
-            <div className="flex min-w-0 flex-1 flex-col gap-2.5">
+            <div className="flex min-w-[192px] flex-1 flex-col gap-2.5">
               {breakdown.map((b) => (
                 <div key={b.key} className="flex min-w-0 items-center gap-2">
                   <span className="flex min-w-0 flex-1 items-center gap-1">
@@ -329,7 +325,18 @@ export function CostCapacityView({ runId }: { runId?: string }) {
         </ChartCard>
 
         <ChartCard title="Cost Over Time (Cumulative)" controls={<MockNote>Placeholder series</MockNote>}>
-          <BaseChart option={cumulativeOption} style={{ height: 244 }} />
+          <BaseChart option={cumulativeOption} style={{ height: 212 }} />
+          <div className="mt-2 flex flex-wrap justify-center gap-x-3 gap-y-1">
+            {COST_SERIES.map((s) => (
+              <span key={s.key} className="flex items-center gap-1">
+                <span
+                  className="size-2.5 shrink-0 rounded-sm"
+                  style={{ backgroundImage: `linear-gradient(135deg, ${s.from} 0%, ${s.to} 100%)` }}
+                />
+                <span className="text-[10px] leading-[14px] whitespace-nowrap text-muted-foreground">{s.key}</span>
+              </span>
+            ))}
+          </div>
         </ChartCard>
       </div>
 

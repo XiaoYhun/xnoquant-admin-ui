@@ -3,13 +3,10 @@
 // Metric card (Fill Rate / Order to trade Ratio / Cancel Rate + Avg Latency / Slippage Avg / Std /
 // Market Impact) → "Fill Rate over time" → "Slippage Distribution" + "Latency Distribution".
 //
-// Replaces the former Latency view (14819:25500). Its per-stage AVG/LAST/MAX cards are not in this
-// design — latency now surfaces as the "Avg Latency" metric plus the distribution chart.
-//
-// Self-contained mock data, and it has to be: every figure here comes from per-fill telemetry, and
-// the only source for that is `GET /api/runs/{id}/trace/stream`, which emits solely while a run is
-// running — a finished run has no history to replay. `RunSummary` carries no fill-rate, slippage or
-// latency field either. Swap in a hook once the backend exposes per-fill history.
+// Fill Rate / Order-to-trade / Cancel Rate and the "Fill Rate over time" series are derived from
+// the run's trade-cycle console log: `GET /api/runs/{id}/trace/history` (terminal) plus
+// `/trace/stream` (SSE while the run is live). Backtests never journal a trace — those stay empty.
+// Latency / slippage / market impact have no fields on the trace events, so they stay mocked.
 //
 // Two axes deliberately depart from the Figma frame, where these charts were duplicated from other
 // panels and kept their source data: "Fill Rate over time" is plotted as a percentage (the frame
@@ -21,6 +18,12 @@ import type { EChartsOption } from "echarts";
 
 import { BaseChart } from "@/components/charts/base-chart";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useRunTraceHistory, useRunTraceStream } from "@/hooks/api/use-run-trace";
+import {
+  deriveFillRateSeries,
+  deriveTraceExecutionMetrics,
+  type TracePeriod,
+} from "@/lib/trace-execution-metrics";
 import { cn } from "@/lib/utils";
 import { ChartCard, MockNote } from "./results-chart-card";
 
@@ -28,25 +31,13 @@ import { ChartCard, MockNote } from "./results-chart-card";
 const YELLOW = "#f1c617";
 const YELLOW_LIGHT = "#fffbd6";
 const GRAD_GREEN = "bg-[linear-gradient(158deg,#cff8ea_0%,#67e1c1_100%)] bg-clip-text text-transparent";
+const DASH = "—";
 
 // ---------------------------------------------------------------------------
 // Metric card (Figma 14180:16732) — two rows of four, divider between.
 // ---------------------------------------------------------------------------
 
 type Metric = { label: string; value: string; tone?: "green" };
-
-const ROW_TOP: Metric[] = [
-  { label: "Fill Rate", value: "96.42%", tone: "green" },
-  { label: "Order to trade Ratio", value: "3.21" },
-  { label: "Cancel Rate", value: "68.74%" },
-];
-
-const ROW_BOTTOM: Metric[] = [
-  { label: "Avg Latency", value: "1.82 ms" },
-  { label: "Slippage (Avg)", value: "-0.38 bp" },
-  { label: "Slippage (Std)", value: "0.72 bp" },
-  { label: "Market Impact", value: "-0.64 bp" },
-];
 
 function MetricCell({ metric }: { metric: Metric }) {
   return (
@@ -64,18 +55,18 @@ function MetricCell({ metric }: { metric: Metric }) {
   );
 }
 
-function MetricCard() {
+function MetricCard({ top, bottom }: { top: Metric[]; bottom: Metric[] }) {
   return (
     <div className="flex min-w-0 flex-col gap-2 rounded-xl border border-border bg-[rgba(29,33,38,0.2)] px-3 py-2">
       {/* Three metrics on a 4-col grid so they align above the bottom row, as the design has them. */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        {ROW_TOP.map((m) => (
+        {top.map((m) => (
           <MetricCell key={m.label} metric={m} />
         ))}
       </div>
       <div className="h-px w-full bg-border" />
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        {ROW_BOTTOM.map((m) => (
+        {bottom.map((m) => (
           <MetricCell key={m.label} metric={m} />
         ))}
       </div>
@@ -84,15 +75,8 @@ function MetricCard() {
 }
 
 // ---------------------------------------------------------------------------
-// Mock series — seeded, so server and client renders agree (no Math.random).
+// Distributions still mocked — trace events carry neither slippage nor latency.
 // ---------------------------------------------------------------------------
-
-const MONTHS = ["Jan 2025", "Feb 2025", "Mar 2025", "Apr 2025", "May 2025", "Jun 2025", "Jul 2025", "Aug 2025"];
-
-const FILL_RATE_SERIES = Array.from({ length: 64 }, (_, i) =>
-  Number((96 + Math.sin(i * 0.7) * 1.9 + Math.cos(i * 0.23) * 1.1).toFixed(2)),
-);
-const FILL_RATE_LABELS = FILL_RATE_SERIES.map((_, i) => MONTHS[Math.floor((i / 64) * MONTHS.length)]);
 
 const SLIPPAGE_BUCKETS = Array.from({ length: 25 }, (_, i) => `${(-3 + i * 0.25).toFixed(2)}%`);
 /** Bell-shaped bucket counts, peaked at `centre`. */
@@ -132,36 +116,46 @@ function distributionOption(labels: string[], counts: number[]): EChartsOption {
   };
 }
 
-const FILL_RATE_OPTION: EChartsOption = {
-  grid: { left: 8, right: 8, top: 16, bottom: 24, containLabel: true },
-  tooltip: { trigger: "axis", valueFormatter: (v: unknown) => `${Number(v).toFixed(2)}%` },
-  xAxis: { type: "category", data: FILL_RATE_LABELS, boundaryGap: false, axisLabel: { hideOverlap: true } },
-  yAxis: { type: "value", min: 90, max: 100, axisLabel: { formatter: "{value}%" } },
-  series: [
-    {
-      type: "line",
-      data: FILL_RATE_SERIES,
-      smooth: false,
-      showSymbol: false,
-      symbol: "none",
-      lineStyle: { width: 1.5, color: YELLOW },
-      itemStyle: { color: YELLOW },
-      areaStyle: {
-        color: {
-          type: "linear",
-          x: 0,
-          y: 0,
-          x2: 0,
-          y2: 1,
-          colorStops: [
-            { offset: 0, color: "rgba(241,198,23,0.45)" },
-            { offset: 1, color: "rgba(241,198,23,0)" },
-          ],
+function fillRateOption(labels: string[], values: number[]): EChartsOption {
+  const lo = values.length ? Math.min(...values) : 90;
+  const hi = values.length ? Math.max(...values) : 100;
+  const pad = Math.max(1, (hi - lo) * 0.15);
+  return {
+    grid: { left: 8, right: 8, top: 16, bottom: 24, containLabel: true },
+    tooltip: { trigger: "axis", valueFormatter: (v: unknown) => `${Number(v).toFixed(2)}%` },
+    xAxis: { type: "category", data: labels, boundaryGap: false, axisLabel: { hideOverlap: true } },
+    yAxis: {
+      type: "value",
+      min: Math.max(0, Math.floor(lo - pad)),
+      max: Math.min(100, Math.ceil(hi + pad)),
+      axisLabel: { formatter: "{value}%" },
+    },
+    series: [
+      {
+        type: "line",
+        data: values,
+        smooth: false,
+        showSymbol: false,
+        symbol: "none",
+        lineStyle: { width: 1.5, color: YELLOW },
+        itemStyle: { color: YELLOW },
+        areaStyle: {
+          color: {
+            type: "linear",
+            x: 0,
+            y: 0,
+            x2: 0,
+            y2: 1,
+            colorStops: [
+              { offset: 0, color: "rgba(241,198,23,0.45)" },
+              { offset: 1, color: "rgba(241,198,23,0)" },
+            ],
+          },
         },
       },
-    },
-  ],
-};
+    ],
+  };
+}
 
 const PERIOD_OPTIONS = ["Daily", "Weekly", "Monthly"] as const;
 const SCOPE_OPTIONS = ["All", "Maker", "Taker"] as const;
@@ -194,29 +188,75 @@ function PillSelect({
   );
 }
 
-export function ExecutionView() {
+const pct = (n: number | null) => (n == null ? DASH : `${n.toFixed(2)}%`);
+const ratio = (n: number | null) => (n == null ? DASH : n.toFixed(2));
+
+export function ExecutionView({ runId, isLive }: { runId?: string; isLive?: boolean }) {
   const [period, setPeriod] = useState<string>("Daily");
   const [slippageScope, setSlippageScope] = useState<string>("All");
   const [latencyScope, setLatencyScope] = useState<string>("All");
 
-  // The selects are presentational until per-fill history exists — one series backs every option.
+  const { data: history = [], isLoading, isError } = useRunTraceHistory(runId);
+  const { events: streamed, state: streamState } = useRunTraceStream(runId, !!isLive);
+  const events = useMemo(() => [...history, ...streamed], [history, streamed]);
+
+  const metrics = useMemo(() => deriveTraceExecutionMetrics(events), [events]);
+  const fillSeries = useMemo(
+    () => deriveFillRateSeries(events, period as TracePeriod),
+    [events, period],
+  );
+  const fillOption = useMemo(
+    () => fillRateOption(
+      fillSeries.map((p) => p.label),
+      fillSeries.map((p) => p.value),
+    ),
+    [fillSeries],
+  );
+
+  const topRow: Metric[] = [
+    { label: "Fill Rate", value: pct(metrics.fillRatePct), tone: "green" },
+    { label: "Order to trade Ratio", value: ratio(metrics.orderToTrade) },
+    { label: "Cancel Rate", value: pct(metrics.cancelRatePct) },
+  ];
+  // Still mocked — no latency / slippage on TraceEvent.
+  const bottomRow: Metric[] = [
+    { label: "Avg Latency", value: "1.82 ms" },
+    { label: "Slippage (Avg)", value: "-0.38 bp" },
+    { label: "Slippage (Std)", value: "0.72 bp" },
+    { label: "Market Impact", value: "-0.64 bp" },
+  ];
+
   const slippage = useMemo(() => distributionOption(SLIPPAGE_BUCKETS, SLIPPAGE_COUNTS), []);
   const latency = useMemo(() => distributionOption(LATENCY_BUCKETS, LATENCY_COUNTS), []);
 
+  const fillNote = !runId
+    ? "Pick a run"
+    : isError
+      ? "Trace unavailable"
+      : isLoading
+        ? "Loading…"
+        : fillSeries.length === 0
+          ? streamState === "open"
+            ? "Waiting for orders…"
+            : "No order events in trace"
+          : streamState === "open"
+            ? "Live"
+            : undefined;
+
   return (
     <div className="flex min-w-0 flex-col gap-4">
-      <MetricCard />
+      <MetricCard top={topRow} bottom={bottomRow} />
 
       <ChartCard
         title="Fill Rate over time"
         controls={
           <>
-            <MockNote>Placeholder — needs per-fill history</MockNote>
+            {fillNote && <MockNote>{fillNote}</MockNote>}
             <PillSelect value={period} onChange={setPeriod} options={PERIOD_OPTIONS} />
           </>
         }
       >
-        <BaseChart option={FILL_RATE_OPTION} style={{ height: 260 }} />
+        <BaseChart option={fillOption} style={{ height: 260 }} />
       </ChartCard>
 
       <div className="grid min-w-0 gap-4 lg:grid-cols-2">

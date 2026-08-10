@@ -30,11 +30,11 @@ export function useTradeHistory(runId: string | undefined) {
     queryKey: ["trade-history", runId],
     queryFn: async (): Promise<TradeHistoryRow[]> => {
       if (USE_MOCK) return mockApi.getTradeHistory(runId as string);
-      // API defaults to page=0/size=100; the Trades tab (run-detail-panel.tsx, out of scope
-      // here) has no pager UI yet, so this surfaces the first page only — see
-      // docs/plans/api-integration.md §4.D.
+      // API defaults to page=0/size=100; Overview + paper/live Trades tabs have no pager UI yet,
+      // so this surfaces the first page only — see docs/plans/api-integration.md §4.D.
       const page = await apiGet<TradePage>(`${HFT_API_URL}/api/runs/${runId}/trades?page=0&size=100`);
-      return page.rows.map(toTradeHistoryRow);
+      const rows = Array.isArray(page?.rows) ? page.rows : [];
+      return rows.map(toTradeHistoryRow);
     },
     enabled: !!runId,
   });

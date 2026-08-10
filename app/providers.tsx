@@ -13,7 +13,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
           queries: {
             staleTime: 60_000,
             refetchOnWindowFocus: false,
-            // 403 is terminal — don't retry into a wall.
+            // 403 / 404 are terminal — don't retry into a wall (see retryUnlessForbidden).
             retry: (failureCount, error) => retryUnlessForbidden(failureCount, error),
           },
         },

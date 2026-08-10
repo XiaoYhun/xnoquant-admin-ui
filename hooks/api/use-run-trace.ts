@@ -26,6 +26,8 @@ export type TraceEvent = {
   reason?: string;
   /** Groups events into one trade cycle. Sent as a NUMBER (`cycle_id`). */
   cycleId?: string;
+  /** Correlates submit ↔ fill(s) for qty-weighted fill rate (`client_order_id`). */
+  clientOrderId?: string;
 };
 
 const str = (v: unknown): string | undefined => (typeof v === "string" && v.trim() ? v : undefined);
@@ -63,6 +65,8 @@ export function toTraceEvent(raw: unknown): TraceEvent | null {
     price: num(r.price) ?? num(r.fill_price) ?? num(r.avg_price),
     reason: str(r.reason),
     cycleId: toIdString(r.cycle_id) ?? toIdString(r.cycleId) ?? toIdString(r.trade_id) ?? toIdString(r.cycle),
+    clientOrderId:
+      str(r.client_order_id) ?? str(r.clientOrderId) ?? toIdString(r.client_order_id) ?? toIdString(r.clientOrderId),
   };
 }
 

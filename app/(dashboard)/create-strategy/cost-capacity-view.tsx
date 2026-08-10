@@ -1,38 +1,31 @@
 "use client";
 // Create Strategy → Results → Cost & Capacity — Figma node 14180:18285.
 // Metric row (Gross PnL / Total Cost / Net PnL / Cost Drag) → "Cost Breakdown (USDT)" donut +
-// "Cost Over Time (Cumulative)" stacked area → "Turn over time" + "Capacity Curve".
+// "Cost Over Time (Cumulative)" → "Turn over time" + "Capacity Curve".
 //
-// Data: the metric row and the donut totals are real, derived from `GET /api/runs/{id}/summary`
-// (`edge_gross_bps - cost_bps == edge_net_bps`, and gross PnL = `net_pnl + total_fee`). "Turn over
-// time" calls `GET /api/runs/{id}/turnover-curve` — live, but it answers `[]` for every run on dev
-// today, so it falls back to placeholder bars and says so.
+// Real:
+// - Metrics from `GET /api/runs/{id}/summary`.
+// - Cost Breakdown + Cost Over Time from `GET /api/runs/{id}/cost-curve`
+//   (`CostPoint { ts, fee, cumulative }`). The API exposes aggregate fees only — no
+//   exchange/maker/funding/slippage split — so the donut is a single "Total Fee" slice and the
+//   over-time chart is one cumulative series (not the Figma five-way stack).
+// - Turn over time from `/turnover-curve`.
 //
-// Mocked, because no endpoint exposes them: the five-way cost split (`RunSummary` carries only the
-// aggregate `total_fee` and `cost_bps` — no exchange/maker-rebate/funding/slippage breakdown), the
-// cumulative cost series, and the capacity curve.
-//
-// The frame's metric values are placeholders copied from the Execution tab (Gross PnL "96.42%",
-// Total Cost "3.21" — the same figures as Fill Rate and Order-to-trade Ratio there), so currency
-// fields are formatted as currency here rather than reproduced as percentages.
+// Still mocked: Capacity Curve.
 import { useMemo, useState } from "react";
 import type { EChartsOption } from "echarts";
 
 import { BaseChart } from "@/components/charts/base-chart";
-import { useRunSummary, useRunTurnover } from "@/hooks/api/use-runs";
+import { useRunCostCurve, useRunSummary, useRunTurnover } from "@/hooks/api/use-runs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { lastCumulative, toCostSeries } from "@/lib/cost-curve";
+import { aggregateTurnover, type TurnoverPeriod } from "@/lib/turnover-curve";
 import { cn } from "@/lib/utils";
 import { ChartCard, MockNote } from "./results-chart-card";
 
-// The five cost components, in the design's order, each with its 135° swatch gradient
-// (Figma 14180:39849 and siblings).
-const COST_SERIES = [
-  { key: "Exchange Fee", from: "#cff8ea", to: "#67e1c0" },
-  { key: "Maker Rebate", from: "#e9e8ff", to: "#b7b1ff" },
-  { key: "Total Fee", from: "#cfdbf8", to: "#2d84ff" },
-  { key: "Funding Fee", from: "#ffe3d6", to: "#ff9783" },
-  { key: "Slippage cost", from: "#fffbd6", to: "#f1c617" },
-] as const;
+// Figma 14180:39849 "Total Fee" swatch — the only component the cost-curve can populate.
+const FEE_FROM = "#cfdbf8";
+const FEE_TO = "#2d84ff";
 
 const YELLOW = "#f1c617";
 const GREEN = "#67e1c1";
@@ -55,10 +48,6 @@ const grad = (from: string, to: string) => ({
   ],
 });
 
-// ---------------------------------------------------------------------------
-// Metric row (Figma 14180:18287) — one row of four.
-// ---------------------------------------------------------------------------
-
 function MetricCell({ label, value, tone }: { label: string; value: string; tone?: "green" }) {
   return (
     <div className="flex min-w-0 flex-col gap-1">
@@ -69,28 +58,6 @@ function MetricCell({ label, value, tone }: { label: string; value: string; tone
     </div>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Mock series — seeded, so server and client renders agree (no Math.random).
-// ---------------------------------------------------------------------------
-
-const MONTHS = ["Jan 2025", "Feb 2025", "Mar 2025", "Apr 2025", "May 2025", "Jun 2025", "Jul 2025"];
-const CUM_LABELS = Array.from({ length: 56 }, (_, i) => MONTHS[Math.floor((i / 56) * MONTHS.length)]);
-
-// Cumulative cost accrues toward a plateau; each component ramps at its own rate. Negative,
-// because the design plots cost as drag on return (0% down to about -8%).
-const CUM_SERIES = COST_SERIES.map((s, si) =>
-  CUM_LABELS.map((_, i) => {
-    const ramp = 1 - Math.exp(-i / 12);
-    const wobble = Math.sin(i * 0.5 + si) * 0.06;
-    return Number((-(0.5 + si * 0.35) * ramp + wobble).toFixed(3));
-  }),
-);
-
-const TURNOVER_PLACEHOLDER = Array.from({ length: 40 }, (_, i) => ({
-  label: MONTHS[Math.floor((i / 40) * MONTHS.length)],
-  value: Math.round(20 + 70 * Math.abs(Math.sin(i * 1.1)) * Math.exp(-i / 26)),
-}));
 
 const CAPACITY_LABELS = ["1M", "5M", "10M", "20M", "30M", "40M", "50M", "60M"];
 // Sharpe decays as deployed capital grows — flat, then a knee, then a steep fall.
@@ -130,19 +97,24 @@ function PillSelect({
   );
 }
 
-const pad = (n: number) => String(n).padStart(2, "0");
-const dayLabel = (ts: number) => {
-  const d = new Date(ts);
-  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${String(d.getFullYear()).slice(2)}`;
-};
-
 export function CostCapacityView({ runId }: { runId?: string }) {
   const { data: summary } = useRunSummary(runId);
-  const { data: turnover = [], isLoading: turnoverLoading } = useRunTurnover(runId);
+  const {
+    data: costCurve = [],
+    isLoading: costLoading,
+    isError: costError,
+  } = useRunCostCurve(runId);
+  const {
+    data: turnover = [],
+    isLoading: turnoverLoading,
+    isError: turnoverError,
+  } = useRunTurnover(runId);
   const [period, setPeriod] = useState<string>("Daily");
   const [capacityMetric, setCapacityMetric] = useState<string>("Sharpe");
 
-  const totalCost = summary?.total_fee ?? null;
+  const curveTotal = lastCumulative(costCurve);
+  // Prefer the curve's closing cumulative when present; summary.total_fee is the same aggregate.
+  const totalCost = curveTotal ?? summary?.total_fee ?? null;
   const netPnl = summary?.net_pnl ?? null;
   const grossPnl = netPnl == null || totalCost == null ? null : netPnl + totalCost;
   const costDrag =
@@ -150,11 +122,9 @@ export function CostCapacityView({ runId }: { runId?: string }) {
       ? DASH
       : `${((summary.cost_bps / summary.edge_gross_bps) * 100).toFixed(2)}%`;
 
-  // The split is mocked; anchor it to the real total so the donut centre stays truthful.
   const breakdown = useMemo(() => {
-    const weights = [0.358, -0.145, 0.358, 0.358, 0.358];
-    const base = totalCost ?? 60_125;
-    return COST_SERIES.map((s, i) => ({ ...s, value: base * weights[i], share: weights[i] }));
+    if (totalCost == null || !Number.isFinite(totalCost) || totalCost === 0) return [];
+    return [{ key: "Total Fee", from: FEE_FROM, to: FEE_TO, value: totalCost, share: 1 }];
   }, [totalCost]);
 
   const donutOption = useMemo<EChartsOption>(
@@ -168,7 +138,6 @@ export function CostCapacityView({ runId }: { runId?: string }) {
           avoidLabelOverlap: false,
           label: { show: false },
           labelLine: { show: false },
-          // Magnitudes only — a negative rebate can't occupy negative arc length.
           data: breakdown.map((b) => ({
             name: b.key,
             value: Math.abs(b.value),
@@ -180,41 +149,53 @@ export function CostCapacityView({ runId }: { runId?: string }) {
     [breakdown],
   );
 
+  const costSeries = useMemo(() => toCostSeries(costCurve), [costCurve]);
+
   const cumulativeOption = useMemo<EChartsOption>(
     () => ({
-      // No ECharts legend — five labels can't lay out inside a ~180px plot without colliding, and
-      // its wrapping isn't controllable. Rendered as HTML beneath the chart instead.
       grid: { left: 8, right: 8, top: 16, bottom: 8, containLabel: true },
-      tooltip: { trigger: "axis", valueFormatter: (v: unknown) => `${Number(v).toFixed(2)}%` },
-      // hideOverlap rather than a fixed interval: this card is ~340px wide in the side panel,
-      // less than half the 793px it was designed at, and a fixed stride collides there.
-      xAxis: { type: "category", data: CUM_LABELS, boundaryGap: false, axisLabel: { hideOverlap: true } },
-      yAxis: { type: "value", axisLabel: { formatter: "{value}%" } },
-      series: COST_SERIES.map((s, i) => ({
-        name: s.key,
-        type: "line" as const,
-        stack: "cost",
-        data: CUM_SERIES[i],
-        smooth: false,
-        showSymbol: false,
-        symbol: "none",
-        lineStyle: { width: 1, color: s.to },
-        itemStyle: { color: s.to },
-        areaStyle: { color: grad(s.from, s.to), opacity: 0.55 },
-      })),
+      tooltip: {
+        trigger: "axis",
+        valueFormatter: (v: unknown) => money(Number(v)),
+      },
+      xAxis: {
+        type: "category",
+        data: costSeries.map((p) => p.label),
+        boundaryGap: false,
+        axisLabel: { hideOverlap: true },
+      },
+      yAxis: { type: "value", axisLabel: { formatter: (v: string | number) => money(Number(v)) } },
+      series: [
+        {
+          name: "Total Fee",
+          type: "line" as const,
+          data: costSeries.map((p) => p.cumulative),
+          smooth: false,
+          showSymbol: false,
+          symbol: "none",
+          lineStyle: { width: 1.5, color: FEE_TO },
+          itemStyle: { color: FEE_TO },
+          areaStyle: { color: grad(FEE_FROM, FEE_TO), opacity: 0.55 },
+        },
+      ],
     }),
-    [],
+    [costSeries],
   );
 
-  const { turnoverSeries, turnoverIsPlaceholder } = useMemo(() => {
-    if (turnover.length > 0) {
-      return {
-        turnoverSeries: turnover.map((p) => ({ label: dayLabel(Number(p.ts)), value: Number(p.turnover ?? 0) })),
-        turnoverIsPlaceholder: false,
-      };
-    }
-    return { turnoverSeries: TURNOVER_PLACEHOLDER, turnoverIsPlaceholder: true };
-  }, [turnover]);
+  const costNote = !runId
+    ? "Pick a run"
+    : costLoading
+      ? "Loading…"
+      : costError
+        ? "Cost curve unavailable"
+        : costSeries.length === 0
+          ? "No cost points"
+          : undefined;
+
+  const turnoverSeries = useMemo(
+    () => aggregateTurnover(turnover, period as TurnoverPeriod),
+    [turnover, period],
+  );
 
   const turnoverOption = useMemo<EChartsOption>(
     () => ({
@@ -238,6 +219,16 @@ export function CostCapacityView({ runId }: { runId?: string }) {
     }),
     [turnoverSeries],
   );
+
+  const turnoverNote = !runId
+    ? "Pick a run"
+    : turnoverLoading
+      ? "Loading…"
+      : turnoverError
+        ? "Turnover unavailable"
+        : turnoverSeries.length === 0
+          ? "No turnover points"
+          : undefined;
 
   const capacityOption = useMemo<EChartsOption>(
     () => ({
@@ -288,54 +279,58 @@ export function CostCapacityView({ runId }: { runId?: string }) {
       </div>
 
       <div className="grid min-w-0 gap-4 lg:grid-cols-2">
-        <ChartCard title="Cost Breakdown (USDT)" controls={<MockNote>Split is placeholder</MockNote>}>
-          {/* Wraps rather than crushing the legend: the design lays this out at 388px, but in the
-              side panel the card can be under 340px, where ring + legend don't fit on one line. */}
+        <ChartCard title="Cost Breakdown (USDT)" controls={costNote ? <MockNote>{costNote}</MockNote> : undefined}>
           <div className="flex min-w-0 flex-wrap items-center justify-center gap-4">
             <div className="relative size-[148px] shrink-0">
               <BaseChart option={donutOption} style={{ height: 148 }} />
-              {/* Centre label sits above the ring rather than inside the canvas, so it stays crisp. */}
               <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1">
                 <span className="text-[10px] leading-4 text-muted-foreground">Total Cost</span>
-                <span className="text-sm leading-[18px] font-semibold text-white">{money(totalCost ?? 60_125)}</span>
+                <span className="text-sm leading-[18px] font-semibold text-white">{money(totalCost)}</span>
               </div>
             </div>
             <div className="flex min-w-[192px] flex-1 flex-col gap-2.5">
-              {breakdown.map((b) => (
-                <div key={b.key} className="flex min-w-0 items-center gap-2">
-                  <span className="flex min-w-0 flex-1 items-center gap-1">
-                    <span
-                      className="size-3 shrink-0 rounded"
-                      style={{ backgroundImage: `linear-gradient(135deg, ${b.from} 0%, ${b.to} 100%)` }}
-                    />
-                    <span className="truncate text-[10px] leading-[14px] text-muted-foreground">{b.key}</span>
-                  </span>
-                  <span className="flex shrink-0 items-center gap-1">
-                    <span className="text-xs leading-[18px] font-semibold text-white">
-                      {Math.round(b.value).toLocaleString("en-US")}
+              {breakdown.length === 0 ? (
+                <span className="text-[10px] leading-[14px] text-muted-foreground">
+                  Aggregate fees only — no component split on /cost-curve.
+                </span>
+              ) : (
+                breakdown.map((b) => (
+                  <div key={b.key} className="flex min-w-0 items-center gap-2">
+                    <span className="flex min-w-0 flex-1 items-center gap-1">
+                      <span
+                        className="size-3 shrink-0 rounded"
+                        style={{ backgroundImage: `linear-gradient(135deg, ${b.from} 0%, ${b.to} 100%)` }}
+                      />
+                      <span className="truncate text-[10px] leading-[14px] text-muted-foreground">{b.key}</span>
                     </span>
-                    <span className="text-[10px] leading-[14px] text-muted-foreground">
-                      ({(b.share * 100).toFixed(1)}%)
+                    <span className="flex shrink-0 items-center gap-1">
+                      <span className="text-xs leading-[18px] font-semibold text-white">
+                        {Math.round(b.value).toLocaleString("en-US")}
+                      </span>
+                      <span className="text-[10px] leading-[14px] text-muted-foreground">
+                        ({(b.share * 100).toFixed(1)}%)
+                      </span>
                     </span>
-                  </span>
-                </div>
-              ))}
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </ChartCard>
 
-        <ChartCard title="Cost Over Time (Cumulative)" controls={<MockNote>Placeholder series</MockNote>}>
+        <ChartCard
+          title="Cost Over Time (Cumulative)"
+          controls={costNote ? <MockNote>{costNote}</MockNote> : undefined}
+        >
           <BaseChart option={cumulativeOption} style={{ height: 212 }} />
           <div className="mt-2 flex flex-wrap justify-center gap-x-3 gap-y-1">
-            {COST_SERIES.map((s) => (
-              <span key={s.key} className="flex items-center gap-1">
-                <span
-                  className="size-2.5 shrink-0 rounded-sm"
-                  style={{ backgroundImage: `linear-gradient(135deg, ${s.from} 0%, ${s.to} 100%)` }}
-                />
-                <span className="text-[10px] leading-[14px] whitespace-nowrap text-muted-foreground">{s.key}</span>
-              </span>
-            ))}
+            <span className="flex items-center gap-1">
+              <span
+                className="size-2.5 shrink-0 rounded-sm"
+                style={{ backgroundImage: `linear-gradient(135deg, ${FEE_FROM} 0%, ${FEE_TO} 100%)` }}
+              />
+              <span className="text-[10px] leading-[14px] whitespace-nowrap text-muted-foreground">Total Fee</span>
+            </span>
           </div>
         </ChartCard>
       </div>
@@ -345,11 +340,7 @@ export function CostCapacityView({ runId }: { runId?: string }) {
           title="Turn over time"
           controls={
             <>
-              {turnoverLoading ? (
-                <MockNote>Loading…</MockNote>
-              ) : turnoverIsPlaceholder ? (
-                <MockNote>Placeholder — /turnover-curve returns no points</MockNote>
-              ) : null}
+              {turnoverNote && <MockNote>{turnoverNote}</MockNote>}
               <PillSelect value={period} onChange={setPeriod} options={PERIOD_OPTIONS} />
             </>
           }

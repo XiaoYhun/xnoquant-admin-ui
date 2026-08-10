@@ -16,7 +16,6 @@ import { canMutate } from "@/lib/rbac";
 import { useMarkets } from "@/hooks/api/use-markets";
 import { useUpdateEditor } from "@/hooks/api/use-strategy-builder";
 import { useHftStrategy, useUpdateHftStrategy, type HftStrategyType } from "@/hooks/api/use-hft-strategies";
-import { useValidateScript, useValidateFeatures } from "@/hooks/api/use-hft-features";
 import { useConsoleLog } from "@/store/console-log-store";
 
 // Toolbar row above the code editor — Figma node 13964:52172 (inside 13964:50200).
@@ -257,7 +256,7 @@ function SettingsMenu({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         {/* The market/type pill is the Settings trigger — it displays exactly the fields the
-            popover edits. Flat border/background, matching the Validate dropdown beside it.
+            popover edits. Flat border/background.
             Falls back to the cog before the strategy's values have loaded. */}
         <button
           type="button"
@@ -304,7 +303,6 @@ export function Toolbar({
   market,
   universe,
   trainRatio,
-  code = "",
   canWrite = true,
   isDirty = false,
   onSave,
@@ -319,7 +317,6 @@ export function Toolbar({
   market?: string;
   universe?: string;
   trainRatio?: number;
-  code?: string;
   canWrite?: boolean;
   isDirty?: boolean;
   onSave?: () => Promise<void>;
@@ -360,33 +357,6 @@ export function Toolbar({
     } catch (err) {
       setDraftName(name);
       addLog("error", `Rename failed: ${resourceErrorMessage(err, "this strategy")}`);
-    }
-  };
-
-  const [validateOpen, setValidateOpen] = useState(false);
-  const validateScript = useValidateScript();
-  const validateFeatures = useValidateFeatures();
-  const strategyFeatures = hftStrategy?.features ?? [];
-  const validating = validateScript.isPending || validateFeatures.isPending;
-
-  // Both validate endpoints are unscoped (no :id in the path), so they also work on a lab-mate's
-  // script — useful for reviewing a shared strategy you cannot save.
-  const runValidation = async (what: "script" | "features") => {
-    try {
-      const errors =
-        what === "script"
-          ? await validateScript.mutateAsync({ code, features: strategyFeatures, strategyType: hftType })
-          : await validateFeatures.mutateAsync(strategyFeatures);
-      if (errors.length === 0) {
-        addLog("success", what === "script" ? "Script is valid" : "Features are valid");
-        return;
-      }
-      for (const e of errors) {
-        const where = e.name ?? (e.index != null ? `#${e.index}` : "");
-        addLog("error", where ? `${where}: ${e.error}` : e.error);
-      }
-    } catch (err) {
-      addLog("error", `Validation failed: ${resourceErrorMessage(err, "this strategy")}`);
     }
   };
 
@@ -503,44 +473,6 @@ export function Toolbar({
           onSettingsSaved={onSettingsSaved}
         />
         <IconButton icon={Copy} label="Duplicate" />
-        {type === "hft" && (
-          <Popover open={validateOpen} onOpenChange={setValidateOpen}>
-            <PopoverTrigger asChild>
-              <button
-                type="button"
-                disabled={validating}
-                className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-2 rounded-[40px] border border-border bg-background px-3 text-xs text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {validating ? "Validating…" : "Validate"}
-                <AltArrowDown weight="Outline" className="size-4" />
-              </button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-44 p-1">
-              <button
-                type="button"
-                disabled={validating}
-                onClick={() => {
-                  setValidateOpen(false);
-                  runValidation("script");
-                }}
-                className={"flex w-full cursor-pointer items-center rounded-md px-3 py-2 text-left text-xs text-white transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"}
-              >
-                Validate script
-              </button>
-              <button
-                type="button"
-                disabled={validating}
-                onClick={() => {
-                  setValidateOpen(false);
-                  runValidation("features");
-                }}
-                className={"flex w-full cursor-pointer items-center rounded-md px-3 py-2 text-left text-xs text-white transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"}
-              >
-                Validate features
-              </button>
-            </PopoverContent>
-          </Popover>
-        )}
         {/* Save/Simulate both PUT the strategy, which 404s for a lab-mate's share — hide them there. */}
         {canWrite && (
           <>

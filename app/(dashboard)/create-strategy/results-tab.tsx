@@ -54,10 +54,14 @@ export function ResultsTab({
       </div>
 
       <div className="min-w-0">
-        {view === "Overview" && <OverviewView />}
+        {view === "Overview" && <OverviewView runId={selectedRun?.id} />}
         {view === "Performance" && <PerformanceView />}
-        {view === "Risk" && <RiskView />}
-        {view === "Execution" && <ExecutionView />}
+        {view === "Risk" && (
+          <RiskView runId={selectedRun?.id} isLive={selectedRun?.status === "running"} />
+        )}
+        {view === "Execution" && (
+          <ExecutionView runId={selectedRun?.id} isLive={selectedRun?.status === "running"} />
+        )}
         {view === "Cost & Capacity" && <CostCapacityView runId={selectedRun?.id} />}
         {view === "Latency" && <LatencyView />}
       </div>

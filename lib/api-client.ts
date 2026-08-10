@@ -45,13 +45,12 @@ export function resourceErrorMessage(err: unknown, resource = "this section"): s
   return err instanceof Error && err.message ? err.message : "Something went wrong.";
 }
 /**
- * React Query retry predicate. A 403 means the caller has no access to this resource family
- * (docs/plans/rbac-frontend-plan.html §3) — that can't change between attempts, so retrying just
- * burns round-trips and delays the "You don't have access to …" message. Everything else keeps
- * the normal budget.
+ * React Query retry predicate. 403 (no access to the family) and 404 (missing / hidden from
+ * you — see docs/plans/rbac-frontend-plan.html §3) are terminal: retrying can't change them and
+ * only delays the empty/error UI. Everything else keeps the normal budget.
  */
 export function retryUnlessForbidden(failureCount: number, error: unknown, max = 3): boolean {
-  if (error instanceof ApiError && error.status === 403) return false;
+  if (error instanceof ApiError && (error.status === 403 || error.status === 404)) return false;
   return failureCount < max;
 }
 

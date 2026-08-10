@@ -116,9 +116,7 @@ export function StartLiveTradingDialog({
       </DialogTrigger>
       <DialogContent className="max-w-[480px] gap-0 rounded-[20px] border-border bg-background p-0">
         <div className="bg-surface px-4 py-2.5">
-          <DialogTitle className="bg-gradient-to-b from-[#fffbd6] to-[#f1c617] bg-clip-text text-lg font-semibold text-transparent">
-            Start Live Trading
-          </DialogTitle>
+          <DialogTitle className="text-lg font-semibold text-white">Start Live Trading</DialogTitle>
         </div>
 
         <div className="flex flex-col gap-3 p-4">
@@ -176,7 +174,7 @@ export function StartLiveTradingDialog({
 
           <div className="flex items-center gap-3 rounded-xl border border-[#fffbd6]/50 bg-[#f1c617]/20 p-2">
             <DangerTriangle weight="Outline" className="size-6 shrink-0 text-[#f1c617]" />
-            <p className="bg-gradient-to-b from-[#fffbd6] to-[#f1c617] bg-clip-text text-sm leading-5 text-transparent">
+            <p className="text-sm leading-5 text-[#f1c617]">
               Starting live trade will execute real orders on the market. Make sure the bot configuration is correct
               before proceeding.
             </p>

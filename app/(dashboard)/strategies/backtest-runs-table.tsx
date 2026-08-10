@@ -19,7 +19,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Sparkline } from "@/components/charts/sparkline";
+import { PlaybackSpeedIcon } from "@/components/icons/playback-speed";
 import { formatPercent, shortRunId } from "@/lib/utils";
 import { resourceErrorMessage } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
@@ -39,14 +41,14 @@ const STOPPABLE = new Set(["running", "paused", "pending"]);
 const COLS = [
   { key: "status", label: "Status", w: "8%", align: "left" },
   { key: "id", label: "ID", w: "10%", align: "left" },
-  { key: "name", label: "Strategy Name", w: "20%", align: "left" },
+  { key: "name", label: "Strategy Name", w: "19%", align: "left" },
   { key: "owner", label: "Owner", w: "6%", align: "left" },
-  { key: "symbol", label: "Symbol/Market", w: "17%", align: "left" },
+  { key: "symbol", label: "Symbol/Market", w: "16%", align: "left" },
   { key: "pnl", label: "PnL chart", w: "8%", align: "left" },
   { key: "return", label: "Return", w: "8%", align: "right" },
   { key: "sharpe", label: "Sharpe", w: "6%", align: "right" },
   { key: "mdd", label: "Max drawdown", w: "8%", align: "right" },
-  { key: "action", label: "Action", w: "7%", align: "right" },
+  { key: "action", label: "Action", w: "9%", align: "right" },
 ] as const;
 
 export function BacktestRunsTable({
@@ -175,7 +177,26 @@ export function BacktestRunsTable({
                   {!writable ? (
                     <span className="text-xs text-muted-foreground">—</span>
                   ) : (
-                    <div className="flex items-center justify-end gap-1">
+                    <div className="flex items-center justify-end gap-2">
+                      {/* Figma 14008:35644 — Start paper trading (Playback Speed). Click is UI-only for now. */}
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label={`Start paper trading for ${r.strategyName}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              addLog("info", `Start paper trading — not wired yet ("${r.strategyName}")`);
+                            }}
+                            className="inline-flex size-[30px] cursor-pointer items-center justify-center rounded-lg bg-surface p-1.5 transition-opacity hover:opacity-90"
+                          >
+                            <span className="size-[18px] overflow-hidden">
+                              <PlaybackSpeedIcon className="size-full" />
+                            </span>
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>Start paper trading</TooltipContent>
+                      </Tooltip>
                       {STOPPABLE.has(r.status) && (
                         <button
                           type="button"

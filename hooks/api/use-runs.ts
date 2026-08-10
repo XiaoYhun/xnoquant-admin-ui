@@ -1,8 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPost, retryUnlessForbidden } from "@/lib/api-client";
 import { HFT_API_URL, USE_MOCK } from "@/lib/constant";
+import { normalizeCostCurve, type CostPoint } from "@/lib/cost-curve";
+import { normalizeTurnover, type TurnoverPoint } from "@/lib/turnover-curve";
 import type { EquityPoint, Run, RunPage, RunSummary } from "@/types/domain";
 import type { components } from "@/types/api/hft";
+
+export type { TurnoverPoint, CostPoint };
 
 // Request body for `POST /api/runs` (simulate-modal's launch form).
 // `otp_passcode` (DNSE live runs — see `POST /api/accounts/{id}/dnse/send-otp`) isn't in the
@@ -81,7 +85,7 @@ export function useRunSummary(id: string | undefined) {
     enabled: !!id,
     // The dev summary/equity endpoints 500 intermittently; keep retries (they recover) but with a
     // short fixed backoff so the detail panel's "Loading results…" settles in ~1s rather than the
-    // default exponential ~7s. A 403 still fails fast — see retryUnlessForbidden.
+    // default exponential ~7s. 403/404 still fail fast — see retryUnlessForbidden.
     retry: retryUnlessForbidden,
     retryDelay: 400,
   });
@@ -164,18 +168,35 @@ export function useLaunchRun() {
 // `GET /api/runs/{id}/turnover-curve` is undocumented: it is absent from the OpenAPI spec, so
 // `gen:types` can't emit a type for it, but it is live on the API. Verified against dev — it
 // returns 200 with a JSON array and reads the same `pnl-*.parquet` the equity curve does (a run
-// with a zero-byte parquet fails both with an identical error). Every run currently answers `[]`,
-// so callers must be able to fall back.
-export type TurnoverPoint = { ts: number; turnover: number };
+// with a zero-byte parquet fails both with an identical error). Response shape is normalized
+// defensively in `lib/turnover-curve.ts` because the contract isn't in OpenAPI.
 
-export function fetchRunTurnover(id: string): Promise<TurnoverPoint[]> {
-  return apiGet<TurnoverPoint[]>(`${HFT_API_URL}/api/runs/${id}/turnover-curve`);
+export async function fetchRunTurnover(id: string): Promise<TurnoverPoint[]> {
+  const raw = await apiGet<unknown>(`${HFT_API_URL}/api/runs/${id}/turnover-curve`);
+  return normalizeTurnover(raw);
 }
 
 export function useRunTurnover(id: string | undefined) {
   return useQuery({
     queryKey: ["run-turnover", id],
     queryFn: () => fetchRunTurnover(id as string),
+    enabled: !!id,
+    retry: retryUnlessForbidden,
+    retryDelay: 400,
+  });
+}
+
+// `GET /api/runs/{id}/cost-curve` — live OpenAPI `CostPoint { ts, fee, cumulative }`. Same parquet
+// source as equity/turnover; many runs currently answer `[]` even when equity has points.
+export async function fetchRunCostCurve(id: string): Promise<CostPoint[]> {
+  const raw = await apiGet<unknown>(`${HFT_API_URL}/api/runs/${id}/cost-curve`);
+  return normalizeCostCurve(raw);
+}
+
+export function useRunCostCurve(id: string | undefined) {
+  return useQuery({
+    queryKey: ["run-cost-curve", id],
+    queryFn: () => fetchRunCostCurve(id as string),
     enabled: !!id,
     retry: retryUnlessForbidden,
     retryDelay: 400,

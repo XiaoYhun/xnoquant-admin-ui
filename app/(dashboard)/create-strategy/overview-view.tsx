@@ -1,13 +1,15 @@
 "use client";
 // OWNED BY: Results "Overview" agent — Figma node 14175:48200.
 // 6 metric cards w/ sparklines → Equity Curve panel → Trading history table.
+//
+// Trading history is `GET /api/runs/{id}/trades` via useTradeHistory. Columns match TradeRow:
+// Time · Symbol · Side · Price · Qty · Mid · Outcome. Metric cards + equity curve stay mocked.
 import { useState } from "react";
 import type { EChartsOption } from "echarts";
 import { MaximizeSquareMinimalistic } from "@solar-icons/react";
 
 import { cn } from "@/lib/utils";
 import { BaseChart } from "@/components/charts/base-chart";
-import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -17,6 +19,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useTradeHistory } from "@/hooks/api/use-paper-runs";
+import type { TradeHistoryRow } from "@/lib/mock/paper-runs";
+import { resourceErrorMessage } from "@/lib/api-client";
 
 const GREEN = "#67e1c1";
 const RED = "#ff135b";
@@ -166,30 +171,40 @@ const STATS: { label: string; value: string; className?: string }[] = [
   { label: "Fill Rate", value: "96.42%", className: GREEN_TEXT },
 ];
 
-// ---- trading history rows ----
-interface TradeRow {
-  date: string;
-  time: string;
-  symbol: string;
-  side: "Buy" | "Sell";
-  price: string;
-  quantity: string;
-  fee: string;
-  role: "Maker" | "Taker";
-  realizedProfit: string;
+const RANGES = ["All", "1M", "3M", "1W"] as const;
+
+const nf = (n: number) =>
+  n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+function splitFillTime(iso: string): { date: string; time: string } {
+  const [date, rest] = iso.split("T");
+  const time = rest?.replace("Z", "").slice(0, 12) ?? "";
+  return { date: date ?? iso, time };
 }
 
-const TRADE_ROWS: TradeRow[] = [
-  { date: "2026-06-11", time: "09:15:23.456", symbol: "ETHUSDC", side: "Buy", price: "2,335.40", quantity: "0.015 ETH", fee: "0.01216822 USDC", role: "Maker", realizedProfit: "0.09555000 USDC" },
-  { date: "2026-06-11", time: "09:15:20.212", symbol: "ETHUSDC", side: "Buy", price: "2,334.85", quantity: "0.022 ETH", fee: "0.01542420 USDC", role: "Maker", realizedProfit: "0.10820000 USDC" },
-  { date: "2026-06-11", time: "09:15:18.009", symbol: "ETHUSDC", side: "Sell", price: "2,336.10", quantity: "0.018 ETH", fee: "0.02523480 USDC", role: "Taker", realizedProfit: "0.07230000 USDC" },
-  { date: "2026-06-11", time: "09:15:14.771", symbol: "ETHUSDC", side: "Buy", price: "2,333.95", quantity: "0.030 ETH", fee: "0.02100555 USDC", role: "Maker", realizedProfit: "0.15400000 USDC" },
-  { date: "2026-06-11", time: "09:15:11.523", symbol: "ETHUSDC", side: "Sell", price: "2,337.25", quantity: "0.012 ETH", fee: "0.01682700 USDC", role: "Taker", realizedProfit: "0.05120000 USDC" },
-  { date: "2026-06-11", time: "09:15:08.340", symbol: "ETHUSDC", side: "Buy", price: "2,335.75", quantity: "0.025 ETH", fee: "0.01750313 USDC", role: "Maker", realizedProfit: "0.12860000 USDC" },
-  { date: "2026-06-11", time: "09:15:05.118", symbol: "ETHUSDC", side: "Buy", price: "2,336.40", quantity: "0.019 ETH", fee: "0.01330228 USDC", role: "Maker", realizedProfit: "0.09780000 USDC" },
-];
+function TradeHistoryTableRow({ t }: { t: TradeHistoryRow }) {
+  const buy = /buy|long/i.test(t.side);
+  const { date, time } = splitFillTime(t.time);
 
-const RANGES = ["All", "1M", "3M", "1W"] as const;
+  return (
+    <TableRow>
+      <TableCell>
+        <div className="flex flex-col text-white">
+          <span>{date}</span>
+          <span>{time}</span>
+        </div>
+      </TableCell>
+      <TableCell className="text-white">{t.symbol}</TableCell>
+      <TableCell>
+        <span className={cn("font-semibold", buy ? GREEN_TEXT : RED_TEXT)}>{t.side}</span>
+      </TableCell>
+      <TableCell className="text-right text-white">{nf(t.price)}</TableCell>
+      <TableCell className="text-right text-white">{nf(t.qty)}</TableCell>
+      <TableCell className="text-right text-white">{nf(t.mid)}</TableCell>
+      <TableCell className="text-white">{t.outcome}</TableCell>
+    </TableRow>
+  );
+}
 
 // ---- mini card charts: flat static line/area/bars with NO end-dot. The card sparklines
 // in Figma (node 14175:90204 chart) are plain SVG lines/areas — the shared `Sparkline`'s
@@ -344,8 +359,9 @@ function equityChartOption(): EChartsOption {
   };
 }
 
-export function OverviewView() {
+export function OverviewView({ runId }: { runId?: string }) {
   const [range, setRange] = useState<string>("All");
+  const { data: trades = [], isLoading, isError, error } = useTradeHistory(runId);
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
@@ -409,45 +425,34 @@ export function OverviewView() {
           <ExpandButton label="Expand trading history" />
         </div>
         <div className="bg-[#0a0e14]">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Time</TableHead>
-                <TableHead>Symbol</TableHead>
-                <TableHead>Side</TableHead>
-                <TableHead>Price</TableHead>
-                <TableHead>Quantity</TableHead>
-                <TableHead>Fee</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead>Realized Profit</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {TRADE_ROWS.map((t, i) => (
-                <TableRow key={i}>
-                  <TableCell>
-                    <div className="flex flex-col text-white">
-                      <span>{t.date}</span>
-                      <span>{t.time}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-white">{t.symbol}</TableCell>
-                  <TableCell>
-                    <span className={cn("font-semibold", t.side === "Buy" ? GREEN_TEXT : RED_TEXT)}>{t.side}</span>
-                  </TableCell>
-                  <TableCell className="text-white">{t.price}</TableCell>
-                  <TableCell className="text-white">{t.quantity}</TableCell>
-                  <TableCell className="text-white">{t.fee}</TableCell>
-                  <TableCell>
-                    <Badge variant="secondary" className="rounded-[12px] px-3 py-1 text-white">
-                      {t.role}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-white">{t.realizedProfit}</TableCell>
+          {!runId ? (
+            <p className="p-4 text-sm text-muted-foreground">Pick a run to load trades.</p>
+          ) : isLoading ? (
+            <p className="p-4 text-sm text-muted-foreground">Loading&hellip;</p>
+          ) : isError ? (
+            <p className="p-4 text-sm text-destructive">{resourceErrorMessage(error, "this run's trades")}</p>
+          ) : trades.length === 0 ? (
+            <p className="p-4 text-sm text-muted-foreground">No trades yet.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Time</TableHead>
+                  <TableHead>Symbol</TableHead>
+                  <TableHead>Side</TableHead>
+                  <TableHead className="text-right">Price</TableHead>
+                  <TableHead className="text-right">Qty</TableHead>
+                  <TableHead className="text-right">Mid</TableHead>
+                  <TableHead>Outcome</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {trades.map((t) => (
+                  <TradeHistoryTableRow key={t.id} t={t} />
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </div>
       </div>
     </div>

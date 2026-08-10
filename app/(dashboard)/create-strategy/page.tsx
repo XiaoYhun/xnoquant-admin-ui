@@ -204,7 +204,6 @@ function StrategyBuilder({ mode, initialEditors }: { mode: Mode; initialEditors:
         market={active?.market}
         universe={active?.universe}
         trainRatio={active?.train_ratio}
-        code={active?.code ?? ""}
         canWrite={canWrite}
         isDirty={!!active && active.code !== (savedCodes[active.id] ?? "")}
         onSave={handleSave}

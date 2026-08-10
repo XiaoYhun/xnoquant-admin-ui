@@ -3,7 +3,7 @@
 // the run-history picker on the right. The old "Period:" row (Train/Test/Simulate/Paper Trade) is
 // gone from the design. Each view lives in its own file. Everything here stays width-responsive:
 // min-w-0 so the panel never forces horizontal overflow.
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { OverviewView } from "./overview-view";
 import { PerformanceView } from "./performance-view";
@@ -13,6 +13,8 @@ import { CostCapacityView } from "./cost-capacity-view";
 import { LatencyView } from "./latency-view";
 import { MftResultsView } from "./mft-results-view";
 import { RunHistoryPicker } from "./run-history-picker";
+import { LiveSnapshotProvider } from "@/hooks/api/use-run-live-snapshot";
+import { symbolNamesOf, useRun } from "@/hooks/api/use-runs";
 import type { Run } from "@/types/domain";
 
 // The Figma tab bar (14876:146506) shows five; Latency is kept on the end as a sixth — its
@@ -35,6 +37,19 @@ export function ResultsTab({
   const [view, setView] = useState<string>("Overview");
   // Which run the views describe. Undefined = the picker's default (the newest run).
   const [selectedRun, setSelectedRun] = useState<Run | undefined>(undefined);
+  // Drop the selection when the strategy tab changes: the picker re-defaults to the new strategy's
+  // newest run, but it only announces that default when nothing is selected. Keeping the old run
+  // here left the label showing one run while every view queried the previous strategy's run.
+  const [prevStrategyId, setPrevStrategyId] = useState(strategyId);
+  if (prevStrategyId !== strategyId) {
+    setPrevStrategyId(strategyId);
+    setSelectedRun(undefined);
+  }
+  // Only a running run publishes live snapshots; anything else reads the persisted artifacts.
+  const isLive = selectedRun?.status === "running";
+  // Frames name symbols by dense index only, so the manifest supplies the tickers.
+  const { data: run } = useRun(isLive ? selectedRun?.id : undefined);
+  const symbolNames = useMemo(() => symbolNamesOf(run), [run]);
 
   if (variant === "mft") return <MftResultsView strategyId={strategyId} />;
 
@@ -53,18 +68,21 @@ export function ResultsTab({
         <RunHistoryPicker strategyId={strategyId} selectedRunId={selectedRun?.id} onSelect={setSelectedRun} />
       </div>
 
-      <div className="min-w-0">
-        {view === "Overview" && <OverviewView runId={selectedRun?.id} />}
-        {view === "Performance" && <PerformanceView />}
-        {view === "Risk" && (
-          <RiskView runId={selectedRun?.id} isLive={selectedRun?.status === "running"} />
-        )}
-        {view === "Execution" && (
-          <ExecutionView runId={selectedRun?.id} isLive={selectedRun?.status === "running"} />
-        )}
-        {view === "Cost & Capacity" && <CostCapacityView runId={selectedRun?.id} />}
-        {view === "Latency" && <LatencyView />}
-      </div>
+      {/*
+        One `/live/stream` subscription for the whole tab. It lives above the view switch so
+        switching views doesn't tear the connection down and lose the accumulated Sharpe series,
+        and so six views share one connection instead of opening six.
+      */}
+      <LiveSnapshotProvider runId={selectedRun?.id} isLive={isLive} symbolNames={symbolNames}>
+        <div className="min-w-0">
+          {view === "Overview" && <OverviewView runId={selectedRun?.id} />}
+          {view === "Performance" && <PerformanceView runId={selectedRun?.id} />}
+          {view === "Risk" && <RiskView runId={selectedRun?.id} isLive={isLive} />}
+          {view === "Execution" && <ExecutionView runId={selectedRun?.id} isLive={isLive} />}
+          {view === "Cost & Capacity" && <CostCapacityView runId={selectedRun?.id} />}
+          {view === "Latency" && <LatencyView isLive={isLive} />}
+        </div>
+      </LiveSnapshotProvider>
     </div>
   );
 }

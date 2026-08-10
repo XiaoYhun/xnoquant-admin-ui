@@ -5,15 +5,23 @@
 // Drawdown is derived from `GET /api/runs/{id}/equity-curve` (peak-to-trough on cumulative realized
 // PnL). Yesterday/Today/All filters real timestamps (same window as the trading-history Export).
 // Rolling Sharpe: while running, appends each `/live/stream` snapshot's sharpe_annualized
-// (fallback: sharpe). Otherwise derived from the equity curve (mean/pop-stddev of PnL deltas,
-// not annualized — same as backend `rollingSharpeSeries`).
-// Ratio card is still mock.
+// (fallback: sharpe), read off the shared `LiveSnapshotProvider` rather than its own connection.
+// Otherwise derived from the equity curve (mean/pop-stddev of PnL deltas, not annualized — same
+// as backend `rollingSharpeSeries`).
+// Ratio card: Sharpe and Max Drawdown come off the live snapshot while the run is running; the
+// remaining ratios (Sortino/Calmar/Omega/MDD-Duration/VaR/CVaR) have no API source and stay mock.
 import { useMemo, useState } from "react";
 import { MaximizeSquareMinimalistic } from "@solar-icons/react";
 import type { EChartsOption } from "echarts";
 
 import { BaseChart } from "@/components/charts/base-chart";
-import { useRunLiveSharpeStream, type LiveSharpeSample } from "@/hooks/api/use-run-live";
+import {
+  mergeLiveTrades,
+  preferLiveEquity,
+  useLiveSnapshot,
+  type LiveSharpeSample,
+  type LiveSnapshot,
+} from "@/hooks/api/use-run-live-snapshot";
 import { useRunEquity } from "@/hooks/api/use-runs";
 import { useTradeHistory } from "@/hooks/api/use-paper-runs";
 import type { TradeHistoryRow } from "@/lib/mock/paper-runs";
@@ -48,21 +56,47 @@ interface RatioItem {
   value: string;
   tone: RatioTone;
   suffix?: string;
+  /** Which live-snapshot field replaces this item's value while a run is streaming, if any. */
+  live?: "sharpe" | "maxDrawdown";
 }
 
+// Labels are the design's own spelling (Figma 14180:15399), typos included — don't "fix" them
+// here or the card stops matching the mock. The `live` marker, not the label, drives the overlay.
 const RATIO_ROW_1: RatioItem[] = [
-  { label: "Sharp Ratio", value: "3.12", tone: "green" },
+  { label: "Sharp Ratio", value: "3.12", tone: "green", live: "sharpe" },
   { label: "Sortio Ratio", value: "4.56", tone: "green" },
   { label: "Calmar Ratio", value: "8.34", tone: "green" },
   { label: "Omega Ratio", value: "8.34", tone: "green" },
 ];
 
 const RATIO_ROW_2: RatioItem[] = [
-  { label: "Max Drawdown", value: "-4.10%", tone: "red" },
+  { label: "Max Drawdown", value: "-4.10%", tone: "red", live: "maxDrawdown" },
   { label: "Max DD Duration", value: "2d18h", tone: "white" },
   { label: "VaR", value: "-6,530", tone: "red", suffix: "USDT" },
   { label: "CVaR", value: "-9,350", tone: "red", suffix: "USDT" },
 ];
+
+/**
+ * Overlay the two ratios the live snapshot actually publishes onto the mock rows. Sortino/Calmar/
+ * Omega/MDD-Duration/VaR/CVaR have no source on the snapshot or in the REST results API, so they
+ * keep their placeholder values rather than being blanked.
+ */
+function withLiveRatios(snapshot: LiveSnapshot | undefined): { row1: RatioItem[]; row2: RatioItem[] } {
+  if (!snapshot) return { row1: RATIO_ROW_1, row2: RATIO_ROW_2 };
+  const sharpe = snapshot.sharpeAnnualized ?? snapshot.sharpe;
+  const mddPct = snapshot.maxDrawdownPct;
+  const overlay = (item: RatioItem): RatioItem => {
+    if (item.live === "sharpe" && sharpe !== undefined) {
+      return { ...item, value: sharpe.toFixed(2), tone: sharpe >= 0 ? "green" : "red" };
+    }
+    // `max_drawdown_pct` is a fraction (0.0032 = 0.32%), matching `RunSummary.max_drawdown_pct`.
+    if (item.live === "maxDrawdown" && mddPct !== undefined) {
+      return { ...item, value: `${(-Math.abs(mddPct) * 100).toFixed(2)}%`, tone: "red" };
+    }
+    return item;
+  };
+  return { row1: RATIO_ROW_1.map(overlay), row2: RATIO_ROW_2.map(overlay) };
+}
 
 const RATIO_TONE_CLASS: Record<RatioTone, string> = {
   green: GRAD_GREEN,
@@ -88,12 +122,13 @@ function RatioRow({ items }: { items: RatioItem[] }) {
   );
 }
 
-function RatioCard() {
+function RatioCard({ snapshot }: { snapshot?: LiveSnapshot }) {
+  const { row1, row2 } = withLiveRatios(snapshot);
   return (
     <div className="flex min-w-0 flex-col gap-2 rounded-xl border border-border bg-[rgba(29,33,38,0.2)] px-3 py-2">
-      <RatioRow items={RATIO_ROW_1} />
+      <RatioRow items={row1} />
       <div className="h-px w-full bg-border" />
-      <RatioRow items={RATIO_ROW_2} />
+      <RatioRow items={row2} />
     </div>
   );
 }
@@ -379,8 +414,11 @@ export function RiskView({ runId, isLive }: { runId?: string; isLive?: boolean }
   const [rollingWindow, setRollingWindow] = useState<string>("30D");
   const [timeWindow, setTimeWindow] = useState<TimeWindow>("All");
 
-  // Drawdown series from the run's equity curve (same query paper/live detail uses).
-  const { data: equity = [], isLoading: equityLoading, isError: equityError } = useRunEquity(runId);
+  // Drawdown series from the run's equity curve (same query paper/live detail uses), or from the
+  // live frame's own `equity` while the run is running — `/equity-curve` 500s for its whole life.
+  const { data: restEquity = [], isLoading: equityLoading, isError: equityError } = useRunEquity(runId);
+  const { snapshot, sharpeSamples: liveSharpe, state: liveState } = useLiveSnapshot();
+  const equity = useMemo(() => preferLiveEquity(restEquity, snapshot), [restEquity, snapshot]);
   const drawdownPoints = useMemo(() => {
     const all = toDrawdown(equity);
     return all.filter((p) => inWindowTs(p.ts, timeWindow));
@@ -389,19 +427,20 @@ export function RiskView({ runId, isLive }: { runId?: string; isLive?: boolean }
     () => buildDrawdownOption(drawdownPoints, drawdownUnit),
     [drawdownPoints, drawdownUnit],
   );
+  // Points win over a REST error: a running run's `/equity-curve` always errors, and the series
+  // being drawn came off the live frame instead.
   const drawdownNote = !runId
     ? "Pick a run"
-    : equityLoading
-      ? "Loading…"
-      : equityError
-        ? "Equity unavailable"
-        : drawdownPoints.length === 0
-          ? "No equity points"
-          : undefined;
+    : drawdownPoints.length > 0
+      ? undefined
+      : equityLoading
+        ? "Loading…"
+        : equityError
+          ? "Equity unavailable"
+          : "No equity points";
 
   // Live sharpe samples — only while the run is running (Redis stream). Finished/backtest runs
   // fall back to equity-curve rolling Sharpe (backend-aligned, not annualized).
-  const { samples: liveSharpe, state: liveState } = useRunLiveSharpeStream(runId, !!isLive);
   const equitySharpe = useMemo(() => {
     if (isLive) return [];
     return toRollingSharpe(equity)
@@ -446,7 +485,9 @@ export function RiskView({ runId, isLive }: { runId?: string; isLive?: boolean }
 
   // The trading history lives on another tab; this view only exports it, so it rides the same
   // cached ["trade-history", runId] query rather than fetching its own copy.
-  const { data: trades = [], isLoading: tradesLoading } = useTradeHistory(runId);
+  const { data: restTrades = [], isLoading: tradesLoading } = useTradeHistory(runId);
+  // Live fills come off the stream, so a running run still has something to export.
+  const trades = useMemo(() => mergeLiveTrades(restTrades, snapshot), [restTrades, snapshot]);
   const exportable = trades.filter((t) => inWindow(t.time, timeWindow));
 
   const handleExport = () => {
@@ -456,7 +497,7 @@ export function RiskView({ runId, isLive }: { runId?: string; isLive?: boolean }
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
-      <RatioCard />
+      <RatioCard snapshot={snapshot} />
 
       <ChartCard
         title="Drawdown"

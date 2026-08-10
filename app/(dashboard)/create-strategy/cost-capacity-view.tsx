@@ -17,6 +17,7 @@ import type { EChartsOption } from "echarts";
 
 import { BaseChart } from "@/components/charts/base-chart";
 import { useRunCostCurve, useRunSummary, useRunTurnover } from "@/hooks/api/use-runs";
+import { mergeLiveSummary, useLiveSnapshot } from "@/hooks/api/use-run-live-snapshot";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { lastCumulative, toCostSeries } from "@/lib/cost-curve";
 import { aggregateTurnover, type TurnoverPeriod } from "@/lib/turnover-curve";
@@ -98,7 +99,10 @@ function PillSelect({
 }
 
 export function CostCapacityView({ runId }: { runId?: string }) {
-  const { data: summary } = useRunSummary(runId);
+  const { data: restSummary } = useRunSummary(runId);
+  // While the run is streaming, the live frame wins over the persisted `/summary` snapshot.
+  const { snapshot } = useLiveSnapshot();
+  const summary = useMemo(() => mergeLiveSummary(restSummary, snapshot), [restSummary, snapshot]);
   const {
     data: costCurve = [],
     isLoading: costLoading,

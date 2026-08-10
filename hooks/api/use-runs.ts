@@ -101,6 +101,29 @@ export function useRunEquity(id: string | undefined) {
   });
 }
 
+/**
+ * One run record (status + manifest). Unlike the result endpoints this answers 200 for a *running*
+ * run, so it's the only place a live view can learn the run's symbol names — live/stream frames
+ * carry the dense `symbol_id` and never the ticker.
+ */
+export function useRun(id: string | undefined) {
+  return useQuery({
+    queryKey: ["run", id],
+    queryFn: () => apiGet<Run>(`${HFT_API_URL}/api/runs/${id}`),
+    enabled: !!id && !USE_MOCK,
+    retry: retryUnlessForbidden,
+  });
+}
+
+/** `symbol_id` → ticker, off a run's manifest. Empty until the run record resolves. */
+export function symbolNamesOf(run: Run | undefined): Record<number, string> {
+  const out: Record<number, string> = {};
+  for (const s of run?.manifest?.symbols ?? []) {
+    if (typeof s.symbol_id === "number" && s.symbol) out[s.symbol_id] = s.symbol;
+  }
+  return out;
+}
+
 // GAP-7: HFT has POST /api/runs/{id}/stop but no start/resume endpoint — "Start Bot" in
 // live-runs-table.tsx stays disabled. "Stop Bot" calls this mutation via a confirm dialog.
 export function useStopRun() {

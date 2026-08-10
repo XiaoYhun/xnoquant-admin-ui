@@ -25,9 +25,9 @@ import type { PaperRunRow } from "@/lib/mock/paper-runs";
 const GRAD_GREEN = "bg-[linear-gradient(162deg,#cff8ea_0%,#67e1c1_100%)] bg-clip-text text-transparent";
 const GRAD_RED = "bg-[linear-gradient(160deg,#ffcce2_0%,#ff135b_100%)] bg-clip-text text-transparent";
 
-// Glassy pill (Account + TF): white/25 border, translucent dark fill, faint green inner glow.
+// Glassy pill (Account + TF): white/10 border, translucent dark fill, faint green inner glow.
 const PILL =
-  "inline-flex h-7 items-center rounded-[40px] border border-white/25 bg-[rgba(14,20,42,0.5)] px-3 text-xs font-medium text-white shadow-[inset_0_0_8px_0_rgba(63,216,189,0.15)] backdrop-blur-[2px]";
+  "inline-flex h-7 items-center rounded-[40px] border border-white/10 bg-[rgba(14,20,42,0.5)] px-3 text-xs font-medium text-white shadow-[inset_0_0_8px_0_rgba(63,216,189,0.15)] backdrop-blur-[2px]";
 
 // A cell that stacks one or more paired "mini-rows" (account[i] ↔ symbol[i]). When there
 // are two, the second band gets a subtle tint so the pairs read as distinct rows and stay

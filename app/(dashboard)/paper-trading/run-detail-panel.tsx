@@ -21,6 +21,7 @@ import { marketOf } from "@/components/market-tabs";
 import { CodeEditor } from "../create-strategy/code-editor";
 import { TradeCycles } from "./trade-cycles";
 import { useRunOpenPositions } from "@/hooks/api/use-run-live";
+import { LiveSnapshotProvider, useLiveSnapshot } from "@/hooks/api/use-run-live-snapshot";
 
 // Paper Trading run detail — a right-side slide-in with Charts / Trades / Configuration / Code
 // tabs. Figma nodes 13982:131691 (Charts), 13982:133350 (Trades), 14585:34189 (Configuration).
@@ -32,7 +33,7 @@ const GRAD_TAB_BG = "bg-[linear-gradient(163deg,#cff8ea_0%,#67e1c1_100%)]";
 
 // Glassy pill (market / timeframe) — same treatment as the live/strategy panels.
 const PILL =
-  "inline-flex h-7 shrink-0 items-center rounded-[40px] border border-white/25 bg-[rgba(14,20,42,0.5)] px-3 text-xs font-medium text-white shadow-[inset_0_0_8px_0_rgba(63,216,189,0.15)] backdrop-blur-[2px]";
+  "inline-flex h-7 shrink-0 items-center rounded-[40px] border border-white/10 bg-[rgba(14,20,42,0.5)] px-3 text-xs font-medium text-white shadow-[inset_0_0_8px_0_rgba(63,216,189,0.15)] backdrop-blur-[2px]";
 
 // The panel is shared by Paper Trading, Live Trading and Backtesting — label it from the run.
 const MODE_LABEL: Record<string, string> = { paper: "Paper Trading", live: "Live Trading", backtest: "Backtest" };
@@ -192,13 +193,18 @@ function TradeRowView({ t }: { t: TradeHistoryRow }) {
   );
 }
 
-// Open position — the run's live snapshot (`/api/runs/{id}/live` → `positions`). Sits above
-// Trading history because it's the "right now" state, whereas the history below is what already
-// happened. Hidden entirely when the run is flat or has no snapshot.
+// Open position — the run's live snapshot `positions`. While the run is running these arrive on
+// the shared `/live/stream` subscription (every published update, no polling); a run that isn't
+// streaming falls back to the one-shot `GET /api/runs/{id}/live`. Sits above Trading history
+// because it's the "right now" state, whereas the history below is what already happened.
 function OpenPositions({ run }: { run: PaperRunRow }) {
+  const isLive = run.status === "running";
   // Always rendered so the section is visibly present; /live 404s harmlessly for runs that never
   // published a snapshot (backtests, finished runs) and the empty state says so.
-  const { data: positions = [], isLoading } = useRunOpenPositions(run.id);
+  const { snapshot, state } = useLiveSnapshot();
+  const { data: polled = [], isLoading: pollLoading } = useRunOpenPositions(run.id, !isLive);
+  const positions = isLive ? (snapshot?.positions ?? []) : polled;
+  const isLoading = isLive ? state === "connecting" : pollLoading;
 
   const num = (n?: number, dp = 2) =>
     n === undefined ? "—" : n.toLocaleString("en-US", { minimumFractionDigits: dp, maximumFractionDigits: dp });
@@ -422,7 +428,9 @@ export function RunDetailPanel({
         <DialogTitle className="sr-only">{run?.strategyName ?? "Run detail"}</DialogTitle>
 
         {run && (
-          <>
+          // One `/live/stream` subscription for the whole panel — Open position reads its frames
+          // instead of polling `/live`. Scoped to the panel so it closes with it.
+          <LiveSnapshotProvider runId={run.id} isLive={run.status === "running"}>
             <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-surface px-4 py-2.5">
               <div className="flex min-w-0 items-center gap-3">
                 <span className="truncate text-base font-semibold text-white">{run.strategyName}</span>
@@ -525,7 +533,7 @@ export function RunDetailPanel({
               {activeTab === "Configuration" && <ConfigTab run={run} />}
               {activeTab === "Code" && <CodeView code={run.code} />}
             </div>
-          </>
+          </LiveSnapshotProvider>
         )}
       </DialogContent>
 

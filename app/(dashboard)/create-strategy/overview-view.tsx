@@ -2,9 +2,19 @@
 // OWNED BY: Results "Overview" agent — Figma node 14175:48200.
 // 6 metric cards w/ sparklines → Equity Curve panel → Trading history table.
 //
-// Trading history is `GET /api/runs/{id}/trades` via useTradeHistory. Columns match TradeRow:
-// Time · Symbol · Side · Price · Qty · Mid · Outcome. Metric cards + equity curve stay mocked.
-import { useState } from "react";
+// Data — the same endpoints the hft-platform reference UI drives its results page from:
+//   `GET /api/runs/{id}/summary`      → RunSummary, the metric cards + stats strip
+//   `GET /api/runs/{id}/equity-curve` → EquityPoint[], the Net line (and drawdown, derived)
+//   `GET /api/runs/{id}/cost-curve`   → CostPoint[], cumulative fees → the Gross line
+//   `GET /api/runs/{id}/trades`       → TradePage, the trading-history table (via useTradeHistory)
+//
+// `equity` is *cumulative realized PnL*, not account equity, so this panel plots PnL from 0 —
+// there is no account-balance series on the API. Gross = Net + cumulative fees, matching the
+// backend's own `edge_gross_bps = (net_pnl + total_fee) / notional` definition.
+//
+// Metrics with no backend source (Max Capacity, MDD Duration, Avg Latency, Fill Rate) render as
+// "—" rather than carrying the old placeholder numbers.
+import { useMemo, useState } from "react";
 import type { EChartsOption } from "echarts";
 import { MaximizeSquareMinimalistic } from "@solar-icons/react";
 
@@ -20,14 +30,31 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useTradeHistory } from "@/hooks/api/use-paper-runs";
+import { useRunCostCurve, useRunEquity, useRunSummary } from "@/hooks/api/use-runs";
+import {
+  mergeLiveSummary,
+  mergeLiveTrades,
+  preferLiveEquity,
+  useLiveSnapshot,
+} from "@/hooks/api/use-run-live-snapshot";
+import type { CostPoint } from "@/lib/cost-curve";
+import {
+  annualizedReturn,
+  curveSpanMs,
+  equityDayLabel,
+  equityStats,
+  toDrawdown,
+  toRollingSharpe,
+} from "@/lib/transform/results";
 import type { TradeHistoryRow } from "@/lib/mock/paper-runs";
+import type { EquityPoint, RunSummary } from "@/types/domain";
 import { resourceErrorMessage } from "@/lib/api-client";
+import { MockNote } from "./results-chart-card";
 
 const GREEN = "#67e1c1";
 const RED = "#ff135b";
 const GOLD = "#f1c617";
 const GRAY = "#9db2ce";
-const FAINT = "rgba(157,178,206,0.55)";
 
 // Gradient text tokens pulled from the card value nodes (14175:90136 etc.).
 const GREEN_TEXT =
@@ -38,51 +65,29 @@ const RED_TEXT =
 const ORANGE_TEXT =
   "bg-[linear-gradient(165deg,#ffe3d6_0%,#ff9783_100%)] bg-clip-text text-transparent";
 
-// ---- deterministic mock data (no Math.random, stable across renders) ----
-function walk(seed: number, points: number, base: number, amp: number): number[] {
-  const out: number[] = [];
-  let v = base;
-  for (let i = 0; i < points; i++) {
-    v += Math.sin(seed + i * 1.1) * amp + Math.sin(seed * 2.3 + i * 2.4) * amp * 0.4;
-    out.push(Number(v.toFixed(2)));
-  }
-  return out;
+const DASH = "—";
+const SPARK_POINTS = 16;
+
+function fmtSigned(v: number, digits = 0): string {
+  const s = v.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  return v > 0 ? `+${s}` : s;
 }
 
-const NET_PNL_SPARK = walk(0.6, 16, 90, 6).map((v, i) => Math.round(v + i * 3.4));
-const SHARPE_SPARK = walk(1.4, 16, 40, 4).map((v, i) => Math.round(v + i * 1.6));
-const MAX_DD_SPARK = walk(2.1, 16, 90, 6).map((v, i) => Math.round(v - i * 3.1));
-const TURNOVER_SPARK = walk(3.0, 16, 50, 3);
-const COST_DRAG_BARS = walk(5.5, 14, 40, 16).map((v) => Math.round(Math.abs(v) + 12));
-const MAX_CAPACITY_SPARK = walk(4.2, 16, 45, 4).map((v, i) => Math.round(v + i * 2.2));
-
-// Equity curve: monthly drift regimes (Jan–Jul 2025) + weekly noise → a realistic-looking
-// up-and-down curve. Drawdown is derived from Net Equity's running peak, so it's always
-// consistent with the equity line (0% at new highs, negative at pullbacks).
-const MONTHS = ["Jan 2025", "Feb 2025", "Mar 2025", "Apr 2025", "May 2025", "Jun 2025", "Jul 2025"];
-const WEEKS_PER_MONTH = 4;
-const MONTH_DRIFT = [2500, -5600, 10000, -2800, 13000, 14500, 14000];
-
-const NET_EQUITY: number[] = [1_000_000];
-for (let i = 1; i < MONTHS.length * WEEKS_PER_MONTH; i++) {
-  const drift = MONTH_DRIFT[Math.floor(i / WEEKS_PER_MONTH)];
-  const noise = Math.sin(i * 1.3) * 2800 + Math.sin(i * 2.7 + 1) * 1600;
-  NET_EQUITY.push(Math.round(NET_EQUITY[i - 1] + drift + noise));
+function fmtPct(v: number, digits = 2): string {
+  return `${v > 0 ? "+" : ""}${v.toFixed(digits)}%`;
 }
-const GROSS_EQUITY = NET_EQUITY.map((v, i) => Math.round(v + 18000 + Math.sin(i * 0.5) * 4200));
-const DRAWDOWN = (() => {
-  let peak = NET_EQUITY[0];
-  return NET_EQUITY.map((v) => {
-    peak = Math.max(peak, v);
-    return Number((((v - peak) / peak) * 100).toFixed(2));
-  });
-})();
-const EQUITY_LABELS = NET_EQUITY.map((_, i) => (i % WEEKS_PER_MONTH === 0 ? MONTHS[i / WEEKS_PER_MONTH] : ""));
 
 function formatCompactUsd(n: number): string {
   if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
   if (Math.abs(n) >= 1_000) return `${Math.round(n / 1000)}K`;
   return `${n}`;
+}
+
+/** Even-stride downsample so a 10k-point curve still fits a 16-point card sparkline. */
+function sample(values: number[], n = SPARK_POINTS): number[] {
+  if (values.length <= n) return values;
+  const step = (values.length - 1) / (n - 1);
+  return Array.from({ length: n }, (_, i) => values[Math.round(i * step)]);
 }
 
 // ---- metric cards ----
@@ -95,83 +100,152 @@ interface Metric {
   sub: string;
   sparkKind: SparkKind;
   sparkColor: string;
-  sparkData: number[];
+  /** Omitted when the API exposes no series for this metric — the card renders without a chart. */
+  sparkData?: number[];
 }
 
-const METRICS: Metric[] = [
-  {
-    label: "Net PnL",
-    value: "+142,350",
-    unit: "USDT",
-    valueClassName: GREEN_TEXT,
-    sub: "+25.4%",
-    sparkKind: "area",
-    sparkColor: GREEN,
-    sparkData: NET_PNL_SPARK,
-  },
-  {
-    label: "Sharpe Ratio",
-    value: "3.12",
-    valueClassName: ORANGE_TEXT,
-    sub: "Daily",
-    sparkKind: "line",
-    sparkColor: GREEN,
-    sparkData: SHARPE_SPARK,
-  },
-  {
-    label: "Max Drawdown",
-    value: "-4.10%",
-    valueClassName: RED_TEXT,
-    sub: "-41,230 USDT",
-    sparkKind: "line",
-    sparkColor: RED,
-    sparkData: MAX_DD_SPARK,
-  },
-  {
-    label: "Return / Turnover",
-    value: "0.83",
-    unit: "bp",
-    sub: "per $ traded",
-    sparkKind: "line",
-    sparkColor: FAINT,
-    sparkData: TURNOVER_SPARK,
-  },
-  {
-    label: "Cost Drag",
-    value: "31.02%",
-    sub: "60,125 USDT",
-    sparkKind: "bar",
-    sparkColor: GOLD,
-    sparkData: COST_DRAG_BARS,
-  },
-  {
-    label: "Max Capacity",
-    value: "12.5M",
-    unit: "USDT",
-    valueClassName: GREEN_TEXT,
-    sub: "8.1% Utilized",
-    sparkKind: "line",
-    sparkColor: GREEN,
-    sparkData: MAX_CAPACITY_SPARK,
-  },
-];
+function buildMetrics(
+  summary: RunSummary | undefined,
+  equity: EquityPoint[],
+  cost: CostPoint[],
+): Metric[] {
+  const netPnl = summary?.net_pnl;
+  const ddPct = summary?.max_drawdown_pct;
+  const mdd = summary?.max_drawdown;
+  // What share of the gross edge the fees eat. Guarded: a run with no gross edge has no drag.
+  // `cost_bps`/`edge_gross_bps` are REST-only — a running run's summary comes off the live frame,
+  // which doesn't publish them, so presence has to be checked rather than assumed.
+  const costDrag =
+    summary?.cost_bps != null && summary.edge_gross_bps
+      ? (summary.cost_bps / summary.edge_gross_bps) * 100
+      : null;
+
+  return [
+    {
+      label: "Net PnL",
+      value: netPnl == null ? DASH : fmtSigned(netPnl),
+      unit: netPnl == null ? undefined : "USDT",
+      valueClassName: netPnl == null ? undefined : netPnl >= 0 ? GREEN_TEXT : RED_TEXT,
+      sub: summary?.return_pct == null ? "Cumulative realized" : fmtPct(summary.return_pct * 100),
+      sparkKind: "area",
+      sparkColor: GREEN,
+      sparkData: sample(equity.map((p) => Number(p.equity))),
+    },
+    {
+      label: "Sharpe Ratio",
+      value: summary?.sharpe_annualized == null ? DASH : summary.sharpe_annualized.toFixed(2),
+      valueClassName: ORANGE_TEXT,
+      // The API's plain `sharpe` is per-closing-trade, not daily — say which one this is.
+      sub: "Annualized",
+      sparkKind: "line",
+      sparkColor: GREEN,
+      sparkData: sample(toRollingSharpe(equity).map((p) => p.value)),
+    },
+    {
+      label: "Max Drawdown",
+      value:
+        ddPct != null
+          ? fmtPct(-Math.abs(ddPct) * 100)
+          : mdd != null
+            ? fmtSigned(-Math.abs(mdd))
+            : DASH,
+      unit: ddPct == null && mdd != null ? "USDT" : undefined,
+      valueClassName: RED_TEXT,
+      sub: mdd == null ? DASH : `${fmtSigned(-Math.abs(mdd))} USDT`,
+      sparkKind: "line",
+      sparkColor: RED,
+      sparkData: sample(toDrawdown(equity).map((p) => p.pct)),
+    },
+    {
+      label: "Return / Turnover",
+      // REST-only: absent while the summary is coming off the live frame.
+      value: summary?.edge_net_bps == null ? DASH : summary.edge_net_bps.toFixed(2),
+      unit: summary?.edge_net_bps == null ? undefined : "bp",
+      sub: "per $ traded",
+      sparkKind: "line",
+      sparkColor: GRAY,
+      // No per-interval edge series on the API — only the run-level bps figure above.
+    },
+    {
+      label: "Cost Drag",
+      value: costDrag == null ? DASH : `${costDrag.toFixed(2)}%`,
+      sub:
+        summary?.total_fee == null
+          ? DASH
+          : `${summary.total_fee.toLocaleString("en-US", { maximumFractionDigits: 0 })} USDT`,
+      sparkKind: "bar",
+      sparkColor: GOLD,
+      sparkData: sample(cost.map((p) => Number(p.cumulative))),
+    },
+    {
+      // No capacity model on the API (GAP — see docs/plans/api-integration.md).
+      label: "Max Capacity",
+      value: DASH,
+      sub: "No API source",
+      sparkKind: "line",
+      sparkColor: GREEN,
+    },
+  ];
+}
 
 // ---- equity curve stats strip (metrics 14175:90755) ----
 // Value colors per node: green gradient (Total/Ann. Return, Profit Days, Fill Rate),
 // SOLID red #ff135b (Max Drawdown, node 14175:90783), white (the rest).
-const STATS: { label: string; value: string; className?: string }[] = [
-  { label: "Total Return", value: "14.24%", className: GREEN_TEXT },
-  { label: "Ann. Return", value: "34.18%", className: GREEN_TEXT },
-  { label: "Max Drawdown", value: "-12.5%", className: "text-[#ff135b]" },
-  { label: "MDD Duration", value: "2d 18h" },
-  { label: "Profit Days", value: "72%", className: GREEN_TEXT },
-  { label: "Trading Days", value: "151" },
-  { label: "Total Trades", value: "1,246,532" },
-  { label: "Avg Latency", value: "1.82 ms" },
-  { label: "Fill Rate", value: "96.42%", className: GREEN_TEXT },
-];
+function buildStats(
+  summary: RunSummary | undefined,
+  equity: EquityPoint[],
+): { label: string; value: string; className?: string }[] {
+  const stats = equityStats(equity);
+  const annReturn = annualizedReturn(summary?.return_pct, curveSpanMs(equity));
+  return [
+    {
+      label: "Total Return",
+      value: summary?.return_pct == null ? DASH : fmtPct(summary.return_pct * 100),
+      className: GREEN_TEXT,
+    },
+    { label: "Ann. Return", value: annReturn == null ? DASH : fmtPct(annReturn * 100), className: GREEN_TEXT },
+    {
+      label: "Max Drawdown",
+      value: summary?.max_drawdown_pct == null ? DASH : fmtPct(-Math.abs(summary.max_drawdown_pct) * 100),
+      className: "text-[#ff135b]",
+    },
+    // Derivable from the drawdown series, but not wired — no consumer asked for it yet.
+    { label: "MDD Duration", value: DASH },
+    {
+      label: "Profit Days",
+      value: stats ? `${stats.profitDayPct.toFixed(0)}%` : DASH,
+      className: GREEN_TEXT,
+    },
+    { label: "Trading Days", value: stats ? String(stats.tradingDays) : DASH },
+    {
+      label: "Total Trades",
+      value: summary?.total_trades == null ? DASH : summary.total_trades.toLocaleString("en-US"),
+    },
+    // Latency and fill rate live on the trace/execution artifacts, not the results endpoints.
+    { label: "Avg Latency", value: DASH },
+    { label: "Fill Rate", value: DASH },
+  ];
+}
 
 const RANGES = ["All", "1M", "3M", "1W"] as const;
+type Range = (typeof RANGES)[number];
+const RANGE_MS: Record<Exclude<Range, "All">, number> = {
+  "1W": 7 * 86_400_000,
+  "1M": 30 * 86_400_000,
+  "3M": 90 * 86_400_000,
+};
+
+/**
+ * Trailing window measured from the curve's own last point, not wall-clock — a backtest over 2023
+ * data would show nothing under "1W" if the cutoff were `Date.now()`.
+ */
+function inRange(points: EquityPoint[], range: Range): EquityPoint[] {
+  if (range === "All" || points.length === 0) return points;
+  const end = Number(points[points.length - 1].ts);
+  if (!Number.isFinite(end)) return points;
+  const cutoff = end - RANGE_MS[range];
+  return points.filter((p) => Number(p.ts) >= cutoff);
+}
 
 const nf = (n: number) =>
   n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -277,33 +351,56 @@ function ExpandButton({ label }: { label: string }) {
   );
 }
 
-function equityChartOption(): EChartsOption {
+/**
+ * Step-join the cumulative-fee series onto the equity timestamps: for each equity point take the
+ * most recent cost point at or before it. The two curves come from the same parquet but are
+ * downsampled independently, so they don't share an index.
+ */
+function grossSeries(equity: EquityPoint[], cost: CostPoint[]): number[] | null {
+  if (cost.length === 0) return null;
+  const sorted = [...cost].sort((a, b) => Number(a.ts) - Number(b.ts));
+  let i = 0;
+  let cumulative = 0;
+  return equity.map((p) => {
+    const ts = Number(p.ts);
+    while (i < sorted.length && Number(sorted[i].ts) <= ts) {
+      cumulative = Number(sorted[i].cumulative);
+      i += 1;
+    }
+    return Number(p.equity) + cumulative;
+  });
+}
+
+function equityChartOption(points: EquityPoint[], gross: number[] | null): EChartsOption {
+  const labels = points.map((p) => equityDayLabel(Number(p.ts)));
+  const net = points.map((p) => Number(p.equity));
+  const drawdown = toDrawdown(points).map((p) => p.pct);
+
   return {
     tooltip: { trigger: "axis" },
     legend: {
       bottom: 0,
-      data: ["Net Equity", "Gross Equity", "Drawdown"],
+      data: gross ? ["Net PnL", "Gross PnL", "Drawdown"] : ["Net PnL", "Drawdown"],
       textStyle: { color: GRAY, fontSize: 12 },
       itemWidth: 16,
       itemHeight: 2,
     },
     grid: { left: 8, right: 8, top: 16, bottom: 56, containLabel: true },
-    xAxis: { type: "category", data: EQUITY_LABELS, boundaryGap: false },
+    xAxis: { type: "category", data: labels, boundaryGap: false },
     yAxis: [
       {
         type: "value",
-        min: 918_000,
-        max: 1_250_000,
+        // Auto-scaled — the curve is cumulative PnL from 0, so its range is run-specific.
+        scale: true,
         splitNumber: 4,
         axisLabel: { formatter: (v: number) => formatCompactUsd(v) },
       },
       {
         type: "value",
-        min: -8,
         max: 0,
         position: "right",
         splitLine: { show: false },
-        axisLabel: { formatter: (v: number) => `${v}%` },
+        axisLabel: { formatter: (v: number) => `${v.toFixed(0)}%` },
       },
     ],
     series: [
@@ -314,7 +411,7 @@ function equityChartOption(): EChartsOption {
         name: "Drawdown",
         type: "line",
         yAxisIndex: 1,
-        data: DRAWDOWN,
+        data: drawdown,
         smooth: true,
         showSymbol: false,
         lineStyle: { width: 1, color: RED, opacity: 0.55 },
@@ -335,20 +432,24 @@ function equityChartOption(): EChartsOption {
         },
         z: 1,
       },
+      ...(gross
+        ? [
+            {
+              name: "Gross PnL",
+              type: "line" as const,
+              data: gross,
+              smooth: true,
+              showSymbol: false,
+              lineStyle: { width: 1.5, color: GRAY, type: "dashed" as const },
+              itemStyle: { color: GRAY },
+              z: 2,
+            },
+          ]
+        : []),
       {
-        name: "Gross Equity",
+        name: "Net PnL",
         type: "line",
-        data: GROSS_EQUITY,
-        smooth: true,
-        showSymbol: false,
-        lineStyle: { width: 1.5, color: GRAY, type: "dashed" },
-        itemStyle: { color: GRAY },
-        z: 2,
-      },
-      {
-        name: "Net Equity",
-        type: "line",
-        data: NET_EQUITY,
+        data: net,
         smooth: true,
         showSymbol: false,
         lineStyle: { width: 2.5, color: GREEN },
@@ -360,13 +461,48 @@ function equityChartOption(): EChartsOption {
 }
 
 export function OverviewView({ runId }: { runId?: string }) {
-  const [range, setRange] = useState<string>("All");
-  const { data: trades = [], isLoading, isError, error } = useTradeHistory(runId);
+  const [range, setRange] = useState<Range>("All");
+  const { data: restTrades = [], isLoading, isError, error } = useTradeHistory(runId);
+
+  const { data: restSummary, isLoading: summaryLoading, isError: summaryError } = useRunSummary(runId);
+  const { data: restEquity = [], isLoading: equityLoading, isError: equityError } = useRunEquity(runId);
+  // Fees are optional: the spec notes many runs answer `[]` here even when equity has points.
+  const { data: cost = [] } = useRunCostCurve(runId);
+
+  // While the run is streaming, the live frame wins over the persisted artifacts — which 500 for
+  // the whole life of a running run, so for those the frame is the only source there is.
+  const { snapshot } = useLiveSnapshot();
+  const summary = useMemo(() => mergeLiveSummary(restSummary, snapshot), [restSummary, snapshot]);
+  const equity = useMemo(() => preferLiveEquity(restEquity, snapshot), [restEquity, snapshot]);
+  const trades = useMemo(() => mergeLiveTrades(restTrades, snapshot), [restTrades, snapshot]);
+
+  const metrics = useMemo(() => buildMetrics(summary, equity, cost), [summary, equity, cost]);
+  const stats = useMemo(() => buildStats(summary, equity), [summary, equity]);
+
+  const windowed = useMemo(() => inRange(equity, range), [equity, range]);
+  const gross = useMemo(() => grossSeries(windowed, cost), [windowed, cost]);
+  const chartOption = useMemo(() => equityChartOption(windowed, gross), [windowed, gross]);
+
+  // Order matters: a running run's REST curve/summary error out by design, so a live series or a
+  // live summary has to win over the REST error rather than be labelled "unavailable" beneath it.
+  const curveNote = !runId
+    ? "Pick a run"
+    : equity.length === 0
+      ? summaryLoading || equityLoading
+        ? "Loading…"
+        : equityError
+          ? "Equity unavailable"
+          : "No equity points"
+      : windowed.length === 0
+        ? "No points in range"
+        : summaryError && !summary
+          ? "Summary unavailable"
+          : undefined;
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
       <div className="flex flex-wrap gap-2">
-        {METRICS.map((m) => (
+        {metrics.map((m) => (
           <div
             key={m.label}
             className="flex min-w-0 flex-1 basis-[120px] flex-col gap-1 rounded-[12px] border border-border bg-[rgba(29,33,38,0.2)] p-2"
@@ -380,9 +516,13 @@ export function OverviewView({ runId }: { runId?: string }) {
             </div>
             <span className="truncate text-[10px] text-muted-foreground">{m.sub}</span>
             <div className="h-[42px] w-full overflow-hidden">
-              {m.sparkKind === "area" && <AreaMini data={m.sparkData} />}
-              {m.sparkKind === "bar" && <BarMini data={m.sparkData} color={m.sparkColor} />}
-              {m.sparkKind === "line" && <LineMini data={m.sparkData} color={m.sparkColor} />}
+              {m.sparkData && m.sparkData.length > 0 && (
+                <>
+                  {m.sparkKind === "area" && <AreaMini data={m.sparkData} />}
+                  {m.sparkKind === "bar" && <BarMini data={m.sparkData} color={m.sparkColor} />}
+                  {m.sparkKind === "line" && <LineMini data={m.sparkData} color={m.sparkColor} />}
+                </>
+              )}
             </div>
           </div>
         ))}
@@ -392,7 +532,8 @@ export function OverviewView({ runId }: { runId?: string }) {
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-[#151a24] px-4 py-3">
           <span className="text-sm font-medium text-white">Equity Curve</span>
           <div className="flex shrink-0 items-center gap-2">
-            <Tabs value={range} onValueChange={(v) => v && setRange(v)}>
+            {curveNote && <MockNote>{curveNote}</MockNote>}
+            <Tabs value={range} onValueChange={(v) => v && setRange(v as Range)}>
               <TabsList>
                 {RANGES.map((r) => (
                   <TabsTrigger key={r} value={r}>
@@ -406,16 +547,21 @@ export function OverviewView({ runId }: { runId?: string }) {
         </div>
         <div className="min-w-0 p-4">
           <div className="flex flex-wrap gap-3 pb-4">
-            {STATS.map((s) => (
+            {stats.map((s) => (
               <div key={s.label} className="flex min-w-0 flex-1 basis-[72px] flex-col gap-1">
                 <span className="whitespace-nowrap text-[10px] text-muted-foreground">{s.label}</span>
-                <span className={cn("whitespace-nowrap text-sm", s.className ?? "text-white")}>
+                <span
+                  className={cn(
+                    "whitespace-nowrap text-sm",
+                    s.value === DASH ? "text-muted-foreground" : (s.className ?? "text-white"),
+                  )}
+                >
                   {s.value}
                 </span>
               </div>
             ))}
           </div>
-          <BaseChart option={equityChartOption()} style={{ height: 300 }} />
+          <BaseChart option={chartOption} style={{ height: 300 }} />
         </div>
       </div>
 
@@ -425,14 +571,21 @@ export function OverviewView({ runId }: { runId?: string }) {
           <ExpandButton label="Expand trading history" />
         </div>
         <div className="bg-[#0a0e14]">
+          {/*
+            Rows first: while the run is live the persisted `/trades` page 500s, and the fills are
+            coming off the stream instead — so a REST error only matters when there is nothing
+            to show.
+          */}
           {!runId ? (
             <p className="p-4 text-sm text-muted-foreground">Pick a run to load trades.</p>
-          ) : isLoading ? (
-            <p className="p-4 text-sm text-muted-foreground">Loading&hellip;</p>
-          ) : isError ? (
-            <p className="p-4 text-sm text-destructive">{resourceErrorMessage(error, "this run's trades")}</p>
           ) : trades.length === 0 ? (
-            <p className="p-4 text-sm text-muted-foreground">No trades yet.</p>
+            isLoading ? (
+              <p className="p-4 text-sm text-muted-foreground">Loading&hellip;</p>
+            ) : isError ? (
+              <p className="p-4 text-sm text-destructive">{resourceErrorMessage(error, "this run's trades")}</p>
+            ) : (
+              <p className="p-4 text-sm text-muted-foreground">No trades yet.</p>
+            )
           ) : (
             <Table>
               <TableHeader>

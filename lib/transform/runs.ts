@@ -173,6 +173,9 @@ export function toPaperRunRow(run: Run): PaperRunRow {
     maxDrawdownPct: runMaxDrawdownPct(run),
     pnlChartSeries: [],
     returnsChartSeries: [],
+    backtestRange: manifest.backtest_range
+      ? { startDate: manifest.backtest_range.start_date, endDate: manifest.backtest_range.end_date }
+      : null,
     metrics: metricsFrom(null, 0),
     config: toRunConfig(manifest),
     code: manifest.strategy.code,

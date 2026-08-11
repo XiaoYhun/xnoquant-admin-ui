@@ -1,54 +1,95 @@
 "use client";
 // OWNED BY: Create Strategy "HFT Samples tab" agent — Figma node 14562:20367.
 // Taker/Maker/Arbitrage sub-tabs + static curated sample cards ("View source" expands the code
-// inline, "Use template" loads it into the editor) + a static Script API Reference block.
+// inline, "Use template" loads it into the editor) + Script API Reference from
+// `GET /api/strategies/script-api` (filtered to the selected strategy type).
 import { useState } from "react";
 import { CheckCircle, Code, Database, NotebookBookmark } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
+import { resourceErrorMessage } from "@/lib/api-client";
 import { HFT_SAMPLES, type HftSample } from "@/lib/mock/hft-strategy-samples";
+import {
+  paramSummary,
+  useScriptApi,
+  type StrategyScriptApi,
+} from "@/hooks/api/use-hft-script-api";
 
 const STRATEGY_TYPES = ["taker", "maker", "arbitrage"] as const;
 type StrategyType = (typeof STRATEGY_TYPES)[number];
 const TYPE_LABEL: Record<StrategyType, string> = { taker: "Taker", maker: "Maker", arbitrage: "Arbitrage" };
 
+// Script API Reference — Figma 14562:20713. Flat 12px/18px stack: muted prose, white identifiers.
+function ScriptApiReference({ type }: { type: StrategyType }) {
+  const { data: apis, isPending, isError, error } = useScriptApi();
+  const api = apis?.find((a) => a.strategy_type === type);
 
-// Script API Reference — Figma 14562:20713. Each entry is either a heading or a white identifier,
-// followed by the muted prose describing it; rendered as one 12px/18px stack.
-const API_REFERENCE: { text: string; strong?: boolean }[] = [
-  { text: "Runs once per tick. Call return target_pos_intent(...) to act this tick; falling through holds (no order)." },
-  { text: "Function" },
-  { text: "target_pos_intent(symbol: int, qty: float, style: string)", strong: true },
-  {
-    text: 'symbol = engine SymbolId (pass the symbol variable below). qty = signed target position: positive long, negative short, 0.0 flattens. style = "market" (sweep now), "cross" (marketable at touch), "join" (passive at touch), or "mid" (passive at mid).',
-  },
-  { text: "Scope" },
-  { text: "features", strong: true },
-  { text: "this strategy\u2019s feature values, in the order defined above \u2014 features[0], features[1], \u2026 NaN until that feature\u2019s window warms up." },
-  { text: "symbol", strong: true },
-  { text: "this run\u2019s SymbolId \u2014 pass straight to target_pos_intent." },
-  { text: "positions", strong: true },
-  { text: "signed position per symbol, indexed by SymbolId." },
-  { text: "asset_features", strong: true },
-  { text: "features[] per symbol \u2014 cross-sectional access via asset_features[sym_id][feature_idx]." },
-];
-
-function ScriptApiReference() {
   return (
     <div className="flex w-full flex-col items-start">
-      <div className="flex h-10 w-full items-center gap-2 rounded overflow-hidden py-3">
+      <div className="flex h-10 w-full items-center gap-2 overflow-hidden rounded py-3">
         <NotebookBookmark weight="Outline" className="size-6 shrink-0 text-white" />
         <span className="min-w-0 flex-1 truncate text-sm text-white">Script API Reference</span>
       </div>
       <div className="flex w-full items-center gap-3 rounded-xl border border-[#1d2939] px-3 py-2">
         <div className="flex min-w-0 flex-1 flex-col justify-center">
-          {API_REFERENCE.map((line, i) => (
-            <p key={i} className={`text-xs leading-[18px] ${line.strong ? "text-white" : "text-[#9db2ce]"}`}>
-              {line.text}
+          {isPending ? (
+            <p className="text-xs leading-[18px] text-[#9db2ce]">Loading script API reference…</p>
+          ) : isError ? (
+            <p className="text-xs leading-[18px] text-destructive">
+              {resourceErrorMessage(error, "the script API reference")}
             </p>
-          ))}
+          ) : !api ? (
+            <p className="text-xs leading-[18px] text-[#9db2ce]">No script API reference for this type.</p>
+          ) : (
+            <ScriptApiBody api={api} />
+          )}
         </div>
       </div>
     </div>
+  );
+}
+
+function ScriptApiBody({ api }: { api: StrategyScriptApi }) {
+  const mainFn = api.functions[0]?.name ?? "";
+  return (
+    <>
+      <p className="text-xs leading-[18px] text-[#9db2ce]">
+        {api.intro}
+        {mainFn ? (
+          <>
+            {" "}
+            Call return {mainFn}(...) to act this tick; falling through holds (no order).
+          </>
+        ) : null}
+      </p>
+      {api.functions.length > 0 && (
+        <>
+          <p className="text-xs leading-[18px] text-[#9db2ce]">Function</p>
+          {api.functions.map((fn) => {
+            const widest = fn.overloads[fn.overloads.length - 1];
+            const sig = widest?.params.map((p) => `${p.name}: ${p.ty}`).join(", ") ?? "";
+            return (
+              <div key={fn.name}>
+                <p className="text-xs leading-[18px] text-white">
+                  {fn.name}({sig})
+                </p>
+                <p className="text-xs leading-[18px] text-[#9db2ce]">{paramSummary(fn)}</p>
+              </div>
+            );
+          })}
+        </>
+      )}
+      {api.scope.length > 0 && (
+        <>
+          <p className="text-xs leading-[18px] text-[#9db2ce]">Scope</p>
+          {api.scope.map((s) => (
+            <div key={s.name}>
+              <p className="text-xs leading-[18px] text-white">{s.name}</p>
+              <p className="text-xs leading-[18px] text-[#9db2ce]">{s.description}</p>
+            </div>
+          ))}
+        </>
+      )}
+    </>
   );
 }
 
@@ -120,7 +161,7 @@ export function HftSamplesTab({ onUseTemplate }: { onUseTemplate?: (code: string
         })}
       </div>
 
-      <ScriptApiReference />
+      <ScriptApiReference type={type} />
     </div>
   );
 }

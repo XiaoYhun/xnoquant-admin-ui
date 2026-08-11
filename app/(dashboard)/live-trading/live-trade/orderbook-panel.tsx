@@ -1,12 +1,14 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { SYMBOLS_BY_MARKET, defaultSymbolFor, orderbookFor } from "@/lib/mock/orderbook";
-import type { Market } from "@/components/market-tabs";
+import { orderbookFor } from "@/lib/mock/orderbook";
+import { LiveSnapshotProvider, useLiveSnapshot } from "@/hooks/api/use-run-live-snapshot";
 
 // Right rail of the Live trade screen (Figma 14779:27408). Opens on the market tab's default
-// symbol — nothing to search or select first — and follows the tab when it changes.
+// symbol — nothing to search or select first — and follows the tab when it changes. Symbol
+// selection and the running-run binding live in the page (live-trade/page.tsx), which is the one
+// that knows the loaded runs and can resolve which run to tail for the chosen symbol.
 
 // The quote header groups thousands ("1,927.50"); the depth ladder does not ("1927.90").
 const quoteNum = new Intl.NumberFormat("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -16,17 +18,24 @@ const ladderNum = new Intl.NumberFormat("en", {
   useGrouping: false,
 });
 
-export function OrderbookPanel({ market }: { market: Market }) {
-  // Keyed by market so switching tabs falls back to that market's default, while an explicit
-  // pick inside a tab sticks.
-  const [picked, setPicked] = useState<Partial<Record<Market, string>>>({});
-  const symbol = picked[market] ?? defaultSymbolFor(market);
+export function OrderbookPanel({
+  symbol,
+  symbolOptions,
+  onSymbolChange,
+  runId,
+  runSymbols,
+}: {
+  symbol: string;
+  symbolOptions: string[];
+  onSymbolChange: (symbol: string) => void;
+  /** The running run trading `symbol`, or undefined when none is running. */
+  runId: string | undefined;
+  /** The bound run's manifest symbol list — a live orderbook frame's `symbol_id` indexes into it. */
+  runSymbols: { symbol: string }[] | undefined;
+}) {
   const book = useMemo(() => orderbookFor(symbol), [symbol]);
   const up = book.changePct >= 0;
-
-  // Both sides share one scale, so the much smaller sell sizes read as the short bars the
-  // design shows rather than filling their cell.
-  const maxAmount = Math.max(...book.levels.flatMap((l) => [l.amountBuy, l.amountSell]));
+  const symbolIndex = runSymbols ? runSymbols.findIndex((s) => s.symbol === symbol) : -1;
 
   return (
     <aside className="flex w-[400px] shrink-0 flex-col overflow-hidden rounded-lg border border-border bg-background">
@@ -38,12 +47,12 @@ export function OrderbookPanel({ market }: { market: Market }) {
       <div className="flex min-h-0 flex-1 flex-col gap-4 py-3">
         <div className="flex shrink-0 flex-col gap-1 px-4">
           <div className="flex items-center justify-between gap-2">
-            <Select value={symbol} onValueChange={(v) => v && setPicked((p) => ({ ...p, [market]: v }))}>
+            <Select value={symbol} onValueChange={(v) => v && onSymbolChange(v)}>
               <SelectTrigger className="h-auto w-auto gap-1 border-0 bg-transparent p-0 text-xl font-medium leading-7 text-white shadow-none dark:bg-transparent dark:hover:bg-transparent [&_svg]:size-5 [&_svg]:text-white [&_svg]:opacity-100">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {(SYMBOLS_BY_MARKET[market] ?? []).map((s) => (
+                {symbolOptions.map((s) => (
                   <SelectItem key={s} value={s}>
                     {s}
                   </SelectItem>
@@ -70,7 +79,8 @@ export function OrderbookPanel({ market }: { market: Market }) {
           </div>
 
           {/* Ceiling / reference / floor use the board's own palette (Trần / Sàn), not the
-              green-red PnL palette. */}
+              green-red PnL palette. Kept on `orderbookFor` mock data — the live snapshot has no
+              source for ceiling/reference/floor, matched volume ("KL") or turnover ("GT"). */}
           <div className="flex items-center justify-between py-0.5 text-xs leading-[18px]">
             <div className="flex items-center gap-1.5">
               <span className="flex items-center text-[#dc6bde]">

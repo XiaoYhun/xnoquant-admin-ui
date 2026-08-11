@@ -104,6 +104,38 @@ describe("toLiveSnapshot", () => {
     expect(snap.equity).toEqual([]);
     expect(snap.symbols).toEqual([]);
   });
+
+  // Field names off the spec's own example payload for this endpoint (types/api/hft.ts:1013).
+  it("reads per-symbol order-book depth", () => {
+    const snap = toLiveSnapshot(
+      {
+        orderbooks: [
+          { symbol_id: 0, bids: [{ price: 100.1, qty: 2.5 }], asks: [{ price: 100.2, qty: 1.8 }] },
+        ],
+      },
+      0,
+    )!;
+    expect(snap.orderbooks).toEqual([
+      { symbolId: 0, bids: [{ price: 100.1, qty: 2.5 }], asks: [{ price: 100.2, qty: 1.8 }] },
+    ]);
+  });
+
+  it("tolerates a missing orderbooks array", () => {
+    expect(toLiveSnapshot({ net_pnl: 1 }, 0)?.orderbooks).toEqual([]);
+  });
+
+  it("drops an orderbook entry with no symbol_id and a level with no price/qty", () => {
+    const snap = toLiveSnapshot(
+      {
+        orderbooks: [
+          { bids: [], asks: [] }, // no symbol_id — unusable
+          { symbol_id: 1, bids: [{ price: 10 }, { price: 11, qty: 1 }], asks: "nope" },
+        ],
+      },
+      0,
+    )!;
+    expect(snap.orderbooks).toEqual([{ symbolId: 1, bids: [{ price: 11, qty: 1 }], asks: [] }]);
+  });
 });
 
 describe("mergeLiveSummary", () => {

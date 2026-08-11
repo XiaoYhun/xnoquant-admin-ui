@@ -47,6 +47,8 @@ import {
   toRollingSharpe,
 } from "@/lib/transform/results";
 import type { TradeHistoryRow } from "@/lib/mock/paper-runs";
+import { downloadTradeHistoryCsv } from "@/lib/trade-history-csv";
+import { TradeHistoryExportButton } from "@/components/trade-history-export-button";
 import type { EquityPoint, RunSummary } from "@/types/domain";
 import { resourceErrorMessage } from "@/lib/api-client";
 import { MockNote } from "./results-chart-card";
@@ -568,9 +570,18 @@ export function OverviewView({ runId }: { runId?: string }) {
       <div className="min-w-0 overflow-hidden rounded-xl border border-border bg-[#0f0f0f]">
         <div className="flex items-center justify-between gap-2 border-b border-border bg-[#151a24] px-4 py-3">
           <span className="text-sm font-medium text-white">Trading history</span>
-          <ExpandButton label="Expand trading history" />
+          <TradeHistoryExportButton
+            disabled={!runId || isLoading || trades.length === 0}
+            onClick={() => downloadTradeHistoryCsv(`trading-history-${runId}.csv`, trades)}
+          />
         </div>
-        <div className="bg-[#0a0e14]">
+        {/*
+          `overflow-anchor:none`: the live stream keeps a newest-first, fixed-size window, so each
+          frame pushes whichever row the browser anchored to further down the list. Scroll
+          anchoring then chases that row and drags the results panel’s scroll offset to the bottom
+          while you are reading. Excluding this subtree from anchor selection leaves the offset put.
+        */}
+        <div className="bg-[#0a0e14] [overflow-anchor:none]">
           {/*
             Rows first: while the run is live the persisted `/trades` page 500s, and the fills are
             coming off the stream instead — so a REST error only matters when there is nothing

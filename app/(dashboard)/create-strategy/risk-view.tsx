@@ -24,8 +24,9 @@ import {
 } from "@/hooks/api/use-run-live-snapshot";
 import { useRunEquity } from "@/hooks/api/use-runs";
 import { useTradeHistory } from "@/hooks/api/use-paper-runs";
-import type { TradeHistoryRow } from "@/lib/mock/paper-runs";
 import { equityDayLabel, toDrawdown, toRollingSharpe, type DrawdownPoint } from "@/lib/transform/results";
+import { downloadTradeHistoryCsv } from "@/lib/trade-history-csv";
+import { TradeHistoryExportButton } from "@/components/trade-history-export-button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
@@ -358,56 +359,12 @@ function WindowSelect({ value, onChange }: { value: string; onChange: (value: st
   );
 }
 
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Trading-history export
-// ---------------------------------------------------------------------------
-
 /** Is this fill inside the selected window, in the reader's own timezone? */
 function inWindow(iso: string, window: TimeWindow): boolean {
   if (window === "All") return true;
   const t = new Date(iso).getTime();
   return inWindowTs(t, window);
 }
-
-const CSV_COLUMNS = ["Time", "Symbol", "Side", "Price", "Qty", "Mid", "Outcome"] as const;
-
-function toCsv(rows: TradeHistoryRow[]): string {
-  // Quote only when a field could break the row; doubling embedded quotes per RFC 4180.
-  const cell = (v: string | number) => {
-    const s = String(v ?? "");
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
-  const body = rows.map((r) => [r.time, r.symbol, r.side, r.price, r.qty, r.mid, r.outcome].map(cell).join(","));
-  return [CSV_COLUMNS.join(","), ...body].join("\n");
-}
-
-function downloadCsv(filename: string, csv: string): void {
-  // Excel reads a bare UTF-8 CSV as the local codepage; the BOM makes it pick UTF-8.
-  const blob = new Blob(["﻿", csv], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(url);
-}
-
-function ExportButton({ disabled, onClick }: { disabled: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={onClick}
-      className="h-8 shrink-0 cursor-pointer rounded-full border border-border bg-background px-3 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-    >
-      Export
-    </button>
-  );
-}
-
-// ---------------------------------------------------------------------------
 
 export function RiskView({ runId, isLive }: { runId?: string; isLive?: boolean }) {
   const [drawdownUnit, setDrawdownUnit] = useState<DrawdownUnit>("%");
@@ -492,7 +449,7 @@ export function RiskView({ runId, isLive }: { runId?: string; isLive?: boolean }
 
   const handleExport = () => {
     if (exportable.length === 0) return;
-    downloadCsv(`trading-history-${runId}-${timeWindow.toLowerCase()}.csv`, toCsv(exportable));
+    downloadTradeHistoryCsv(`trading-history-${runId}-${timeWindow.toLowerCase()}.csv`, exportable);
   };
 
   return (
@@ -514,7 +471,7 @@ export function RiskView({ runId, isLive }: { runId?: string; isLive?: boolean }
               </TabsList>
             </Tabs>
             <UnitToggle value={drawdownUnit} onChange={setDrawdownUnit} />
-            <ExportButton disabled={!runId || tradesLoading || exportable.length === 0} onClick={handleExport} />
+            <TradeHistoryExportButton disabled={!runId || tradesLoading || exportable.length === 0} onClick={handleExport} />
           </>
         }
       >

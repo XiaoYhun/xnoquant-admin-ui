@@ -42,7 +42,7 @@ export function PromoteToLiveDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-[480px] gap-0 rounded-[20px] border-border bg-background p-0">
+      <DialogContent className="max-w-[480px] gap-0 overflow-hidden rounded-[20px] border-border bg-background p-0">
         <div className="bg-surface px-4 py-2.5">
           <DialogTitle className="text-lg font-semibold text-white">Promote to Live Basket</DialogTitle>
         </div>

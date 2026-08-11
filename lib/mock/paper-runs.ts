@@ -67,6 +67,8 @@ export type PaperRunRow = {
   // Detail-view "Charts" tab data — denormalized so selecting a run needs no extra fetch.
   pnlChartSeries: { date: string; value: number }[];
   returnsChartSeries: { date: string; value: number }[];
+  /** manifest.backtest_range — the inclusive historical window a backtest replayed. */
+  backtestRange?: { startDate: string; endDate: string } | null;
   // Detail-view tabs: metrics (Charts stat cards), config (Configuration), code (Code).
   metrics: RunMetrics;
   config: RunConfig;

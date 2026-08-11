@@ -7,8 +7,8 @@ import type { components } from "@/types/api/hft";
 
 // HFT strategies (`GET/POST /api/strategies`, raw — no envelope) surfaced as editor tabs
 // alongside the XALPHA/MFT editors (see use-strategy-builder.ts's useEditors).
-// NOTE: `validate` (whole-code) is not wired yet. `validate-features`/`feature-catalog` are wired
-// in use-hft-features.ts (used by the Features tab). The Settings save below uses
+// NOTE: `validate-features`/`feature-catalog` are in use-hft-features.ts; `script-api` is in
+// use-hft-script-api.ts (Samples tab reference). The Settings save below uses
 // `PUT /api/strategies/{id}` and independently updates `strategy_type`/`code`/`features`, re-sending
 // the current value of whichever field isn't passed in so it isn't wiped.
 type Strategy = components["schemas"]["Strategy"];

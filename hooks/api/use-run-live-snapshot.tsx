@@ -46,6 +46,16 @@ export type LiveSymbolPnl = {
   netPnl?: number;
 };
 
+/**
+ * One `orderbooks[].bids`/`asks` entry. Named distinctly from `lib/mock/orderbook.ts`'s
+ * `OrderbookLevel` (a different shape: `{amountBuy, priceBuy, priceSell, amountSell}`) so the two
+ * don't collide where a caller imports both.
+ */
+export type LiveOrderbookLevel = { price: number; qty: number };
+
+/** One `orderbooks` entry — the depth ladder for a single symbol in the run. */
+export type LiveOrderbook = { symbolId: number; bids: LiveOrderbookLevel[]; asks: LiveOrderbookLevel[] };
+
 export type LiveSnapshot = {
   netPnl?: number;
   totalFee?: number;
@@ -66,6 +76,8 @@ export type LiveSnapshot = {
   equity: EquityPoint[];
   /** `symbols` — per-symbol PnL attribution. */
   symbols: LiveSymbolPnl[];
+  /** `orderbooks` — per-symbol bid/ask depth. */
+  orderbooks: LiveOrderbook[];
   alphaTiming?: AlphaTiming;
   /** `updated_at_ms` from the snapshot, else receive time. */
   ts: number;
@@ -162,6 +174,32 @@ export function toLiveSymbolPnl(raw: unknown): LiveSymbolPnl | null {
   };
 }
 
+/** One `orderbooks[].bids`/`asks` entry. */
+export function toLiveOrderbookLevel(raw: unknown): LiveOrderbookLevel | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const price = num(r.price);
+  const qty = num(r.qty) ?? num(r.quantity) ?? num(r.size);
+  if (price === undefined || qty === undefined) return null;
+  return { price, qty };
+}
+
+/** One `orderbooks` entry — a symbol's bid/ask depth. */
+export function toLiveOrderbook(raw: unknown): LiveOrderbook | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const symbolId = num(r.symbol_id) ?? num(r.symbolId);
+  // Without a symbol_id there is no way to bind this book to a chosen symbol.
+  if (symbolId === undefined) return null;
+  const bids = Array.isArray(r.bids)
+    ? r.bids.map(toLiveOrderbookLevel).filter((l): l is LiveOrderbookLevel => l !== null)
+    : [];
+  const asks = Array.isArray(r.asks)
+    ? r.asks.map(toLiveOrderbookLevel).filter((l): l is LiveOrderbookLevel => l !== null)
+    : [];
+  return { symbolId, bids, asks };
+}
+
 export function toLiveSnapshot(
   raw: unknown,
   receivedAt: number,
@@ -183,9 +221,13 @@ export function toLiveSnapshot(
   const symbols = Array.isArray(r.symbols)
     ? r.symbols.map(toLiveSymbolPnl).filter((s): s is LiveSymbolPnl => s !== null)
     : [];
+  const orderbooks = Array.isArray(r.orderbooks)
+    ? r.orderbooks.map(toLiveOrderbook).filter((o): o is LiveOrderbook => o !== null)
+    : [];
   return {
     equity,
     symbols,
+    orderbooks,
     netPnl: num(r.net_pnl),
     totalFee: num(r.total_fee),
     totalTrades: num(r.total_trades),

@@ -24,7 +24,8 @@ import { cn, formatPercent } from "@/lib/utils";
 import { LiveRunsTable } from "./live-runs-table";
 import { OrderbookPanel } from "./orderbook-panel";
 import { MarketTabs, matchesMarket, marketFromParam, type Market } from "@/components/market-tabs";
-import { RunDetailPanel } from "../../paper-trading/run-detail-panel";
+import { SYMBOLS_BY_MARKET, defaultSymbolFor } from "@/lib/mock/orderbook";
+import { RunDetailInline } from "../../paper-trading/run-detail-panel";
 import type { PaperRunRow } from "@/lib/mock/paper-runs";
 
 const PAGE_SIZE = 9;
@@ -113,6 +114,10 @@ function LiveTrade() {
   const [page, setPage] = useState(1);
   const [selectedRun, setSelectedRun] = useState<PaperRunRow | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  // The orderbook rail's symbol. Separate from `symbolFilter` above: that one narrows the table
+  // and carries an "all" option, whereas the rail always shows exactly one book. Opens on the
+  // market tab's default and follows the tab when it changes.
+  const [bookSymbol, setBookSymbol] = useState<string>(() => defaultSymbolFor(market));
 
   // Symbol options come from the live runs in the selected market.
   const symbolOptions = useMemo(() => {
@@ -147,6 +152,14 @@ function LiveTrade() {
     };
   }, [runs, market]);
 
+  // The running run trading the rail's symbol — the orderbook tails its live frames, and only a
+  // running run publishes any. Undefined when nothing live is on that symbol, which the panel
+  // reads as "fall back to the mock depth".
+  const boundRun = useMemo(
+    () => runs.find((r) => r.status === "running" && r.symbols.some((s) => s.symbol === bookSymbol)),
+    [runs, bookSymbol],
+  );
+
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount);
   const pageRows = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
@@ -159,6 +172,7 @@ function LiveTrade() {
         value={market}
         onChange={(m) => {
           setMarket(m);
+          setBookSymbol(defaultSymbolFor(m));
           resetPage();
         }}
       />
@@ -228,7 +242,14 @@ function LiveTrade() {
       </div>
 
       <div className="flex min-h-0 gap-4">
-        <section className="flex min-w-0 flex-1 shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-background">
+        <section className="flex min-h-0 min-w-0 flex-1 shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-background">
+          {/* The run detail takes over this box rather than sliding in over the viewport (as it
+              does on Paper Trading / Backtesting), so the orderbook rail stays visible beside it.
+              Mounted only while open — unmounting drops the run's `/live/stream` subscription. */}
+          {detailOpen && selectedRun ? (
+            <RunDetailInline run={selectedRun} onClose={() => setDetailOpen(false)} />
+          ) : (
+            <>
           <div className="min-w-0 overflow-x-auto">
             {isError ? (
               <p className="p-4 text-sm text-destructive">{resourceErrorMessage(error)}</p>
@@ -286,12 +307,18 @@ function LiveTrade() {
               </Pagination>
             </div>
           )}
+            </>
+          )}
         </section>
 
-        <OrderbookPanel market={market} />
+        <OrderbookPanel
+          symbol={bookSymbol}
+          symbolOptions={SYMBOLS_BY_MARKET[market] ?? []}
+          onSymbolChange={setBookSymbol}
+          runId={boundRun?.id}
+          runSymbols={boundRun?.symbols}
+        />
       </div>
-
-      <RunDetailPanel open={detailOpen} onOpenChange={setDetailOpen} run={selectedRun} />
     </main>
   );
 }

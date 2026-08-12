@@ -18,6 +18,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BaseChart } from "@/components/charts/base-chart";
 import { ReorderDotsVerticalIcon } from "@/components/icons/reorder-dots-vertical";
+import { CloseIcon } from "@/components/icons/close";
 import { cn } from "@/lib/utils";
 import { canMutate } from "@/lib/rbac";
 import { useTradeHistory } from "@/hooks/api/use-paper-runs";
@@ -759,7 +760,7 @@ function StopLiveDialog({
   );
 }
 
-function LiveHeaderBar({ run }: { run: PaperRunRow }) {
+function LiveHeaderBar({ run, padRight = false }: { run: PaperRunRow; padRight?: boolean }) {
   const { userId, isAdmin } = useAuth();
   const [confirmStop, setConfirmStop] = useState(false);
   // Only stoppable (running) and only for someone who may mutate this run — same gate
@@ -774,7 +775,13 @@ function LiveHeaderBar({ run }: { run: PaperRunRow }) {
 
   return (
     <>
-      <div className="flex shrink-0 items-center gap-3 border-b border-border bg-surface px-4 py-2">
+      {/* `padRight` keeps the in-table panel's pinned X clear of the Stop-live button. */}
+      <div
+        className={cn(
+          "flex shrink-0 items-center gap-3 border-b border-border bg-surface px-4 py-2",
+          padRight && "pr-12",
+        )}
+      >
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <span className="bg-[linear-gradient(172deg,#cff8ea_0%,#67e1c0_100%)] bg-clip-text text-xs leading-[18px] text-transparent">
             LIVE TRADE RESULTS
@@ -929,11 +936,13 @@ function LiveTabBar({
   active,
   onChange,
   onClose,
+  showMenu = true,
 }: {
   tabs: readonly Tab[];
   active: Tab;
   onChange: (tab: Tab) => void;
   onClose: () => void;
+  showMenu?: boolean;
 }) {
   return (
     <div className="flex h-12 shrink-0 items-center gap-1 border-b border-[#1d2939] bg-surface pr-4">
@@ -959,52 +968,61 @@ function LiveTabBar({
           </button>
         );
       })}
-      <Popover>
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            aria-label="More"
-            className="ml-auto inline-flex cursor-pointer items-center justify-center text-muted-foreground transition-colors hover:text-white"
-          >
-            <ReorderDotsVerticalIcon className="size-5" />
-          </button>
-        </PopoverTrigger>
-        <PopoverContent align="end" className="w-40 p-1">
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex w-full cursor-pointer items-center rounded-md px-2 py-1.5 text-left text-sm text-white transition-colors hover:bg-secondary"
-          >
-            Close panel
-          </button>
-        </PopoverContent>
-      </Popover>
+      {/* In-table presentation supplies its own absolutely-positioned X, so the ⋮ menu — whose
+          only entry is "Close panel" — would be redundant there. */}
+      {showMenu && (
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              aria-label="More"
+              className="ml-auto inline-flex cursor-pointer items-center justify-center text-muted-foreground transition-colors hover:text-white"
+            >
+              <ReorderDotsVerticalIcon className="size-5" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-40 p-1">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex w-full cursor-pointer items-center rounded-md px-2 py-1.5 text-left text-sm text-white transition-colors hover:bg-secondary"
+            >
+              Close panel
+            </button>
+          </PopoverContent>
+        </Popover>
+      )}
     </div>
   );
 }
 
-export function RunDetailPanel({
-  open,
-  onOpenChange,
+// Header + tab bar + tab content for one run. Shared by both presentations: the viewport
+// slide-in (RunDetailPanel — Paper Trading / Backtesting) and the in-table panel
+// (RunDetailInline — Live trade). Mounting is the caller's job: unmounting this tears down the
+// `/live/stream` subscription, which is what closing the panel should do.
+function RunDetailBody({
   run,
+  onClose,
+  inline = false,
 }: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  run: PaperRunRow | null;
+  run: PaperRunRow;
+  onClose: () => void;
+  /** In-table presentation: the caller pins its own X, so drop the tab bar's ⋮ close menu. */
+  inline?: boolean;
 }) {
   const [tab, setTab] = useState<Tab>("Charts");
   const [promoteOpen, setPromoteOpen] = useState(false);
   const router = useRouter();
   const { isAdmin } = useAuth();
-  const visibleTabs = tabsFor(run?.mode);
+  const visibleTabs = tabsFor(run.mode);
   const activeTab: Tab = visibleTabs.includes(tab) ? tab : "Charts";
   // Summary + equity are fetched here — only when the panel is open for a run — not per-row on the
   // list. Skipped in mock mode (synthetic ids the real endpoints can't resolve; the mock row
   // already carries its metrics).
-  const summaryQ = useRunSummary(!USE_MOCK && run ? run.id : undefined);
-  const equityQ = useRunEquity(!USE_MOCK && run ? run.id : undefined);
+  const summaryQ = useRunSummary(!USE_MOCK ? run.id : undefined);
+  const equityQ = useRunEquity(!USE_MOCK ? run.id : undefined);
   const detail: RunDetail =
-    USE_MOCK && run
+    USE_MOCK
       ? {
           returnPct: run.returnPct ?? 0,
           sharpe: run.sharpe ?? 0,
@@ -1015,8 +1033,8 @@ export function RunDetailPanel({
           pnlSeries: run.pnlSeries,
           pnlChartSeries: run.pnlChartSeries,
         }
-      : toRunDetail(summaryQ.data ?? null, equityQ.data ?? [], run?.startingEquity ?? 0);
-  const lazy = !USE_MOCK && !!run;
+      : toRunDetail(summaryQ.data ?? null, equityQ.data ?? [], run.startingEquity);
+  const lazy = !USE_MOCK;
   // Metrics come from /summary, the equity chart from /equity-curve — track them separately so a
   // slow/flaky equity fetch doesn't hide already-loaded metrics behind "Loading results…".
   const summaryLoading = lazy && summaryQ.isLoading;
@@ -1024,36 +1042,24 @@ export function RunDetailPanel({
   const summaryError = lazy ? summaryQ.error : null;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        showCloseButton={false}
-        className="fixed inset-y-0 top-0 right-0 left-auto flex h-dvh w-[min(960px,92vw)] max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-none border-l bg-background p-0 shadow-none duration-300 sm:max-w-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-right data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-right ![--tw-enter-scale:1] ![--tw-exit-scale:1]"
-      >
-        <DialogTitle className="sr-only">{run?.strategyName ?? "Run detail"}</DialogTitle>
+    <>
+      {/* One `/live/stream` subscription for the whole panel — Open position reads its frames
+          instead of polling `/live`. Scoped here so it closes when the panel unmounts. */}
+      <LiveSnapshotProvider runId={run.id} isLive={run.status === "running"}>
+        {run.mode === "live" ? (
+          <LiveHeaderBar run={run} padRight={inline} />
+        ) : (
+          <ResultsHeaderBar
+            run={run}
+            onClose={onClose}
+            canPromote={run.mode === "paper" && isAdmin}
+            onPromote={() => setPromoteOpen(true)}
+          />
+        )}
 
-        {run && (
-          // One `/live/stream` subscription for the whole panel — Open position reads its frames
-          // instead of polling `/live`. Scoped to the panel so it closes with it.
-          <LiveSnapshotProvider runId={run.id} isLive={run.status === "running"}>
-            {run.mode === "live" ? (
-              <LiveHeaderBar run={run} />
-            ) : (
-              <ResultsHeaderBar
-                run={run}
-                onClose={() => onOpenChange(false)}
-                canPromote={run.mode === "paper" && isAdmin}
-                onPromote={() => setPromoteOpen(true)}
-              />
-            )}
-
-            {run.mode === "live" ? (
-              <LiveTabBar
-                tabs={visibleTabs}
-                active={activeTab}
-                onChange={setTab}
-                onClose={() => onOpenChange(false)}
-              />
-            ) : (
+        {run.mode === "live" ? (
+          <LiveTabBar tabs={visibleTabs} active={activeTab} onChange={setTab} onClose={onClose} showMenu={!inline} />
+        ) : (
               <div className="flex h-14 shrink-0 items-stretch border-b border-border bg-surface">
                 {visibleTabs.map((t) => {
                   const on = activeTab === t;
@@ -1072,51 +1078,92 @@ export function RunDetailPanel({
                     </button>
                   );
                 })}
-              </div>
-            )}
-
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              {activeTab === "Charts" &&
-                (run.mode === "live" ? (
-                  <LiveChartsTab
-                    summary={summaryQ.data}
-                    equity={equityQ.data ?? []}
-                    summaryLoading={summaryLoading}
-                    equityLoading={equityLoading}
-                    error={summaryError}
-                  />
-                ) : (
-                  <ChartsTab
-                    detail={detail}
-                    error={summaryError}
-                    summaryLoading={summaryLoading}
-                    equityLoading={equityLoading}
-                  />
-                ))}
-              {activeTab === "Trades" && <TradesTab run={run} />}
-              {activeTab === "Trade cycles" && (
-                <div className="p-4">
-                  <TradeCycles runId={run.id} isLive={run.status === "running"} symbols={run.symbols} />
-                </div>
-              )}
-              {activeTab === "Configuration" && <ConfigTab run={run} />}
-              {activeTab === "Code" && <CodeView code={run.code} />}
-            </div>
-          </LiveSnapshotProvider>
+          </div>
         )}
-      </DialogContent>
+
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {activeTab === "Charts" &&
+            (run.mode === "live" ? (
+              <LiveChartsTab
+                summary={summaryQ.data}
+                equity={equityQ.data ?? []}
+                summaryLoading={summaryLoading}
+                equityLoading={equityLoading}
+                error={summaryError}
+              />
+            ) : (
+              <ChartsTab
+                detail={detail}
+                error={summaryError}
+                summaryLoading={summaryLoading}
+                equityLoading={equityLoading}
+              />
+            ))}
+          {activeTab === "Trades" && <TradesTab run={run} />}
+          {activeTab === "Trade cycles" && (
+            <div className="p-4">
+              <TradeCycles runId={run.id} isLive={run.status === "running"} symbols={run.symbols} />
+            </div>
+          )}
+          {activeTab === "Configuration" && <ConfigTab run={run} />}
+          {activeTab === "Code" && <CodeView code={run.code} />}
+        </div>
+      </LiveSnapshotProvider>
 
       <PromoteToLiveDialog
         run={run}
         open={promoteOpen}
         onOpenChange={setPromoteOpen}
         onPromoted={() => {
-          const market = run ? marketOf(run) : null;
+          const market = marketOf(run);
           setPromoteOpen(false);
-          onOpenChange(false);
+          onClose();
           router.push(`/live-trading/alpha-pool${market ? `?market=${market}` : ""}`);
         }}
       />
+    </>
+  );
+}
+
+// Viewport slide-in — Paper Trading and Backtesting. Unchanged presentation.
+export function RunDetailPanel({
+  open,
+  onOpenChange,
+  run,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  run: PaperRunRow | null;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        showCloseButton={false}
+        className="fixed inset-y-0 top-0 right-0 left-auto flex h-dvh w-[min(960px,92vw)] max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-none border-l bg-background p-0 shadow-none duration-300 sm:max-w-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-right data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-right ![--tw-enter-scale:1] ![--tw-exit-scale:1]"
+      >
+        <DialogTitle className="sr-only">{run?.strategyName ?? "Run detail"}</DialogTitle>
+        {run && <RunDetailBody run={run} onClose={() => onOpenChange(false)} />}
+      </DialogContent>
     </Dialog>
+  );
+}
+
+// In-table presentation — Live trade renders this in place of the runs table rather than over
+// the whole viewport, so the orderbook rail beside it stays visible. The X is pinned to the
+// panel's top-right corner, outside the header/tab-bar flow, and replaces the slide-in's ⋮ menu
+// (whose only entry was "Close panel").
+export function RunDetailInline({ run, onClose }: { run: PaperRunRow; onClose: () => void }) {
+  return (
+    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Close"
+        className="absolute top-3 right-3 z-20 inline-flex cursor-pointer items-center justify-center rounded-md p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-white"
+      >
+        <CloseIcon className="size-4" />
+      </button>
+      <RunDetailBody run={run} onClose={onClose} inline />
+    </div>
   );
 }

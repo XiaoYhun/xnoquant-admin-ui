@@ -34,6 +34,13 @@ export function OrderbookPanel({
   runSymbols: { symbol: string }[] | undefined;
 }) {
   const book = useMemo(() => orderbookFor(symbol), [symbol]);
+  // One scale across BOTH sides so bid and ask depth stay comparable — in Figma 14779:27408 the
+  // buy amounts (28–42) fill most of their column while the sells (3–4) read as thin slivers.
+  // Floored at 1 so an empty/zero ladder can't divide by zero into a NaN width.
+  const maxAmount = useMemo(
+    () => Math.max(1, ...book.levels.flatMap((l) => [l.amountBuy, l.amountSell])),
+    [book],
+  );
   const up = book.changePct >= 0;
   const symbolIndex = runSymbols ? runSymbols.findIndex((s) => s.symbol === symbol) : -1;
 

@@ -22,11 +22,12 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Sparkline } from "@/components/charts/sparkline";
 import { PlaybackSpeedIcon } from "@/components/icons/playback-speed";
-import { formatPercent, shortRunId } from "@/lib/utils";
+import { formatPercent } from "@/lib/utils";
 import { resourceErrorMessage } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
 import { canMutate, isShared } from "@/lib/rbac";
 import { RunStatusPill } from "@/components/run-status-pill";
+import { RunId } from "@/components/run-id";
 import { useStopRun, useDeleteRun } from "@/hooks/api/use-backtest-runs";
 import { useConsoleLog } from "@/store/console-log-store";
 import type { PaperRunRow } from "@/lib/mock/paper-runs";
@@ -117,8 +118,8 @@ export function BacktestRunsTable({
                 <TableCell sticky="left">
                   <RunStatusPill status={r.status} />
                 </TableCell>
-                <TableCell className="truncate text-sm text-white" title={r.id}>
-                  {shortRunId(r.id)}
+                <TableCell className="truncate text-sm text-white">
+                  <RunId id={r.id} />
                 </TableCell>
                 {/* Keep the cell a table-cell so it inherits `align-middle` — a `flex` class here
                     would override display and top-align the name on the taller two-band rows. */}

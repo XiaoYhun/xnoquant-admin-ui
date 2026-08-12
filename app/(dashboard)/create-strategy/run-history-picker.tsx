@@ -2,7 +2,8 @@
 import { useEffect, useState } from "react";
 import { AltArrowDown } from "@solar-icons/react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { cn, shortRunId } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { RunId } from "@/components/run-id";
 import { useStrategyRuns } from "@/hooks/api/use-strategy-runs";
 import type { Run } from "@/types/domain";
 
@@ -71,7 +72,7 @@ export function RunHistoryPicker({
             disabled={runs.length === 0}
             className="inline-flex h-8 cursor-pointer items-center gap-2 rounded-[40px] border border-border bg-background px-3 text-xs text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {isLoading ? "Loading…" : selected ? shortRunId(selected.id) : "No runs"}
+            {isLoading ? "Loading…" : selected ? <RunId id={selected.id} /> : "No runs"}
             <AltArrowDown weight="Outline" className="size-4" />
           </button>
         </PopoverTrigger>
@@ -97,7 +98,7 @@ export function RunHistoryPicker({
                     )}
                   >
                     <span className="flex min-w-0 flex-col gap-1">
-                      <span className="truncate text-xs text-white">{shortRunId(r.id)}</span>
+                      <RunId id={r.id} className="truncate text-xs text-white" />
                       <span className="truncate text-xs text-[#9db2ce]">{formatRunTime(r.created_at)}</span>
                     </span>
                     <span className="flex shrink-0 flex-col items-end gap-1">

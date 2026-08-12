@@ -5,6 +5,7 @@ import { resourceErrorMessage } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
 import { canMutate, isShared } from "@/lib/rbac";
 import { RunStatusPill } from "@/components/run-status-pill";
+import { RunId } from "@/components/run-id";
 import {
   Table,
   TableBody,
@@ -25,7 +26,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Sparkline } from "@/components/charts/sparkline";
 import { FlashValue } from "@/components/ui/flash-value";
-import { cn, formatPercent, shortRunId } from "@/lib/utils";
+import { cn, formatPercent } from "@/lib/utils";
 import { useStopRun } from "@/hooks/api/use-runs";
 import { useDemoteStrategy } from "@/hooks/api/use-live-basket";
 import type { PaperRunRow } from "@/lib/mock/paper-runs";
@@ -110,8 +111,8 @@ export function LiveRunsTable({
                 <TableCell sticky="left">
                   <RunStatusPill status={r.status} showDot />
                 </TableCell>
-                <TableCell className="truncate text-sm text-white" title={r.id}>
-                  {shortRunId(r.id)}
+                <TableCell className="truncate text-sm text-white">
+                  <RunId id={r.id} />
                 </TableCell>
                 {/* Keep the cell a table-cell so it inherits `align-middle` — a `flex` class here
                     would override display and top-align the name on the taller two-band rows. */}

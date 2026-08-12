@@ -12,9 +12,10 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { FlashValue } from "@/components/ui/flash-value";
 import { RunStatusPill } from "@/components/run-status-pill";
+import { RunId } from "@/components/run-id";
 import { StartLiveTradingDialog } from "../../paper-trading/start-live-trading-dialog";
 import { isApprovalStale } from "@/hooks/api/use-live-basket";
-import { cn, formatPercent, shortRunId } from "@/lib/utils";
+import { cn, formatPercent } from "@/lib/utils";
 import type { PaperRunRow } from "@/lib/mock/paper-runs";
 import type { AlphaPoolRow } from "./page";
 
@@ -89,8 +90,8 @@ export function AlphaPoolTable({
               onClick={() => onOpenDetail({ member, run })}
             >
               <TableCell sticky="left">{run ? <RunStatusPill status={run.status} /> : DASH}</TableCell>
-              <TableCell className="truncate text-sm text-white" title={run?.id}>
-                {run ? shortRunId(run.id) : DASH}
+              <TableCell className="truncate text-sm text-white">
+                {run ? <RunId id={run.id} /> : DASH}
               </TableCell>
               {/* Keep the cell a table-cell so it inherits `align-middle` — a `flex` class here
                   would override display and top-align the name on the taller two-band rows. */}

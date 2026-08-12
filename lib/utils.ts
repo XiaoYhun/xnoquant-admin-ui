@@ -13,12 +13,18 @@ export function formatPercent(n: number): string {
   return `${sign}${n.toFixed(2)}%`;
 }
 /**
- * Short, readable handle for a run — `#XfPfqf36LY` rather than a full uuid (Figma 14175:48186).
- * Uses the tail of the id: run uuids are v7-style, so the leading characters are a shared
- * timestamp prefix and the distinguishing bits are at the end.
+ * Short, readable handle for a run — `#019f4559-e48b` rather than a full uuid (Figma
+ * 14175:48186): the first two dash-separated groups of the backend id, so what's on screen is a
+ * literal prefix of the real id and can be matched against it by eye.
+ *
+ * Those twelve hex digits are exactly the 48-bit millisecond timestamp of a v7 uuid, so they
+ * stay unique per run but sort chronologically and share a leading group within any ~65s window
+ * — runs created close together look alike at a glance. The run tables hover-reveal the full id
+ * via `title`; the results-tab run picker does not.
  */
 export function shortRunId(id: string): string {
-  return `#${id.replace(/-/g, "").slice(-10)}`;
+  const [first, second] = id.split("-");
+  return `#${second ? `${first}-${second}` : first}`;
 }
 
 export function formatCompact(n: number): string {

@@ -77,7 +77,9 @@ export type PaperRunRow = {
 
 // The 16 mock literals below carry only the list-row fields; the detail-tab fields
 // (metrics/config/code) are synthesized in listPaperRuns so the literals stay compact.
-type PaperRunBase = Omit<PaperRunRow, "metrics" | "config" | "code" | "startingEquity" | "owner">;
+// Exported (with the builders below) so lib/mock/live-runs.ts composes its live rows from the
+// same machinery instead of duplicating it.
+export type PaperRunBase = Omit<PaperRunRow, "metrics" | "config" | "code" | "startingEquity" | "owner">;
 
 // UI-only row for the detail view's "Trade history" table.
 export type TradeHistoryRow = {
@@ -120,7 +122,7 @@ function dateAt(offsetDays: number): string {
 }
 
 // Larger-magnitude cumulative walk for the detail view's PnL area chart.
-function pnlChartSeries(seed: number, drift: number, points = 40): { date: string; value: number }[] {
+export function pnlChartSeries(seed: number, drift: number, points = 40): { date: string; value: number }[] {
   const out: { date: string; value: number }[] = [];
   let value = 0;
   for (let i = 0; i < points; i++) {
@@ -131,7 +133,7 @@ function pnlChartSeries(seed: number, drift: number, points = 40): { date: strin
 }
 
 // Noisy oscillation (no cumulative drift) for the detail view's Returns line chart.
-function returnsChartSeries(seed: number, points = 80): { date: string; value: number }[] {
+export function returnsChartSeries(seed: number, points = 80): { date: string; value: number }[] {
   const out: { date: string; value: number }[] = [];
   for (let i = 0; i < points; i++) {
     const value = Math.sin(seed * 1.7 + i * 0.9) * 0.09 + Math.sin(seed * 0.6 + i * 0.33) * 0.05;
@@ -143,11 +145,11 @@ function returnsChartSeries(seed: number, points = 80): { date: string; value: n
 const CRYPTO_LEG = { symbol: "ETHUSD", market: "Crypto" };
 const FUT_LEG = { symbol: "VN30F2M", market: "VNFuture" };
 
-function strategyIdFor(n: number): string {
+export function strategyIdFor(n: number): string {
   return `a1b2c3d4-0000-4000-8000-${String(n).padStart(12, "0")}`;
 }
 
-function symbolIdsFor(n: number, count: number): string[] {
+export function symbolIdsFor(n: number, count: number): string[] {
   return Array.from({ length: count }, (_, i) => `b1b2c3d4-1111-4111-8111-${String(n * 10 + i).padStart(12, "0")}`);
 }
 
@@ -216,7 +218,7 @@ const SAMPLE_FEATURES: FeatureDef[] = [
 
 // Synthesize the detail-tab payload from a list row's seed — keeps the 16 literals compact
 // while giving each selected run stable, design-shaped metrics / config / code.
-function buildDetail(r: PaperRunBase): Pick<PaperRunRow, "metrics" | "config" | "code"> {
+export function buildDetail(r: PaperRunBase): Pick<PaperRunRow, "metrics" | "config" | "code"> {
   const seed = seedFromId(r.id);
   const isTick = r.timeframe === "tick";
   return {
@@ -228,7 +230,9 @@ function buildDetail(r: PaperRunBase): Pick<PaperRunRow, "metrics" | "config" | 
       edgeNetBp: Number((0.4 + (seed % 12) / 10).toFixed(2)),
     },
     config: {
-      mode: "Paper",
+      // Paper literals leave `mode` unset, so they keep reading "Paper"; live-runs.ts tags its
+      // rows `mode: "live"` and gets "Live" in the Configuration tab.
+      mode: r.mode === "live" ? "Live" : r.mode === "backtest" ? "Backtest" : "Paper",
       data: isTick ? "Tick" : `Bar (${r.timeframe.replace("min", "m")})`,
       sourceHash: seed.toString(16).padStart(12, "0"),
       accountName: r.accounts[0] ?? "—",

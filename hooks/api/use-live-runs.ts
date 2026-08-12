@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { USE_MOCK } from "@/lib/constant";
+import { mockApi } from "@/lib/mock";
 import type { PaperRunRow } from "@/lib/mock/paper-runs";
 import { fetchRuns, type RunsQuery } from "./use-runs";
 import { toPaperRunRow } from "@/lib/transform/runs";
@@ -16,7 +17,9 @@ async function fetchLiveRunRows(query: RunsQuery): Promise<PaperRunRow[]> {
 export function useLiveRuns(query: RunsQuery = {}) {
   return useQuery({
     queryKey: ["live-runs", query.q ?? "", query.status ?? ""],
-    queryFn: () => (USE_MOCK ? Promise.resolve<PaperRunRow[]>([]) : fetchLiveRunRows(query)),
+    // Mock ignores `query` — search/status narrowing is server-side only, same as
+    // usePaperRuns' mock branch.
+    queryFn: () => (USE_MOCK ? mockApi.listLiveRuns() : fetchLiveRunRows(query)),
     placeholderData: (prev) => prev, // keep rows on screen while a new search resolves
   });
 }

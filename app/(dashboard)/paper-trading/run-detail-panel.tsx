@@ -16,10 +16,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { BaseChart } from "@/components/charts/base-chart";
 import { ReorderDotsVerticalIcon } from "@/components/icons/reorder-dots-vertical";
-import { cn, formatPercent } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { canMutate } from "@/lib/rbac";
 import { useTradeHistory } from "@/hooks/api/use-paper-runs";
 import { useRunSummary, useRunEquity, useStopRun } from "@/hooks/api/use-runs";
@@ -52,7 +51,6 @@ import {
 // Header + slide-in shell mirror strategy-detail-panel.tsx / live-run-detail-panel.tsx.
 const GRAD_GREEN = "bg-[linear-gradient(158deg,#cff8ea_0%,#67e1c1_100%)] bg-clip-text text-transparent";
 const GRAD_RED = "bg-[linear-gradient(160deg,#ffcce2_0%,#ff135b_100%)] bg-clip-text text-transparent";
-const GRAD_ORANGE = "bg-[linear-gradient(150deg,#ffe3d6_0%,#ff9783_100%)] bg-clip-text text-transparent";
 const GRAD_TAB_BG = "bg-[linear-gradient(163deg,#cff8ea_0%,#67e1c1_100%)]";
 
 const TABS = ["Charts", "Trades", "Trade cycles", "Configuration", "Code"] as const;
@@ -65,26 +63,39 @@ const tabsFor = (mode?: string): readonly Tab[] => (mode === "backtest" ? TABS.f
 const TRADES_PAGE_SIZE = 100;
 
 // ── Charts tab ──────────────────────────────────────────────────────────────
-type Tone = "green" | "red" | "orange" | "white";
-const TONE: Record<Tone, string> = { green: GRAD_GREEN, red: GRAD_RED, orange: GRAD_ORANGE, white: "text-white" };
-
-function StatCard({ label, value, unit, tone }: { label: string; value: string; unit?: string; tone: Tone }) {
+// KPI grid cell — label/value/extra layout shell shared by both Charts tabs' KPI blocks; every
+// visual variation (size, tone, unit) is supplied by the caller.
+function KpiCell({
+  label,
+  size,
+  value,
+  valueClassName,
+  extra,
+  extraClassName,
+  title,
+}: {
+  label: string;
+  size: "sm" | "base";
+  value: string;
+  valueClassName: string;
+  extra?: string;
+  extraClassName?: string;
+  title?: string;
+}) {
   return (
-    <div className="flex min-w-0 flex-1 flex-col gap-1 rounded-[12px] border border-border bg-[rgba(29,33,38,0.2)] p-2">
-      <span className="truncate text-xs leading-[18px] text-[#9db2ce]">{label}</span>
-      {/*
-        Seven cards share the row, so a large PnL figure runs wider than its card and used to
-        paint over the neighbour’s value. Clamp the number to the card and keep the unit pinned
-        beside it; the untruncated figure is on hover.
-      */}
-      <div className="flex min-w-0 items-end gap-1">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span className={cn("min-w-0 truncate text-base leading-5 font-semibold", TONE[tone])}>{value}</span>
-          </TooltipTrigger>
-          <TooltipContent>{unit ? `${value} ${unit}` : value}</TooltipContent>
-        </Tooltip>
-        {unit && <span className="shrink-0 text-[10px] leading-[14px] text-[#9db2ce]">{unit}</span>}
+    <div className="flex min-w-0 flex-col gap-1">
+      <span className="text-xs leading-[18px] text-[#9db2ce]">{label}</span>
+      <div className="flex min-w-0 items-end gap-1" title={title}>
+        <span
+          className={cn(
+            size === "sm" ? "text-sm" : "text-base",
+            "min-w-0 truncate leading-5 font-semibold",
+            valueClassName,
+          )}
+        >
+          {value}
+        </span>
+        {extra && <span className={cn("shrink-0", extraClassName)}>{extra}</span>}
       </div>
     </div>
   );
@@ -143,6 +154,69 @@ function PnlChart({ series, height = 240 }: { series: PaperRunRow["pnlChartSerie
   return <BaseChart option={option} style={{ height }} />;
 }
 
+// Two rows of 4 KPIs in one bordered block — Figma 14876:145548. Profit Factor and the win-rate
+// wins|losses breakdown have no source in RunSummary (no profit-factor field; total_trades counts
+// fills, not closing trades), so those render "—" with an explanatory title — same convention as
+// LiveKpiGrid below.
+function ResultsKpiGrid({ detail }: { detail: RunDetail }) {
+  const m = detail.metrics;
+  const netPnlTone = m.netPnl < 0 ? GRAD_RED : GRAD_GREEN;
+  const amount = (n: number) => `${Math.abs(n).toLocaleString()} ₫`;
+
+  return (
+    <div className="flex flex-col gap-2 rounded-[12px] border border-[#1d2939] bg-[rgba(29,33,38,0.2)] px-3 py-2">
+      <div className="grid w-full grid-cols-4 gap-4">
+        <KpiCell
+          label="Net PnL"
+          size="sm"
+          value={`${m.netPnl >= 0 ? "+" : "-"}${amount(m.netPnl)}`}
+          valueClassName={netPnlTone}
+          extra={`(${detail.returnPct >= 0 ? "+" : ""}${detail.returnPct.toFixed(1)}%)`}
+          extraClassName={cn("text-xs font-medium", netPnlTone)}
+        />
+        <KpiCell label="Trades" size="base" value={m.trades.toLocaleString()} valueClassName="text-white" />
+        <KpiCell
+          label="Win rate"
+          size="sm"
+          value={`${m.winRate.toFixed(2)}%`}
+          valueClassName="text-white"
+          extra="—"
+          extraClassName="text-xs text-[#9db2ce]"
+          title="Wins|losses counts aren't available — total_trades counts fills, not closing trades."
+        />
+        <KpiCell
+          label="Profit Factor"
+          size="base"
+          value="—"
+          valueClassName="text-muted-foreground"
+          title="Not available — RunSummary has no profit-factor field."
+        />
+      </div>
+      <div className="h-px w-full bg-[#1d2939]" />
+      <div className="grid w-full grid-cols-4 gap-4">
+        <KpiCell
+          label="Max Drawdown"
+          size="sm"
+          value={`-${amount(detail.maxDrawdown)}`}
+          valueClassName={GRAD_RED}
+          extra={`(-${Math.abs(detail.maxDrawdownPct).toFixed(1)}%)`}
+          extraClassName={cn("text-xs font-medium", GRAD_RED)}
+        />
+        <KpiCell label="Sharpe Ratio" size="base" value={detail.sharpe.toFixed(2)} valueClassName="text-white" />
+        <KpiCell label="Cost Drag" size="base" value={`${m.costDragPct.toFixed(2)}%`} valueClassName="text-white" />
+        <KpiCell
+          label="Edge net"
+          size="base"
+          value={m.edgeNetBp.toFixed(2)}
+          valueClassName="text-white"
+          extra="bp"
+          extraClassName="text-[10px] leading-[14px] text-[#9db2ce]"
+        />
+      </div>
+    </div>
+  );
+}
+
 function ChartsTab({
   detail,
   error,
@@ -166,18 +240,9 @@ function ChartsTab({
   if (summaryLoading) {
     return <div className="p-4 text-sm text-[#9db2ce]">Loading results…</div>;
   }
-  const m = detail.metrics;
   return (
     <div className="flex flex-col gap-3 p-4">
-      <div className="flex gap-2">
-        <StatCard label="Net PnL" value={`${m.netPnl >= 0 ? "+" : "-"}${Math.abs(m.netPnl).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`} unit="USDT" tone={m.netPnl >= 0 ? "green" : "red"} />
-        <StatCard label="Win rate" value={`${m.winRate.toFixed(2)}%`} tone={m.winRate >= 0 ? "green" : "red"} />
-        <StatCard label="Sharpe Ratio" value={detail.sharpe.toFixed(2)} tone="orange" />
-        <StatCard label="Max Drawdown" value={formatPercent(detail.maxDrawdownPct)} tone="red" />
-        <StatCard label="Trades" value={String(m.trades)} tone="white" />
-        <StatCard label="Cost Drag" value={`${m.costDragPct.toFixed(2)}%`} tone="white" />
-        <StatCard label="Edge net" value={m.edgeNetBp.toFixed(2)} unit="bp" tone="white" />
-      </div>
+      <ResultsKpiGrid detail={detail} />
       <ChartCard title="Equity curve">
         {equityLoading ? (
           <div className="flex h-[240px] items-center justify-center text-sm text-muted-foreground">
@@ -196,38 +261,6 @@ function ChartsTab({
 }
 
 // ── Charts tab (live variant, Figma 14890:143542) ──────────────────────────
-// KPI grid cell — label/value/extra layout shell; every visual variation (size, tone, unit) is
-// supplied by the caller.
-function KpiCell({
-  label,
-  size,
-  value,
-  valueClassName,
-  extra,
-  extraClassName,
-  title,
-}: {
-  label: string;
-  size: "sm" | "base";
-  value: string;
-  valueClassName: string;
-  extra?: string;
-  extraClassName?: string;
-  title?: string;
-}) {
-  return (
-    <div className="flex flex-col gap-1">
-      <span className="text-xs leading-[18px] text-[#9db2ce]">{label}</span>
-      <div className="flex items-end gap-1" title={title}>
-        <span className={cn(size === "sm" ? "text-sm" : "text-base", "font-semibold leading-5", valueClassName)}>
-          {value}
-        </span>
-        {extra && <span className={extraClassName}>{extra}</span>}
-      </div>
-    </div>
-  );
-}
-
 // Two rows of 4 KPIs off RunSummary. Profit Factor and the win-rate wins|losses breakdown have no
 // API source (no profit-factor field; total_trades counts fills, not closing trades) — those two
 // render "—" with an explanatory title, same convention as the live-trade page's KpiCard.
@@ -975,6 +1008,8 @@ export function RunDetailPanel({
       ? {
           returnPct: run.returnPct ?? 0,
           sharpe: run.sharpe ?? 0,
+          // PaperRunRow carries only the percentage, so back the absolute figure out of it.
+          maxDrawdown: ((run.maxDrawdownPct ?? 0) / 100) * run.startingEquity,
           maxDrawdownPct: run.maxDrawdownPct ?? 0,
           metrics: run.metrics,
           pnlSeries: run.pnlSeries,

@@ -116,6 +116,9 @@ function metricsFrom(summary: RunSummary | null, startEquity: number): PaperRunR
 export type RunDetail = {
   returnPct: number;
   sharpe: number;
+  // Absolute drawdown in settlement currency, alongside the percentage — the Charts tab's
+  // Max Drawdown KPI shows both ("-25,400,000 ₫ (-5.4%)").
+  maxDrawdown: number;
   maxDrawdownPct: number;
   metrics: PaperRunRow["metrics"];
   pnlSeries: number[];
@@ -126,6 +129,7 @@ export function toRunDetail(summary: RunSummary | null, equity: EquityPoint[], s
   return {
     returnPct: returnPctFrom(summary, startEquity),
     sharpe: summary?.sharpe ?? 0,
+    maxDrawdown: summary?.max_drawdown ?? 0,
     maxDrawdownPct: maxDrawdownPctFrom(summary, startEquity),
     metrics: metricsFrom(summary, startEquity),
     pnlSeries: equity.map((p) => p.equity),

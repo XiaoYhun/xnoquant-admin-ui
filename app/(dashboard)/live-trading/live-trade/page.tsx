@@ -24,7 +24,7 @@ import { cn, formatPercent } from "@/lib/utils";
 import { LiveRunsTable } from "./live-runs-table";
 import { OrderbookPanel } from "./orderbook-panel";
 import { MarketTabs, matchesMarket, marketFromParam, type Market } from "@/components/market-tabs";
-import { SYMBOLS_BY_MARKET, defaultSymbolFor } from "@/lib/mock/orderbook";
+import { useOrderbookSymbols } from "@/hooks/api/use-orderbook-symbols";
 import { RunDetailInline } from "../../paper-trading/run-detail-panel";
 import type { PaperRunRow } from "@/lib/mock/paper-runs";
 
@@ -115,9 +115,11 @@ function LiveTrade() {
   const [selectedRun, setSelectedRun] = useState<PaperRunRow | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   // The orderbook rail's symbol. Separate from `symbolFilter` above: that one narrows the table
-  // and carries an "all" option, whereas the rail always shows exactly one book. Opens on the
-  // market tab's default and follows the tab when it changes.
-  const [bookSymbol, setBookSymbol] = useState<string>(() => defaultSymbolFor(market));
+  // and carries an "all" option, whereas the rail always shows exactly one book. `null` until the
+  // user picks — the panel defaults to the first active symbol. Not tied to the market tab: the
+  // options are whatever is actually running, which the tab filter would often reduce to nothing.
+  const [bookSymbol, setBookSymbol] = useState<string | null>(null);
+  const { data: orderbookSymbols = [] } = useOrderbookSymbols();
 
   // Symbol options come from the live runs in the selected market.
   const symbolOptions = useMemo(() => {
@@ -152,14 +154,6 @@ function LiveTrade() {
     };
   }, [runs, market]);
 
-  // The running run trading the rail's symbol — the orderbook tails its live frames, and only a
-  // running run publishes any. Undefined when nothing live is on that symbol, which the panel
-  // reads as "fall back to the mock depth".
-  const boundRun = useMemo(
-    () => runs.find((r) => r.status === "running" && r.symbols.some((s) => s.symbol === bookSymbol)),
-    [runs, bookSymbol],
-  );
-
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount);
   const pageRows = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
@@ -172,7 +166,6 @@ function LiveTrade() {
         value={market}
         onChange={(m) => {
           setMarket(m);
-          setBookSymbol(defaultSymbolFor(m));
           resetPage();
         }}
       />
@@ -318,13 +311,7 @@ function LiveTrade() {
           )}
         </section>
 
-        <OrderbookPanel
-          symbol={bookSymbol}
-          symbolOptions={SYMBOLS_BY_MARKET[market] ?? []}
-          onSymbolChange={setBookSymbol}
-          runId={boundRun?.id}
-          runSymbols={boundRun?.symbols}
-        />
+        <OrderbookPanel options={orderbookSymbols} symbol={bookSymbol} onSymbolChange={setBookSymbol} />
       </div>
     </main>
   );

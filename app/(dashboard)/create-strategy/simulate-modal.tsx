@@ -408,6 +408,9 @@ export function SimulateModal({
   const [costProcessTradeNs, setCostProcessTradeNs] = useState(0);
   const [l2QueueCapacity, setL2QueueCapacity] = useState(64);
   const [tradeQueueCapacity, setTradeQueueCapacity] = useState(64);
+  // Engine default (MarketConfig::imbalance_depth) — mirrored here so the field shows the value
+  // the run would use rather than an empty box.
+  const [imbalanceDepth, setImbalanceDepth] = useState(10);
 
   const [mode, setMode] = useState<RunMode>("paper");
   const [liveConfirmed, setLiveConfirmed] = useState(false);
@@ -509,6 +512,8 @@ export function SimulateModal({
               l2_queue_capacity: l2QueueCapacity,
               trade_queue_capacity: tradeQueueCapacity,
             },
+      // Market-data config, not execution — applies to every mode.
+      imbalance_depth: imbalanceDepth,
       starting_balances: {
         settlement_currency: settlementCurrency.trim() || "USDT",
         balances: Object.fromEntries(balances.map((b) => [b.currency, b.amount])),
@@ -813,6 +818,22 @@ export function SimulateModal({
                 </div>
               </>
             )}
+          </GroupBox>
+
+          <GroupBox title="Market">
+            {/* Top order-book levels aggregated per side for the strategy's `imbalance_n`
+                feature. Applies to every mode, so it sits outside the Execution box. */}
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-xs font-medium text-[#d0d5dd]">Imbalance depth (book levels per side)</span>
+              <div className="w-24 shrink-0">
+                <PillInput
+                  type="number"
+                  min={0}
+                  value={imbalanceDepth}
+                  onChange={(e) => setImbalanceDepth(Number(e.target.value))}
+                />
+              </div>
+            </div>
           </GroupBox>
 
           {launchRun.isError && (

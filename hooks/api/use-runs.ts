@@ -20,10 +20,15 @@ export type { TurnoverPoint, CostPoint };
 export type BacktestDateRange = { start_date: string; end_date: string };
 
 export type ExecutionSettings = components["schemas"]["ExecutionSettings"];
+// `imbalance_depth` is in the deployed spec (nullable integer ≥ 0: top order-book levels
+// aggregated per side for the `imbalance_n` feature, engine default 10) but not in the checked-in
+// generated types, which predate it. Declared here so the launch form can send it; drop this line
+// once `npm run gen:types` has been re-run against the current spec.
 export type LaunchRequest = Omit<components["schemas"]["LaunchRequest"], "execution"> & {
   execution?: ExecutionSettings | null;
   otp_passcode?: string;
   backtest_range?: BacktestDateRange;
+  imbalance_depth?: number | null;
 };
 
 // Shared HFT `runs` fetchers used to compose useLiveRuns/usePaperRuns rows (Run + RunSummary +

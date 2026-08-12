@@ -1154,16 +1154,23 @@ export function RunDetailPanel({
 // (whose only entry was "Close panel").
 export function RunDetailInline({ run, onClose }: { run: PaperRunRow; onClose: () => void }) {
   return (
-    <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+    // No overflow-hidden here: the close button straddles the top-right corner and must not clip.
+    <div className="relative flex min-h-0 flex-1 flex-col">
       <button
         type="button"
         onClick={onClose}
         aria-label="Close"
-        className="absolute top-3 right-3 z-20 inline-flex cursor-pointer items-center justify-center rounded-md p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-white"
+        className="absolute -top-4 -right-4 z-30 inline-flex size-10 cursor-pointer items-center justify-center rounded-full border border-[#1d2939] bg-background text-[#9db2ce] transition-colors hover:border-white/25 hover:text-white"
       >
-        <CloseIcon className="size-4" />
+        <CloseIcon className="size-5" />
       </button>
-      <RunDetailBody run={run} onClose={onClose} inline />
+      {/* Clipper: bounds the slide-in to the panel box (the wrapper above can't, since it has to
+          let the close button overhang) and keeps the content inside the section's rounded edge. */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl">
+        <div className="flex min-h-0 flex-1 flex-col animate-in fade-in-0 slide-in-from-right duration-300">
+          <RunDetailBody run={run} onClose={onClose} inline />
+        </div>
+      </div>
     </div>
   );
 }

@@ -242,7 +242,14 @@ function LiveTrade() {
       </div>
 
       <div className="flex min-h-0 gap-4">
-        <section className="flex min-h-0 min-w-0 flex-1 shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-background">
+        <section
+          className={cn(
+            "flex min-h-0 min-w-0 flex-1 shrink-0 flex-col rounded-xl border border-border bg-background",
+            // The table needs clipping for its rounded corners; the detail panel must not clip,
+            // or its corner close button gets cut off.
+            detailOpen && selectedRun ? "overflow-visible" : "overflow-hidden",
+          )}
+        >
           {/* The run detail takes over this box rather than sliding in over the viewport (as it
               does on Paper Trading / Backtesting), so the orderbook rail stays visible beside it.
               Mounted only while open — unmounting drops the run's `/live/stream` subscription. */}

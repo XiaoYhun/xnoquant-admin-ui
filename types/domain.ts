@@ -32,14 +32,7 @@ export type Portfolio = {
 // schema to avoid shadowing the global `Symbol` type.
 export type Run = HftComponents["schemas"]["Run"];
 export type RunPage = HftComponents["schemas"]["RunPage"];
-// `fill_rate` (filled / submitted order qty) and `oversized` are returned by the deployed API but
-// missing from the checked-in generated schema, which predates them — the same lag that forced
-// `imbalance_depth` to be declared by hand in hooks/api/use-runs.ts. Drop these once
-// `npm run gen:types` has been re-run against the current spec.
-export type RunSummary = HftComponents["schemas"]["RunSummary"] & {
-  fill_rate?: number;
-  oversized?: boolean;
-};
+export type RunSummary = HftComponents["schemas"]["RunSummary"];
 export type RunStatus = HftComponents["schemas"]["RunStatus"];
 export type RunMode = HftComponents["schemas"]["RunMode"];
 export type Strategy = HftComponents["schemas"]["Strategy"];
@@ -47,6 +40,18 @@ export type StrategyType = HftComponents["schemas"]["StrategyType"];
 export type Instrument = HftComponents["schemas"]["Symbol"];
 export type InstrumentClass = HftComponents["schemas"]["InstrumentClass"];
 export type SymbolPnlSummary = HftComponents["schemas"]["SymbolPnlSummary"];
+
+// --- Risk management (Figma 14975:41599 / 14975:44103) ---
+// Two scopes with different severities: an account can only go Yellow (warn, no action), the
+// portfolio only Red (stops + flattens every running strategy and halts new launches).
+export type RiskLevel = HftComponents["schemas"]["RiskLevel"];
+export type RiskStatusResponse = HftComponents["schemas"]["RiskStatusResponse"];
+export type AccountRiskStatus = HftComponents["schemas"]["AccountRiskStatus"];
+export type RiskThresholdsResponse = HftComponents["schemas"]["RiskThresholdsResponse"];
+export type AccountRiskThreshold = HftComponents["schemas"]["AccountRiskThreshold"];
+export type PortfolioRiskThreshold = HftComponents["schemas"]["PortfolioRiskThreshold"];
+export type RiskAuditEntry = HftComponents["schemas"]["RiskAuditEntry"];
+export type ResetRiskRequest = HftComponents["schemas"]["ResetRiskRequest"];
 export type TradeRow = HftComponents["schemas"]["TradeRow"];
 export type TradePage = HftComponents["schemas"]["TradePage"];
 export type EquityPoint = HftComponents["schemas"]["EquityPoint"];

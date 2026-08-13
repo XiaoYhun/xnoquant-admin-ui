@@ -1,4 +1,4 @@
-import { AddCircle, ServerMinimalistic, Translation, DiagramUp } from "@solar-icons/react";
+import { AddCircle, ServerMinimalistic, Translation, DiagramUp, DangerCircle } from "@solar-icons/react";
 import type { IconProps } from "@solar-icons/react";
 import { Receipt2 } from "@/components/icons/receipt-2";
 import { EmptyWalletTime } from "@/components/icons/empty-wallet-time";
@@ -30,6 +30,9 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Venue", href: "/venues", icon: EmptyWalletTime },
       { label: "Live account", href: "/accounts", icon: Translation, requiresAccess: true },
+      // Thresholds, the audit log and every risk mutation are admin-only (403 otherwise); the
+      // live-status half follows the same visibility rule as the accounts list.
+      { label: "Risk management", href: "/risk-management", icon: DangerCircle, adminOnly: true },
       {
         label: "Live trading",
         href: "/live-trading",

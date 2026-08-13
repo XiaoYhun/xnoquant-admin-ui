@@ -8,28 +8,12 @@ import type { components } from "@/types/api/hft";
 
 export type { TurnoverPoint, CostPoint };
 
-// Request body for `POST /api/runs` (simulate-modal's launch form).
-// `otp_passcode` (DNSE live runs — see `POST /api/accounts/{id}/dnse/send-otp`) isn't in the
-// generated schema yet — extended locally until the OpenAPI spec catches up.
-//
-// `backtest_range` likewise: the deployed spec declares the field but `$ref`s a
-// `BacktestDateRange` schema it never defines (utoipa doesn't register the component), so
-// `gen:types` can't emit it. Shape mirrors the server's `BacktestDateRange` — two `NaiveDate`s,
-// which serde reads as "YYYY-MM-DD". Required for a bar-mode backtest and ignored otherwise;
-// the server rejects start > end and any end in the future.
-export type BacktestDateRange = { start_date: string; end_date: string };
-
+// Request body for `POST /api/runs` (simulate-modal's launch form). `otp_passcode`,
+// `backtest_range` and `imbalance_depth` used to be declared by hand here because the checked-in
+// schema predated them; the regenerated spec carries all three, so this is a plain re-export now.
+export type BacktestDateRange = components["schemas"]["BacktestDateRange"];
 export type ExecutionSettings = components["schemas"]["ExecutionSettings"];
-// `imbalance_depth` is in the deployed spec (nullable integer ≥ 0: top order-book levels
-// aggregated per side for the `imbalance_n` feature, engine default 10) but not in the checked-in
-// generated types, which predate it. Declared here so the launch form can send it; drop this line
-// once `npm run gen:types` has been re-run against the current spec.
-export type LaunchRequest = Omit<components["schemas"]["LaunchRequest"], "execution"> & {
-  execution?: ExecutionSettings | null;
-  otp_passcode?: string;
-  backtest_range?: BacktestDateRange;
-  imbalance_depth?: number | null;
-};
+export type LaunchRequest = components["schemas"]["LaunchRequest"];
 
 // Shared HFT `runs` fetchers used to compose useLiveRuns/usePaperRuns rows (Run + RunSummary +
 // EquityPoint[] → LiveRunRow/PaperRunRow via lib/transform/runs.ts — see
@@ -78,6 +62,35 @@ export function useRuns() {
     queryKey: ["runs"],
     queryFn: () => (USE_MOCK ? Promise.resolve<Run[]>([]) : fetchRuns()),
   });
+}
+
+/**
+ * Currently-running runs. The Risk screen's Strategy column has no field on the risk API, so it
+ * is derived from these by joining `manifest.account.id` — which also means it only describes
+ * what is running *now*, not what was running when a past audit event fired.
+ */
+export function useRunningRuns() {
+  return useQuery({
+    queryKey: ["runs", "running"],
+    queryFn: () => fetchRuns({ status: "running" }),
+    enabled: !USE_MOCK,
+  });
+}
+
+/** `account_id` → the names of the strategies it is currently running, in first-seen order. */
+export function strategiesByAccount(runs: Run[]): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  for (const run of runs) {
+    const name = run.manifest?.strategy?.name;
+    if (!name) continue;
+    // Arbitrage binds a second account as leg 2; both are running this strategy.
+    for (const account of [run.manifest.account, ...(run.manifest.extra_accounts ?? [])]) {
+      if (!account?.id) continue;
+      const seen = out.get(account.id) ?? [];
+      if (!seen.includes(name)) out.set(account.id, [...seen, name]);
+    }
+  }
+  return out;
 }
 
 // Exposed for future row-level/lazy loading. The current live/paper tables consume

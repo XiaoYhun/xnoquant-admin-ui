@@ -21,7 +21,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description List of accounts (caller's own; admins see all — accounts are never lab-shared) */
+                /** @description List of accounts (caller's own assigned accounts; admins see all — accounts are never lab-shared) */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -47,7 +47,11 @@ export interface paths {
             };
         };
         put?: never;
-        /** POST /api/accounts — create an account owned by the caller, encrypting both credentials. */
+        /**
+         * POST /api/accounts — create an account (admin-only). The creating admin's id is recorded as
+         * @description `accounts.user_id` ("created by"), but grants no implicit access — see
+         *     `account_assignments`.
+         */
         post: {
             parameters: {
                 query?: never;
@@ -77,7 +81,7 @@ export interface paths {
                     };
                     content?: never;
                 };
-                /** @description Caller's role has no access to this resource family */
+                /** @description Admin only */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -106,6 +110,188 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/accounts/{account_id}/assignments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** GET /api/accounts/:account_id/assignments — list who currently has access (admin-only). */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Account ID */
+                    account_id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Current assignees, oldest first */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AccountAssignment"][];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Admin only */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Account not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        /** POST /api/accounts/:account_id/assignments — grant a trader/pm access (admin-only). */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Account ID */
+                    account_id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["AssignAccountRequest"];
+                };
+            };
+            responses: {
+                /** @description Assignment created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AccountAssignment"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Admin only */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Account not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Already assigned */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description user_id has never authenticated (not in user_roles) */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/accounts/{account_id}/assignments/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** DELETE /api/accounts/:account_id/assignments/:user_id — withhold/revoke access (admin-only). */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Account ID */
+                    account_id: string;
+                    /** @description User ID to revoke */
+                    user_id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Revoked */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Admin only */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description No such assignment */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/accounts/{id}": {
         parameters: {
             query?: never;
@@ -126,7 +312,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Account (caller's own; admins may fetch any) */
+                /** @description Account (caller's own assigned account; admins may fetch any) */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -195,7 +381,7 @@ export interface paths {
                     };
                     content?: never;
                 };
-                /** @description Caller's role has no access to this resource family */
+                /** @description Admin only */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -246,7 +432,7 @@ export interface paths {
                     };
                     content?: never;
                 };
-                /** @description Caller's role has no access to this resource family */
+                /** @description Admin only */
                 403: {
                     headers: {
                         [name: string]: unknown;
@@ -262,6 +448,84 @@ export interface paths {
                 };
             };
         };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/accounts/{id}/dnse/balance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * GET /api/accounts/:id/dnse/balance — admin, the account's live DNSE derivative balance
+         * @description (free deposit, VND). Used by the risk admin UI to suggest a `baseline_equity` value instead
+         *     of requiring an admin to type it in blind. Only valid for DNSE-venue accounts.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Account ID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Live DNSE balance */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DnseBalanceResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Caller's role has no access to this resource family */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Account is not a DNSE-venue account */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description DNSE request failed */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -631,6 +895,399 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/risk/audit-log": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** GET /api/risk/audit-log — admin, the 100 most recent breach/reset events. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Recent audit entries */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["RiskAuditEntry"][];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Admin only */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/risk/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * POST /api/risk/reset — admin, only while the portfolio is halted. Re-baselines the portfolio
+         * @description and every listed account to the admin's confirmed post-flatten balance, resets each
+         *     watermark to that same value, records one audit row per scope touched, and lifts the halt.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ResetRiskRequest"];
+                };
+            };
+            responses: {
+                /** @description Reset applied, platform unhalted */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Admin only */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Portfolio is not currently halted */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/risk/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * GET /api/risk/status — live portfolio + per-account drawdown, filtered to the accounts the
+         * @description caller can see (same visibility rule as `GET /api/accounts`). Recomputed on every call from
+         *     the same read-only aggregation the monitor uses (`risk_monitor::aggregate_net_pnl`), so this
+         *     never disagrees with what the monitor itself just did.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Current risk status */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["RiskStatusResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Caller's role has no access to this resource family */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/risk/thresholds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** GET /api/risk/thresholds — admin view of every configured threshold. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Configured thresholds */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["RiskThresholdsResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Admin only */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/risk/thresholds/accounts/{account_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * PUT /api/risk/thresholds/accounts/:account_id — admin, create or update an account's Yellow
+         * @description threshold. Same watermark-preservation rule as [`set_portfolio_threshold`].
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Account ID */
+                    account_id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["SetAccountRiskThreshold"];
+                };
+            };
+            responses: {
+                /** @description Threshold saved */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AccountRiskThreshold"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Admin only */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Account not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Validation error */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        /** DELETE /api/risk/thresholds/accounts/:account_id — admin, stop monitoring this account. */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Account ID */
+                    account_id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Threshold removed */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Admin only */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/risk/thresholds/portfolio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * PUT /api/risk/thresholds/portfolio — admin, create or update the single portfolio Red
+         * @description threshold. Sets `peak_equity` to `baseline_equity` only on first creation — an existing
+         *     threshold's watermark is left alone (only `POST /api/risk/reset` may re-baseline it) so
+         *     tightening/loosening the percentage doesn't accidentally erase drawdown history.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["SetPortfolioRiskThreshold"];
+                };
+            };
+            responses: {
+                /** @description Threshold saved */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PortfolioRiskThreshold"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Admin only */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Validation error */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/runs": {
         parameters: {
             query?: never;
@@ -735,6 +1392,13 @@ export interface paths {
                     };
                     content?: never;
                 };
+                /** @description Platform halted by a portfolio risk breach — an admin must reset before launching */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
                 /** @description Validation error */
                 422: {
                     headers: {
@@ -804,7 +1468,12 @@ export interface paths {
         };
         put?: never;
         post?: never;
-        /** DELETE /api/runs/:id — delete a run record. */
+        /**
+         * DELETE /api/runs/:id — delete a run record and its on-disk artifacts. Regular users may only
+         * @description delete their own backtest runs; admins (`all_access`) may delete any run of any mode, as a
+         *     hard-removal override for cases like a runaway test strategy leaving unusably large artifacts
+         *     (see docs/run-result-service.md's "Known issue" section).
+         */
         delete: {
             parameters: {
                 query?: never;
@@ -817,7 +1486,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Deleted */
+                /** @description Deleted (DB row and on-disk artifacts, best-effort for the latter) */
                 204: {
                     headers: {
                         [name: string]: unknown;
@@ -845,7 +1514,7 @@ export interface paths {
                     };
                     content?: never;
                 };
-                /** @description Paper and live runs cannot be deleted */
+                /** @description Paper and live runs cannot be deleted by non-admins */
                 422: {
                     headers: {
                         [name: string]: unknown;
@@ -854,6 +1523,66 @@ export interface paths {
                 };
             };
         };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs/{id}/cost-curve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** GET /api/runs/:id/cost-curve — downsampled cumulative trading-cost (fees) curve. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Run ID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Downsampled cost curve points (same visibility as the run itself) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CostPoint"][];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Caller's role has no access to this resource family */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1391,6 +2120,66 @@ export interface paths {
                     };
                     content: {
                         "application/json": components["schemas"]["TradePage"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Caller's role has no access to this resource family */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs/{id}/turnover-curve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** GET /api/runs/:id/turnover-curve — downsampled cumulative traded-notional curve. */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Run ID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Downsampled turnover curve points (same visibility as the run itself) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TurnoverPoint"][];
                     };
                 };
                 /** @description Unauthorized */
@@ -1963,6 +2752,64 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * GET /api/users — roster of authenticated users from the local `user_roles` mirror,
+         * @description filterable by role (admin-only). Powers the account-assignment picker. Only lists users who
+         *     have signed in at least once (accepted limitation of `user_roles` being an opportunistic
+         *     cache, not a full user directory).
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Comma-separated role filter, default trader,pm */
+                    role?: string | null;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Matching users, ordered by username */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["UserRosterEntry"][];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Admin only */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/venues": {
         parameters: {
             query?: never;
@@ -2275,12 +3122,77 @@ export interface components {
             venue_id: string;
         };
         /**
+         * @description One trader/pm's grant of access to see + run a specific account. Existence of a row is the
+         *     entire access check — see the `EXISTS` queries in `routes::accounts` / `routes::runs`.
+         */
+        AccountAssignment: {
+            /** Format: uuid */
+            account_id: string;
+            /** Format: date-time */
+            assigned_at: string;
+            assigned_by: string;
+            /** Format: uuid */
+            id: string;
+            note?: string | null;
+            user_id: string;
+            /** @description From the local `user_roles` mirror; `None` if that user has never authenticated. */
+            username?: string | null;
+        };
+        /** @description One account's live risk status, as returned by `GET /api/risk/status`. */
+        AccountRiskStatus: {
+            /** Format: uuid */
+            account_id: string;
+            account_name: string;
+            /**
+             * Format: double
+             * @description Current peak-to-trough drawdown, as a fraction of the account's high-water-mark equity.
+             *     `0.0` when the account has no currently running runs.
+             */
+            drawdown_pct: number;
+            level: components["schemas"]["RiskLevel"];
+            /**
+             * Format: double
+             * @description `None` when no admin threshold has been set for this account (monitored as `Ok` only).
+             */
+            yellow_threshold_pct?: number | null;
+        };
+        /**
+         * @description An account's admin-configured Yellow drawdown threshold. `baseline_equity` is the
+         *     admin's confirmed capital for this account — current equity is computed as
+         *     `baseline_equity + sum(net_pnl of this account's running runs)`, not derived from the
+         *     run manifest (empty for live runs; see `risk_monitor` module docs).
+         */
+        AccountRiskThreshold: {
+            /** Format: uuid */
+            account_id: string;
+            /** @description The account's display name, from the `accounts` join — for the admin threshold list. */
+            account_name: string;
+            /** Format: double */
+            baseline_equity: number;
+            /**
+             * Format: double
+             * @description Monitor-maintained high-water mark, exposed read-only so admins can see how close the
+             *     account is to breaching without needing the audit log.
+             */
+            peak_equity: number;
+            /** Format: date-time */
+            updated_at: string;
+            updated_by: string;
+            /** Format: double */
+            yellow_drawdown_pct: number;
+        };
+        /**
          * @description The kind of account / margin mode at a venue. Snake_case is the canonical
          *     wire/storage form, shared by the JSON API and the Postgres `accounts.account_type`
          *     text column.
          * @enum {string}
          */
         AccountType: "spot" | "cross_margin" | "isolated_margin" | "linear_futures" | "inverse_futures";
+        /** @description POST /api/accounts/:account_id/assignments — grant access to a user. */
+        AssignAccountRequest: {
+            note?: string | null;
+            user_id: string;
+        };
         /**
          * @description Inclusive date range for a backtest's historical OHLC fetch. `start_date <= end_date <=
          *     today`, validated by the launch handler.
@@ -2290,6 +3202,19 @@ export interface components {
             end_date: string;
             /** Format: date */
             start_date: string;
+        };
+        /**
+         * @description One downsampled point on the cumulative trading-cost (fees) curve. `fee` is this point's own
+         *     `total_fee` from its `pnl.parquet` round-trip; `cumulative` is the running total from the
+         *     start of the run. `ts` is epoch milliseconds of the closing fill.
+         */
+        CostPoint: {
+            /** Format: double */
+            cumulative: number;
+            /** Format: double */
+            fee: number;
+            /** Format: int64 */
+            ts: number;
         };
         /**
          * @description Mirrors the engine's `DataFormat`. See [`DataSourceType`] for why this is duplicated.
@@ -2456,6 +3381,11 @@ export interface components {
              *     Ignored unless `avoid_auction_sessions` is set; defaults to 300s (5 min) when omitted.
              */
             flatten_buffer_secs?: number | null;
+            /**
+             * @description Number of top order-book levels aggregated per side for the `imbalance_n` feature
+             *     field. Defaults to the engine's `MarketConfig::imbalance_depth` (10) when omitted.
+             */
+            imbalance_depth?: number | null;
             live_condition?: components["schemas"]["LiveConditionSettings"] | null;
             mode: components["schemas"]["RunMode"];
             /**
@@ -2633,6 +3563,34 @@ export interface components {
             name: string;
             venue_type: components["schemas"]["VenueType"];
         };
+        /** @description The portfolio-wide live risk status, as returned by `GET /api/risk/status`. */
+        PortfolioRiskStatus: {
+            /** Format: double */
+            drawdown_pct: number;
+            halted: boolean;
+            /** Format: date-time */
+            halted_at?: string | null;
+            halted_reason?: string | null;
+            level: components["schemas"]["RiskLevel"];
+            /** Format: double */
+            red_threshold_pct?: number | null;
+        };
+        /**
+         * @description The single portfolio-wide Red drawdown threshold, if an admin has set one.
+         *     `baseline_equity` is the admin's confirmed total platform capital — same rationale as
+         *     [`AccountRiskThreshold::baseline_equity`].
+         */
+        PortfolioRiskThreshold: {
+            /** Format: double */
+            baseline_equity: number;
+            /** Format: double */
+            peak_equity: number;
+            /** Format: double */
+            red_drawdown_pct: number;
+            /** Format: date-time */
+            updated_at: string;
+            updated_by: string;
+        };
         /**
          * @description Request body for `POST /api/live-basket/:strategy_id` — promotes (or re-promotes) a
          *     strategy into the live basket, pinned to its current version.
@@ -2645,6 +3603,48 @@ export interface components {
              */
             based_on_run_id?: string | null;
             note?: string | null;
+        };
+        /**
+         * @description POST /api/risk/reset — only callable while the portfolio is halted. The admin supplies the
+         *     confirmed real capital for the portfolio and for each affected account after the
+         *     Red-triggered stop/flatten; these become the new `baseline_equity` (and the new
+         *     high-water mark) for future drawdown calculations (see `risk_monitor`).
+         */
+        ResetRiskRequest: {
+            account_baselines: {
+                [key: string]: number;
+            };
+            /** Format: double */
+            portfolio_baseline_equity: number;
+        };
+        /**
+         * @description One row of the risk audit trail: either a threshold breach/recovery transition detected by
+         *     the monitor (`kind = "breach"`, `actor = "system"`) or an admin's reset of a Red halt
+         *     (`kind = "reset"`).
+         */
+        RiskAuditEntry: {
+            /** Format: uuid */
+            account_id?: string | null;
+            account_name?: string | null;
+            actor: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: double */
+            drawdown_pct?: number | null;
+            /** Format: double */
+            equity?: number | null;
+            /** Format: int64 */
+            id: number;
+            kind: string;
+            level?: components["schemas"]["RiskLevel"] | null;
+            /** Format: double */
+            new_baseline_equity?: number | null;
+            /** Format: double */
+            peak_equity?: number | null;
+            scope: string;
+            stopped_run_ids?: string[] | null;
+            /** Format: double */
+            threshold_pct?: number | null;
         };
         /**
          * @description Per-account risk policy. Tagged by `type` (snake_case) to mirror the engine's `RiskConfig`
@@ -2675,6 +3675,29 @@ export interface components {
             max_notional: number;
             /** @enum {string} */
             type: "inverse_futures";
+        };
+        /**
+         * @description Severity of a risk-threshold breach. Account-scope status only ever reports `Ok`/`Yellow`
+         *     (warn badge, no automatic action); portfolio-scope status only ever reports `Ok`/`Red`
+         *     (stops + flattens every running strategy, halts new launches) — see migration 0027's CHECK
+         *     constraints. [`RiskAuditEntry::level`] is the only place all three values can appear
+         *     together.
+         * @enum {string}
+         */
+        RiskLevel: "ok" | "yellow" | "red";
+        /** @description GET /api/risk/status */
+        RiskStatusResponse: {
+            /**
+             * @description Filtered to the accounts the caller has access to (same visibility rule as
+             *     `GET /api/accounts`).
+             */
+            accounts: components["schemas"]["AccountRiskStatus"][];
+            portfolio: components["schemas"]["PortfolioRiskStatus"];
+        };
+        /** @description GET /api/risk/thresholds — admin view of every configured threshold. */
+        RiskThresholdsResponse: {
+            accounts: components["schemas"]["AccountRiskThreshold"][];
+            portfolio?: components["schemas"]["PortfolioRiskThreshold"] | null;
         };
         /** @description A strategy run as returned to API clients. */
         Run: {
@@ -2765,6 +3788,8 @@ export interface components {
              * @description Mirrors [`LaunchRequest::flatten_buffer_secs`].
              */
             flatten_buffer_secs?: number | null;
+            /** @description Mirrors [`LaunchRequest::imbalance_depth`]. */
+            imbalance_depth?: number | null;
             live_condition?: components["schemas"]["LiveConditionSettings"] | null;
             mode: components["schemas"]["RunMode"];
             /** @description Strategy parameters (free-form). Empty until params are wired through the UI. */
@@ -2830,6 +3855,17 @@ export interface components {
             edge_net_bps: number;
             /**
              * Format: double
+             * @description Qty-weighted share of submitted order quantity that was actually filled, in `[0, 1]`,
+             *     from `<run_dir>/trace.jsonl` order-lifecycle events (`OrderSubmitted` vs
+             *     `OrderFilled`/`OrderPartiallyFilled`, matched by `client_order_id`). `0.0` when the run
+             *     never journaled trade cycles (predates the journal) or submitted no orders. Backtests
+             *     trend towards `1.0` since the simulator only leaves an order unfilled via
+             *     `entry_order_ttl_ms` expiry or a strategy-side cancel — real rejects only happen on
+             *     paper/live venues.
+             */
+            fill_rate: number;
+            /**
+             * Format: double
              * @description Largest peak-to-trough drop of the cumulative realized-PnL curve, in PnL units.
              */
             max_drawdown: number;
@@ -2846,6 +3882,13 @@ export interface components {
              * @description Sum of per-symbol `net_pnl` (already net of fees).
              */
             net_pnl: number;
+            /**
+             * @description `true` when this run's parquet artifacts exceeded the size `result::store` will safely
+             *     load into memory — every other field is then a zeroed/`None` placeholder, not a real
+             *     computed value. See docs/run-result-service.md's "Known issue" section. `#[serde(default)]`
+             *     so Redis-cached JSON from before this field existed still deserializes (as `false`).
+             */
+            oversized?: boolean;
             /**
              * Format: double
              * @description [`net_pnl`](Self::net_pnl) as a fraction of starting capital (the run's settlement-
@@ -2885,6 +3928,20 @@ export interface components {
              * @description Fraction of closing (round-trip-reducing) trades with positive realized PnL, in `[0, 1]`.
              */
             win_rate: number;
+        };
+        /** @description PUT /api/risk/thresholds/accounts/:account_id */
+        SetAccountRiskThreshold: {
+            /** Format: double */
+            baseline_equity: number;
+            /** Format: double */
+            yellow_drawdown_pct: number;
+        };
+        /** @description PUT /api/risk/thresholds/portfolio */
+        SetPortfolioRiskThreshold: {
+            /** Format: double */
+            baseline_equity: number;
+            /** Format: double */
+            red_drawdown_pct: number;
         };
         /**
          * @description Paper-run starting account state supplied at launch. A paper run is a simulation, so it does
@@ -3037,6 +4094,20 @@ export interface components {
             symbol_id: number;
         };
         /**
+         * @description One downsampled point on the cumulative traded-notional (turnover) curve. `notional` is
+         *     this point's own `fill_price * fill_qty` (same definition `compute_summary` sums for
+         *     `cost_bps`/`edge_*_bps`); `cumulative` is the running total from the start of the run.
+         *     `ts` is epoch milliseconds of the fill.
+         */
+        TurnoverPoint: {
+            /** Format: double */
+            cumulative: number;
+            /** Format: double */
+            notional: number;
+            /** Format: int64 */
+            ts: number;
+        };
+        /**
          * @description Request body for updating an account (`PUT /api/accounts/:id`).
          *
          *     `api_key` / `secret_key` are optional: omit them to keep the stored credentials (so the
@@ -3065,6 +4136,16 @@ export interface components {
         User: {
             email: string;
             roles?: string[];
+            user_id: string;
+            username?: string | null;
+        };
+        /**
+         * @description One entry from the local `user_roles` mirror — used by the admin account-assignment picker
+         *     (`GET /api/users`). Only lists users who have authenticated at least once (accepted
+         *     limitation — `user_roles` is populated opportunistically on login).
+         */
+        UserRosterEntry: {
+            roles: string[];
             user_id: string;
             username?: string | null;
         };
@@ -3105,6 +4186,7 @@ export interface components {
          * @enum {string}
          */
         VenueType: "binance_spot" | "binance_futures" | "tcbs" | "dnse";
+        DnseBalanceResponse: Record<string, never>;
         DnseOtpRequest: Record<string, never>;
     };
     responses: never;

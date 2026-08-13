@@ -32,7 +32,14 @@ export type Portfolio = {
 // schema to avoid shadowing the global `Symbol` type.
 export type Run = HftComponents["schemas"]["Run"];
 export type RunPage = HftComponents["schemas"]["RunPage"];
-export type RunSummary = HftComponents["schemas"]["RunSummary"];
+// `fill_rate` (filled / submitted order qty) and `oversized` are returned by the deployed API but
+// missing from the checked-in generated schema, which predates them — the same lag that forced
+// `imbalance_depth` to be declared by hand in hooks/api/use-runs.ts. Drop these once
+// `npm run gen:types` has been re-run against the current spec.
+export type RunSummary = HftComponents["schemas"]["RunSummary"] & {
+  fill_rate?: number;
+  oversized?: boolean;
+};
 export type RunStatus = HftComponents["schemas"]["RunStatus"];
 export type RunMode = HftComponents["schemas"]["RunMode"];
 export type Strategy = HftComponents["schemas"]["Strategy"];

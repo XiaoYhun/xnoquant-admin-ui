@@ -106,7 +106,7 @@ function metricsFrom(summary: RunSummary | null, startEquity: number): PaperRunR
     winRate: summary ? Number((summary.win_rate * 100).toFixed(2)) : 0,
     trades: summary?.total_trades ?? 0,
     costDragPct: summary && startEquity ? Number(((summary.total_fee / startEquity) * 100).toFixed(2)) : 0,
-    edgeNetBp: 0,
+    edgeNetBp: summary?.edge_net_bps ?? 0,
   };
 }
 

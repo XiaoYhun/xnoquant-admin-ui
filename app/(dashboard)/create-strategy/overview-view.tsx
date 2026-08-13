@@ -68,6 +68,9 @@ const ORANGE_TEXT =
   "bg-[linear-gradient(165deg,#ffe3d6_0%,#ff9783_100%)] bg-clip-text text-transparent";
 
 const DASH = "—";
+
+/** Gross edge below which the Cost Drag ratio stops meaning anything — see `costDrag` below. */
+const MIN_GROSS_EDGE_BPS = 0.1;
 const SPARK_POINTS = 16;
 
 function fmtSigned(v: number, digits = 0): string {
@@ -114,12 +117,20 @@ function buildMetrics(
   const netPnl = summary?.net_pnl;
   const ddPct = summary?.max_drawdown_pct;
   const mdd = summary?.max_drawdown;
-  // What share of the gross edge the fees eat. Guarded: a run with no gross edge has no drag.
-  // `cost_bps`/`edge_gross_bps` are REST-only — a running run's summary comes off the live frame,
-  // which doesn't publish them, so presence has to be checked rather than assumed.
+  // What share of the gross edge the fees eat. `cost_bps`/`edge_gross_bps` are REST-only — a
+  // running run's summary comes off the live frame, which doesn't publish them, so presence has
+  // to be checked rather than assumed.
+  //
+  // The ratio only means anything while the strategy has gross edge to erode. A run that gives
+  // its whole edge back to fees lands on `edge_gross_bps ≈ 0`, and dividing by it prints
+  // percentages in the tens of thousands (one dev run reads -62,207%) — worse than useless, since
+  // a bigger number there looks like a worse result when it actually means "no edge either way".
+  // Below that floor the card shows a dash; `cost_bps` on the Cost & Capacity tab is the figure
+  // that still holds.
+  const grossEdgeBps = summary?.edge_gross_bps;
   const costDrag =
-    summary?.cost_bps != null && summary.edge_gross_bps
-      ? (summary.cost_bps / summary.edge_gross_bps) * 100
+    summary?.cost_bps != null && grossEdgeBps != null && Math.abs(grossEdgeBps) >= MIN_GROSS_EDGE_BPS
+      ? (summary.cost_bps / grossEdgeBps) * 100
       : null;
 
   return [
@@ -135,10 +146,13 @@ function buildMetrics(
     },
     {
       label: "Sharpe Ratio",
-      value: summary?.sharpe_annualized == null ? DASH : summary.sharpe_annualized.toFixed(2),
+      value: summary?.sharpe == null ? DASH : summary.sharpe.toFixed(2),
       valueClassName: ORANGE_TEXT,
-      // The API's plain `sharpe` is per-closing-trade, not daily — say which one this is.
-      sub: "Annualized",
+      // Headline is the API's plain `sharpe` (per closing trade), with the annualized figure
+      // beneath — the same pairing the HFT control plane's run page shows. Annualizing scales by
+      // sqrt(trades per year) off the run's own fill rate, so an HFT run that fills hundreds of
+      // times a second annualizes to five or six digits; on its own it reads as a broken number.
+      sub: summary?.sharpe_annualized == null ? "Per closing trade" : `Ann. ${summary.sharpe_annualized.toFixed(2)}`,
       sparkKind: "line",
       sparkColor: GREEN,
       sparkData: sample(toRollingSharpe(equity).map((p) => p.value)),
@@ -223,9 +237,13 @@ function buildStats(
       label: "Total Trades",
       value: summary?.total_trades == null ? DASH : summary.total_trades.toLocaleString("en-US"),
     },
-    // Latency and fill rate live on the trace/execution artifacts, not the results endpoints.
+    // Latency lives on the trace/execution artifacts, not the results endpoints.
     { label: "Avg Latency", value: DASH },
-    { label: "Fill Rate", value: DASH },
+    {
+      label: "Fill Rate",
+      value: summary?.fill_rate == null ? DASH : `${(summary.fill_rate * 100).toFixed(1)}%`,
+      className: GREEN_TEXT,
+    },
   ];
 }
 

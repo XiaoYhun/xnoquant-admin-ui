@@ -22,11 +22,24 @@ import { CloseIcon } from "@/components/icons/close";
 import { cn } from "@/lib/utils";
 import { canMutate } from "@/lib/rbac";
 import { useTradeHistory } from "@/hooks/api/use-paper-runs";
-import { useRunSummary, useRunEquity, useStopRun } from "@/hooks/api/use-runs";
+import {
+  useRunSummary,
+  useRunEquity,
+  useRunTurnover,
+  useRunCostCurve,
+  useStopRun,
+} from "@/hooks/api/use-runs";
 import { ApiError, resourceErrorMessage } from "@/lib/api-client";
 import { USE_MOCK } from "@/lib/constant";
 import { toRunDetail, type RunDetail } from "@/lib/transform/runs";
-import { toDailyPnl, toWeekdayPnl, type DayPoint } from "@/lib/transform/results";
+import {
+  equityDayLabel,
+  toDailyPnl,
+  toDrawdown,
+  toRollingSharpe,
+  toWeekdayPnl,
+  type DayPoint,
+} from "@/lib/transform/results";
 import type { PaperRunRow, TradeHistoryRow } from "@/lib/mock/paper-runs";
 import type { EquityPoint, RunSummary } from "@/types/domain";
 import { RUN_STATUS_META } from "@/components/run-status-pill";
@@ -219,12 +232,16 @@ function ResultsKpiGrid({ detail }: { detail: RunDetail }) {
 }
 
 function ChartsTab({
+  runId,
   detail,
+  equity,
   error,
   summaryLoading,
   equityLoading,
 }: {
+  runId: string | undefined;
   detail: RunDetail;
+  equity: EquityPoint[];
   error: unknown;
   summaryLoading: boolean;
   equityLoading: boolean;
@@ -257,6 +274,25 @@ function ChartsTab({
           <PnlChart series={detail.pnlChartSeries} />
         )}
       </ChartCard>
+      <div className="grid grid-cols-2 gap-4">
+        <ChartCard title="Net PnL by day">
+          <ChartSlot
+            option={dailyBarOption(toDailyPnl(equity))}
+            empty={equity.length === 0}
+            loading={equityLoading}
+            emptyNote="No daily PnL."
+          />
+        </ChartCard>
+        <ChartCard title="Net PnL by weekday">
+          <ChartSlot
+            option={dailyBarOption(toWeekdayPnl(equity))}
+            empty={equity.length === 0}
+            loading={equityLoading}
+            emptyNote="No weekly PnL."
+          />
+        </ChartCard>
+      </div>
+      <DerivedCharts runId={runId} equity={equity} />
     </div>
   );
 }
@@ -370,13 +406,219 @@ function dailyBarOption(points: DayPoint[]): EChartsOption {
   };
 }
 
+// ── Derived curve charts (shared by both Charts tabs) ───────────────────────
+// The HFT control plane's own run page (hft-dev.xnoquant.io/runs/<id>) charts eight panels; this
+// block covers the four the detail panel was missing. Drawdown and rolling Sharpe are derived
+// from `/equity-curve` (lib/transform/results.ts); turnover and fees come from their own curve
+// endpoints. Two control-plane panels stay out: "Fill rate" needs a per-order endpoint HFT
+// doesn't expose, and "PnL attribution" (`GET /api/runs/{id}/symbol-pnl`, live but unused here)
+// is a table rather than a chart.
+const DRAWDOWN_COLOR = "#ff135b";
+const SHARPE_COLOR = "#ff9783";
+const TURNOVER_COLOR = "#f1c617";
+const FEE_COLOR = "#2d84ff";
+
+const compactNum = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 2 });
+const pad2 = (n: number) => String(n).padStart(2, "0");
+const clockLabel = (ts: number) => {
+  const d = new Date(ts);
+  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+};
+
+/**
+ * X-axis labeller for a curve. An HFT run usually lives inside a single day, where the DD/MM/YY
+ * label the equity-derived charts use elsewhere repeats identically on every point — so label by
+ * wall clock until the curve actually spans more than a day.
+ */
+function labellerFor(points: { ts: number }[]): (ts: number) => string {
+  const span = points.length > 1 ? points[points.length - 1].ts - points[0].ts : 0;
+  return span > 86_400_000 ? equityDayLabel : clockLabel;
+}
+
+/** `#rrggbb` → `rgba(...)`, for the gradient stops under each line. */
+function fade(hex: string, alpha: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
+}
+
+function areaLineOption(
+  labels: string[],
+  data: number[],
+  color: string,
+  format: (v: number) => string,
+  yMax?: number,
+): EChartsOption {
+  return {
+    tooltip: { trigger: "axis", valueFormatter: (v: unknown) => format(Number(v)) },
+    grid: { left: 8, right: 8, top: 16, bottom: 8, containLabel: true },
+    xAxis: { type: "category", data: labels, boundaryGap: false, axisLabel: { hideOverlap: true } },
+    yAxis: { type: "value", max: yMax, axisLabel: { formatter: (v: string | number) => format(Number(v)) } },
+    series: [
+      {
+        type: "line",
+        data,
+        showSymbol: false,
+        symbol: "none",
+        lineStyle: { width: 1.5, color },
+        itemStyle: { color },
+        areaStyle: {
+          color: {
+            type: "linear",
+            x: 0,
+            y: 0,
+            x2: 0,
+            y2: 1,
+            colorStops: [
+              { offset: 0, color: fade(color, 0.4) },
+              { offset: 1, color: fade(color, 0) },
+            ],
+          },
+        },
+      },
+    ],
+  };
+}
+
+/** Chart body with the panel's two standing placeholders, so every card keeps its height. */
+function ChartSlot({
+  option,
+  empty,
+  loading,
+  emptyNote,
+  height = 240,
+}: {
+  option: EChartsOption;
+  empty: boolean;
+  loading?: boolean;
+  emptyNote: string;
+  height?: number;
+}) {
+  if (loading || empty) {
+    return (
+      <div className="flex items-center justify-center text-sm text-muted-foreground" style={{ height }}>
+        {loading ? "Loading…" : emptyNote}
+      </div>
+    );
+  }
+  return <BaseChart option={option} style={{ height }} />;
+}
+
+function DerivedCharts({ runId, equity }: { runId: string | undefined; equity: EquityPoint[] }) {
+  const { data: turnover = [], isLoading: turnoverLoading } = useRunTurnover(runId);
+  const { data: costCurve = [], isLoading: costLoading } = useRunCostCurve(runId);
+
+  const drawdown = useMemo(() => {
+    const points = toDrawdown(equity);
+    const label = labellerFor(points);
+    return {
+      empty: points.length === 0,
+      // Absolute drop, not %: `max_drawdown_pct` is a fraction of starting capital, which live
+      // runs never report — the currency figure is the one that's always defined.
+      option: areaLineOption(
+        points.map((p) => label(p.ts)),
+        points.map((p) => p.abs),
+        DRAWDOWN_COLOR,
+        (v) => compactNum.format(v),
+        0,
+      ),
+    };
+  }, [equity]);
+
+  const rollingSharpe = useMemo(() => {
+    // Derived from the equity curve for running and finished runs alike. The live frame also
+    // publishes `sharpe_annualized`, but splicing the two would step the line where history meets
+    // the live tail — they are different statistics (see lib/transform/results.ts).
+    const points = toRollingSharpe(equity);
+    const label = labellerFor(points);
+    return {
+      empty: points.length === 0,
+      option: areaLineOption(
+        points.map((p) => label(p.ts)),
+        points.map((p) => p.value),
+        SHARPE_COLOR,
+        (v) => v.toFixed(2),
+      ),
+    };
+  }, [equity]);
+
+  const turnoverChart = useMemo(() => {
+    // The control plane charts traded notional from the start of the run, which the endpoint
+    // reports per point. Accumulating the points' own `turnover` instead would undercount by
+    // orders of magnitude — the curve is downsampled, so most fills never appear on it.
+    const points = [...turnover].sort((a, b) => a.ts - b.ts);
+    const label = labellerFor(points);
+    const cumulative: number[] = [];
+    for (const p of points) {
+      cumulative.push(p.cumulative ?? (cumulative[cumulative.length - 1] ?? 0) + p.turnover);
+    }
+    return {
+      empty: points.length === 0,
+      option: areaLineOption(
+        points.map((p) => label(p.ts)),
+        cumulative,
+        TURNOVER_COLOR,
+        (v) => compactNum.format(v),
+      ),
+    };
+  }, [turnover]);
+
+  const costChart = useMemo(() => {
+    const points = [...costCurve].sort((a, b) => a.ts - b.ts);
+    const label = labellerFor(points);
+    return {
+      empty: points.length === 0,
+      option: areaLineOption(
+        points.map((p) => label(p.ts)),
+        points.map((p) => p.cumulative),
+        FEE_COLOR,
+        (v) => compactNum.format(v),
+      ),
+    };
+  }, [costCurve]);
+
+  return (
+    <>
+      <ChartCard title="Drawdown">
+        <ChartSlot option={drawdown.option} empty={drawdown.empty} emptyNote="No equity data." />
+      </ChartCard>
+      <ChartCard title="Rolling Sharpe">
+        <ChartSlot
+          option={rollingSharpe.option}
+          empty={rollingSharpe.empty}
+          emptyNote="Need more equity points."
+        />
+      </ChartCard>
+      <div className="grid grid-cols-2 gap-4">
+        <ChartCard title="Turnover">
+          <ChartSlot
+            option={turnoverChart.option}
+            empty={turnoverChart.empty}
+            loading={turnoverLoading}
+            emptyNote="No turnover data."
+          />
+        </ChartCard>
+        <ChartCard title="Cumulative cost">
+          <ChartSlot
+            option={costChart.option}
+            empty={costChart.empty}
+            loading={costLoading}
+            emptyNote="No cost data."
+          />
+        </ChartCard>
+      </div>
+    </>
+  );
+}
+
 function LiveChartsTab({
+  runId,
   summary,
   equity,
   summaryLoading,
   equityLoading,
   error,
 }: {
+  runId: string | undefined;
   summary: RunSummary | undefined;
   equity: EquityPoint[];
   summaryLoading: boolean;
@@ -450,6 +692,8 @@ function LiveChartsTab({
           )}
         </ChartCard>
       </div>
+
+      <DerivedCharts runId={runId} equity={liveEquity} />
     </div>
   );
 }
@@ -1034,6 +1278,16 @@ function RunDetailBody({
           pnlChartSeries: run.pnlChartSeries,
         }
       : toRunDetail(summaryQ.data ?? null, equityQ.data ?? [], run.startingEquity);
+  // The equity-derived charts (daily/weekday PnL, drawdown, rolling Sharpe) need the raw curve,
+  // not just `detail`'s chart-ready projection of it. Mock rows have no curve endpoint behind
+  // them, so rebuild one from the row's own series.
+  const equityPoints = useMemo<EquityPoint[]>(
+    () =>
+      USE_MOCK
+        ? run.pnlChartSeries.map((p) => ({ ts: Date.parse(p.date), equity: p.value, pnl: p.value }))
+        : equityQ.data ?? [],
+    [run.pnlChartSeries, equityQ.data],
+  );
   const lazy = !USE_MOCK;
   // Metrics come from /summary, the equity chart from /equity-curve — track them separately so a
   // slow/flaky equity fetch doesn't hide already-loaded metrics behind "Loading results…".
@@ -1085,15 +1339,18 @@ function RunDetailBody({
           {activeTab === "Charts" &&
             (run.mode === "live" ? (
               <LiveChartsTab
+                runId={lazy ? run.id : undefined}
                 summary={summaryQ.data}
-                equity={equityQ.data ?? []}
+                equity={equityPoints}
                 summaryLoading={summaryLoading}
                 equityLoading={equityLoading}
                 error={summaryError}
               />
             ) : (
               <ChartsTab
+                runId={lazy ? run.id : undefined}
                 detail={detail}
+                equity={equityPoints}
                 error={summaryError}
                 summaryLoading={summaryLoading}
                 equityLoading={equityLoading}

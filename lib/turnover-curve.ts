@@ -1,7 +1,16 @@
 // Aggregate `GET /api/runs/{id}/turnover-curve` points for the Cost & Capacity "Turn over time"
 // chart. The endpoint is undocumented in OpenAPI; shapes are normalized defensively.
 
-export type TurnoverPoint = { ts: number; turnover: number };
+export type TurnoverPoint = {
+  ts: number;
+  turnover: number;
+  /**
+   * Traded notional from the start of the run, as the endpoint reports it. The curve is
+   * downsampled, so this is NOT the running sum of the retained points' own `turnover` — it is
+   * far larger. Optional because the endpoint is undocumented and older shapes omit it.
+   */
+  cumulative?: number;
+};
 export type TurnoverPeriod = "Daily" | "Weekly" | "Monthly";
 export type TurnoverBar = { label: string; value: number };
 
@@ -27,7 +36,7 @@ export function normalizeTurnover(raw: unknown): TurnoverPoint[] {
     const ts = num(r.ts) ?? num(r.timestamp) ?? num(r.t) ?? num(r.time);
     const turnover = num(r.turnover) ?? num(r.value) ?? num(r.notional) ?? num(r.volume);
     if (ts === undefined || turnover === undefined) continue;
-    out.push({ ts, turnover });
+    out.push({ ts, turnover, cumulative: num(r.cumulative) ?? num(r.cum_turnover) ?? num(r.total) });
   }
   return out;
 }

@@ -21,6 +21,7 @@ import { mergeLiveSummary, useLiveSnapshot } from "@/hooks/api/use-run-live-snap
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { lastCumulative, toCostSeries } from "@/lib/cost-curve";
 import { aggregateTurnover, type TurnoverPeriod } from "@/lib/turnover-curve";
+import { costDragPct } from "@/lib/transform/results";
 import { cn } from "@/lib/utils";
 import { ChartCard, MockNote } from "./results-chart-card";
 
@@ -121,10 +122,10 @@ export function CostCapacityView({ runId }: { runId?: string }) {
   const totalCost = curveTotal ?? summary?.total_fee ?? null;
   const netPnl = summary?.net_pnl ?? null;
   const grossPnl = netPnl == null || totalCost == null ? null : netPnl + totalCost;
-  const costDrag =
-    summary?.cost_bps == null || !summary?.edge_gross_bps
-      ? DASH
-      : `${((summary.cost_bps / summary.edge_gross_bps) * 100).toFixed(2)}%`;
+  // Dashes rather than printing a five-digit percentage when there is no gross edge to erode —
+  // see costDragPct. `cost_bps` in the Cost Over Time card is the figure that still holds.
+  const drag = costDragPct(summary);
+  const costDrag = drag == null ? DASH : `${drag.toFixed(2)}%`;
 
   const breakdown = useMemo(() => {
     if (totalCost == null || !Number.isFinite(totalCost) || totalCost === 0) return [];

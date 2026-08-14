@@ -40,6 +40,7 @@ import {
 import type { CostPoint } from "@/lib/cost-curve";
 import {
   annualizedReturn,
+  costDragPct,
   curveSpanMs,
   equityDayLabel,
   equityStats,
@@ -69,8 +70,6 @@ const ORANGE_TEXT =
 
 const DASH = "—";
 
-/** Gross edge below which the Cost Drag ratio stops meaning anything — see `costDrag` below. */
-const MIN_GROSS_EDGE_BPS = 0.1;
 const SPARK_POINTS = 16;
 
 function fmtSigned(v: number, digits = 0): string {
@@ -117,21 +116,7 @@ function buildMetrics(
   const netPnl = summary?.net_pnl;
   const ddPct = summary?.max_drawdown_pct;
   const mdd = summary?.max_drawdown;
-  // What share of the gross edge the fees eat. `cost_bps`/`edge_gross_bps` are REST-only — a
-  // running run's summary comes off the live frame, which doesn't publish them, so presence has
-  // to be checked rather than assumed.
-  //
-  // The ratio only means anything while the strategy has gross edge to erode. A run that gives
-  // its whole edge back to fees lands on `edge_gross_bps ≈ 0`, and dividing by it prints
-  // percentages in the tens of thousands (one dev run reads -62,207%) — worse than useless, since
-  // a bigger number there looks like a worse result when it actually means "no edge either way".
-  // Below that floor the card shows a dash; `cost_bps` on the Cost & Capacity tab is the figure
-  // that still holds.
-  const grossEdgeBps = summary?.edge_gross_bps;
-  const costDrag =
-    summary?.cost_bps != null && grossEdgeBps != null && Math.abs(grossEdgeBps) >= MIN_GROSS_EDGE_BPS
-      ? (summary.cost_bps / grossEdgeBps) * 100
-      : null;
+  const costDrag = costDragPct(summary);
 
   return [
     {

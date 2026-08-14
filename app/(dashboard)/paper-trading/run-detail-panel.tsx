@@ -1,7 +1,6 @@
 "use client";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { EChartsOption } from "echarts";
 import { format, isValid, parseISO } from "date-fns";
 import { AltArrowDown, Maximize, MenuDots, Pause, Plain, Rocket } from "@solar-icons/react";
 import {
@@ -15,33 +14,25 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { BaseChart } from "@/components/charts/base-chart";
+import { OverviewView } from "../create-strategy/overview-view";
+import { PerformanceView } from "../create-strategy/performance-view";
+import { RiskView } from "../create-strategy/risk-view";
+import { ExecutionView } from "../create-strategy/execution-view";
+import { CostCapacityView } from "../create-strategy/cost-capacity-view";
+import { LatencyView } from "../create-strategy/latency-view";
 import { ReorderDotsVerticalIcon } from "@/components/icons/reorder-dots-vertical";
 import { CloseIcon } from "@/components/icons/close";
 import { cn } from "@/lib/utils";
 import { canMutate } from "@/lib/rbac";
 import { useTradeHistory } from "@/hooks/api/use-paper-runs";
-import {
-  useRunSummary,
-  useRunEquity,
-  useRunTurnover,
-  useRunCostCurve,
-  useStopRun,
-} from "@/hooks/api/use-runs";
+import { useRunSummary, useRunEquity, useRun, symbolNamesOf, useStopRun } from "@/hooks/api/use-runs";
 import { ApiError, resourceErrorMessage } from "@/lib/api-client";
 import { USE_MOCK } from "@/lib/constant";
 import { toRunDetail, type RunDetail } from "@/lib/transform/runs";
-import {
-  equityDayLabel,
-  toDailyPnl,
-  toDrawdown,
-  toRollingSharpe,
-  toWeekdayPnl,
-  type DayPoint,
-} from "@/lib/transform/results";
 import type { PaperRunRow, TradeHistoryRow } from "@/lib/mock/paper-runs";
-import type { EquityPoint, RunSummary } from "@/types/domain";
+import type { RunSummary } from "@/types/domain";
 import { RUN_STATUS_META } from "@/components/run-status-pill";
 import { downloadTradeHistoryCsv } from "@/lib/trade-history-csv";
 import { TradeHistoryExportButton } from "@/components/trade-history-export-button";
@@ -56,7 +47,6 @@ import {
   LiveSnapshotProvider,
   mergeLiveSummary,
   mergeLiveTrades,
-  preferLiveEquity,
   useLiveSnapshot,
 } from "@/hooks/api/use-run-live-snapshot";
 
@@ -113,59 +103,6 @@ function KpiCell({
       </div>
     </div>
   );
-}
-
-function ChartCard({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="rounded-2xl border border-border bg-surface">
-      <div className="flex items-center justify-between px-4 py-3">
-        <span className="text-sm font-semibold text-white">{title}</span>
-        <Maximize weight="Outline" className="size-4 text-muted-foreground" />
-      </div>
-      <div className="px-2 pb-2">{children}</div>
-    </div>
-  );
-}
-
-function PnlChart({ series, height = 240 }: { series: PaperRunRow["pnlChartSeries"]; height?: number }) {
-  const option: EChartsOption = {
-    grid: { left: 8, right: 8, top: 16, bottom: 24, containLabel: true },
-    tooltip: { trigger: "axis" },
-    xAxis: { type: "category", data: series.map((p) => p.date), boundaryGap: false },
-    yAxis: { type: "value" },
-    visualMap: {
-      show: false,
-      dimension: 1,
-      seriesIndex: 0,
-      pieces: [
-        { lte: 0, color: "#ff135b" },
-        { gt: 0, color: "#67e1c1" },
-      ],
-    },
-    series: [
-      {
-        type: "line",
-        data: series.map((p) => p.value),
-        showSymbol: false,
-        smooth: true,
-        lineStyle: { width: 1.5 },
-        areaStyle: {
-          color: {
-            type: "linear",
-            x: 0,
-            y: 0,
-            x2: 0,
-            y2: 1,
-            colorStops: [
-              { offset: 0, color: "rgba(103,225,193,0.35)" },
-              { offset: 1, color: "rgba(103,225,193,0)" },
-            ],
-          },
-        },
-      },
-    ],
-  };
-  return <BaseChart option={option} style={{ height }} />;
 }
 
 // Two rows of 4 KPIs in one bordered block — Figma 14876:145548. Profit Factor and the win-rate
@@ -234,17 +171,15 @@ function ResultsKpiGrid({ detail }: { detail: RunDetail }) {
 function ChartsTab({
   runId,
   detail,
-  equity,
+  isLive,
   error,
   summaryLoading,
-  equityLoading,
 }: {
   runId: string | undefined;
   detail: RunDetail;
-  equity: EquityPoint[];
+  isLive: boolean;
   error: unknown;
   summaryLoading: boolean;
-  equityLoading: boolean;
 }) {
   if (error) {
     return (
@@ -261,38 +196,7 @@ function ChartsTab({
   return (
     <div className="flex flex-col gap-3 p-4">
       <ResultsKpiGrid detail={detail} />
-      <ChartCard title="Equity curve">
-        {equityLoading ? (
-          <div className="flex h-[240px] items-center justify-center text-sm text-muted-foreground">
-            Loading…
-          </div>
-        ) : detail.pnlChartSeries.length === 0 ? (
-          <div className="flex h-[240px] items-center justify-center text-sm text-muted-foreground">
-            No equity data.
-          </div>
-        ) : (
-          <PnlChart series={detail.pnlChartSeries} />
-        )}
-      </ChartCard>
-      <div className="grid grid-cols-2 gap-4">
-        <ChartCard title="Net PnL by day">
-          <ChartSlot
-            option={dailyBarOption(toDailyPnl(equity))}
-            empty={equity.length === 0}
-            loading={equityLoading}
-            emptyNote="No daily PnL."
-          />
-        </ChartCard>
-        <ChartCard title="Net PnL by weekday">
-          <ChartSlot
-            option={dailyBarOption(toWeekdayPnl(equity))}
-            empty={equity.length === 0}
-            loading={equityLoading}
-            emptyNote="No weekly PnL."
-          />
-        </ChartCard>
-      </div>
-      <DerivedCharts runId={runId} equity={equity} />
+      <ResultsViews runId={runId} isLive={isLive} />
     </div>
   );
 }
@@ -382,255 +286,63 @@ function LiveKpiGrid({ summary }: { summary: RunSummary | undefined }) {
   );
 }
 
-// Bar option for the two half-width PnL charts (3c). The Figma frame clips both charts' bodies —
-// only the card chrome and a "10K"-style y-axis tick are visible — so there's no spec for the bars
-// themselves; this mirrors create-strategy/performance-view.tsx's day/month PnL bar rendering
-// (same green/red-by-sign coloring), kept local since that file exports no chart component to
-// import directly.
-function dailyBarOption(points: DayPoint[]): EChartsOption {
-  return {
-    tooltip: { trigger: "axis" },
-    grid: { left: 8, right: 8, top: 16, bottom: 8, containLabel: true },
-    xAxis: { type: "category", data: points.map((p) => p.label), axisTick: { show: false } },
-    yAxis: {
-      type: "value",
-      axisLabel: { formatter: (v: number) => (Math.abs(v) >= 1000 ? `${v / 1000}K` : `${v}`) },
-    },
-    series: [
-      {
-        type: "bar",
-        barWidth: "60%",
-        data: points.map((p) => ({ value: p.value, itemStyle: { color: p.value >= 0 ? "#67e1c1" : "#ff135b" } })),
-      },
-    ],
-  };
-}
+// ── Results views (shared by both Charts tabs) ──────────────────────────────
+// The same six views Create Strategy's Results tab renders, minus its run-history picker — the
+// panel is already scoped to one run, so the picker has nothing to choose. They subscribe to the
+// `LiveSnapshotProvider` RunDetailBody already opens, so all six share its one connection.
+//
+// This replaced a set of standalone chart cards that lived here: every series they drew is in one
+// of these views already (equity in Overview, day/weekday PnL in Performance, drawdown and
+// rolling Sharpe in Risk, turnover and cumulative cost in Cost & Capacity).
+const VIEWS = ["Overview", "Performance", "Risk", "Execution", "Cost & Capacity", "Latency"] as const;
+type View = (typeof VIEWS)[number];
 
-// ── Derived curve charts (shared by both Charts tabs) ───────────────────────
-// The HFT control plane's own run page (hft-dev.xnoquant.io/runs/<id>) charts eight panels; this
-// block covers the four the detail panel was missing. Drawdown and rolling Sharpe are derived
-// from `/equity-curve` (lib/transform/results.ts); turnover and fees come from their own curve
-// endpoints. Two control-plane panels stay out: "Fill rate" needs a per-order endpoint HFT
-// doesn't expose, and "PnL attribution" (`GET /api/runs/{id}/symbol-pnl`, live but unused here)
-// is a table rather than a chart.
-const DRAWDOWN_COLOR = "#ff135b";
-const SHARPE_COLOR = "#ff9783";
-const TURNOVER_COLOR = "#f1c617";
-const FEE_COLOR = "#2d84ff";
+// Figma pills (14876:146506), same tokens the Results tab uses: no track, active = Neutral/Black 800.
+const VIEW_TAB_LIST = "gap-2 rounded-none bg-transparent p-0";
+const VIEW_TAB_TRIGGER =
+  "rounded-[40px] px-3 py-2 text-sm text-[#9db2ce] data-[state=active]:bg-[#1d2939] data-[state=active]:text-white data-[state=active]:shadow-none";
 
-const compactNum = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 2 });
-const pad2 = (n: number) => String(n).padStart(2, "0");
-const clockLabel = (ts: number) => {
-  const d = new Date(ts);
-  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
-};
-
-/**
- * X-axis labeller for a curve. An HFT run usually lives inside a single day, where the DD/MM/YY
- * label the equity-derived charts use elsewhere repeats identically on every point — so label by
- * wall clock until the curve actually spans more than a day.
- */
-function labellerFor(points: { ts: number }[]): (ts: number) => string {
-  const span = points.length > 1 ? points[points.length - 1].ts - points[0].ts : 0;
-  return span > 86_400_000 ? equityDayLabel : clockLabel;
-}
-
-/** `#rrggbb` → `rgba(...)`, for the gradient stops under each line. */
-function fade(hex: string, alpha: number): string {
-  const n = parseInt(hex.slice(1), 16);
-  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
-}
-
-function areaLineOption(
-  labels: string[],
-  data: number[],
-  color: string,
-  format: (v: number) => string,
-  yMax?: number,
-): EChartsOption {
-  return {
-    tooltip: { trigger: "axis", valueFormatter: (v: unknown) => format(Number(v)) },
-    grid: { left: 8, right: 8, top: 16, bottom: 8, containLabel: true },
-    xAxis: { type: "category", data: labels, boundaryGap: false, axisLabel: { hideOverlap: true } },
-    yAxis: { type: "value", max: yMax, axisLabel: { formatter: (v: string | number) => format(Number(v)) } },
-    series: [
-      {
-        type: "line",
-        data,
-        showSymbol: false,
-        symbol: "none",
-        lineStyle: { width: 1.5, color },
-        itemStyle: { color },
-        areaStyle: {
-          color: {
-            type: "linear",
-            x: 0,
-            y: 0,
-            x2: 0,
-            y2: 1,
-            colorStops: [
-              { offset: 0, color: fade(color, 0.4) },
-              { offset: 1, color: fade(color, 0) },
-            ],
-          },
-        },
-      },
-    ],
-  };
-}
-
-/** Chart body with the panel's two standing placeholders, so every card keeps its height. */
-function ChartSlot({
-  option,
-  empty,
-  loading,
-  emptyNote,
-  height = 240,
-}: {
-  option: EChartsOption;
-  empty: boolean;
-  loading?: boolean;
-  emptyNote: string;
-  height?: number;
-}) {
-  if (loading || empty) {
-    return (
-      <div className="flex items-center justify-center text-sm text-muted-foreground" style={{ height }}>
-        {loading ? "Loading…" : emptyNote}
-      </div>
-    );
-  }
-  return <BaseChart option={option} style={{ height }} />;
-}
-
-function DerivedCharts({ runId, equity }: { runId: string | undefined; equity: EquityPoint[] }) {
-  const { data: turnover = [], isLoading: turnoverLoading } = useRunTurnover(runId);
-  const { data: costCurve = [], isLoading: costLoading } = useRunCostCurve(runId);
-
-  const drawdown = useMemo(() => {
-    const points = toDrawdown(equity);
-    const label = labellerFor(points);
-    return {
-      empty: points.length === 0,
-      // Absolute drop, not %: `max_drawdown_pct` is a fraction of starting capital, which live
-      // runs never report — the currency figure is the one that's always defined.
-      option: areaLineOption(
-        points.map((p) => label(p.ts)),
-        points.map((p) => p.abs),
-        DRAWDOWN_COLOR,
-        (v) => compactNum.format(v),
-        0,
-      ),
-    };
-  }, [equity]);
-
-  const rollingSharpe = useMemo(() => {
-    // Derived from the equity curve for running and finished runs alike. The live frame also
-    // publishes `sharpe_annualized`, but splicing the two would step the line where history meets
-    // the live tail — they are different statistics (see lib/transform/results.ts).
-    const points = toRollingSharpe(equity);
-    const label = labellerFor(points);
-    return {
-      empty: points.length === 0,
-      option: areaLineOption(
-        points.map((p) => label(p.ts)),
-        points.map((p) => p.value),
-        SHARPE_COLOR,
-        (v) => v.toFixed(2),
-      ),
-    };
-  }, [equity]);
-
-  const turnoverChart = useMemo(() => {
-    // The control plane charts traded notional from the start of the run, which the endpoint
-    // reports per point. Accumulating the points' own `turnover` instead would undercount by
-    // orders of magnitude — the curve is downsampled, so most fills never appear on it.
-    const points = [...turnover].sort((a, b) => a.ts - b.ts);
-    const label = labellerFor(points);
-    const cumulative: number[] = [];
-    for (const p of points) {
-      cumulative.push(p.cumulative ?? (cumulative[cumulative.length - 1] ?? 0) + p.turnover);
-    }
-    return {
-      empty: points.length === 0,
-      option: areaLineOption(
-        points.map((p) => label(p.ts)),
-        cumulative,
-        TURNOVER_COLOR,
-        (v) => compactNum.format(v),
-      ),
-    };
-  }, [turnover]);
-
-  const costChart = useMemo(() => {
-    const points = [...costCurve].sort((a, b) => a.ts - b.ts);
-    const label = labellerFor(points);
-    return {
-      empty: points.length === 0,
-      option: areaLineOption(
-        points.map((p) => label(p.ts)),
-        points.map((p) => p.cumulative),
-        FEE_COLOR,
-        (v) => compactNum.format(v),
-      ),
-    };
-  }, [costCurve]);
-
+function ResultsViews({ runId, isLive }: { runId: string | undefined; isLive: boolean }) {
+  const [view, setView] = useState<View>("Overview");
   return (
-    <>
-      <ChartCard title="Drawdown">
-        <ChartSlot option={drawdown.option} empty={drawdown.empty} emptyNote="No equity data." />
-      </ChartCard>
-      <ChartCard title="Rolling Sharpe">
-        <ChartSlot
-          option={rollingSharpe.option}
-          empty={rollingSharpe.empty}
-          emptyNote="Need more equity points."
-        />
-      </ChartCard>
-      <div className="grid grid-cols-2 gap-4">
-        <ChartCard title="Turnover">
-          <ChartSlot
-            option={turnoverChart.option}
-            empty={turnoverChart.empty}
-            loading={turnoverLoading}
-            emptyNote="No turnover data."
-          />
-        </ChartCard>
-        <ChartCard title="Cumulative cost">
-          <ChartSlot
-            option={costChart.option}
-            empty={costChart.empty}
-            loading={costLoading}
-            emptyNote="No cost data."
-          />
-        </ChartCard>
+    <div className="flex min-w-0 flex-col gap-4">
+      <Tabs value={view} onValueChange={(v) => v && setView(v as View)}>
+        <TabsList className={cn(VIEW_TAB_LIST, "flex-wrap")}>
+          {VIEWS.map((v) => (
+            <TabsTrigger key={v} value={v} className={VIEW_TAB_TRIGGER}>
+              {v}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
+      <div className="min-w-0">
+        {view === "Overview" && <OverviewView runId={runId} />}
+        {view === "Performance" && <PerformanceView runId={runId} />}
+        {view === "Risk" && <RiskView runId={runId} isLive={isLive} />}
+        {view === "Execution" && <ExecutionView runId={runId} isLive={isLive} />}
+        {view === "Cost & Capacity" && <CostCapacityView runId={runId} />}
+        {view === "Latency" && <LatencyView isLive={isLive} />}
       </div>
-    </>
+    </div>
   );
 }
 
 function LiveChartsTab({
   runId,
   summary,
-  equity,
   summaryLoading,
-  equityLoading,
   error,
 }: {
   runId: string | undefined;
   summary: RunSummary | undefined;
-  equity: EquityPoint[];
   summaryLoading: boolean;
-  equityLoading: boolean;
   error: unknown;
 }) {
-  // The REST /summary and /equity-curve 500 for the whole life of a running run (parquet sidecar
-  // still being written) — the live/stream frame is the only source until the run stops, so the
-  // KPIs and every chart below read the merged values, not the raw REST props.
+  // The REST /summary 500s for the whole life of a running run (parquet sidecar still being
+  // written) — the live/stream frame is the only source until it stops, so the KPIs read the
+  // merged values, not the raw REST prop. The views below do their own equivalent merging.
   const { snapshot } = useLiveSnapshot();
   const liveSummary = mergeLiveSummary(summary, snapshot);
-  const liveEquity = preferLiveEquity(equity, snapshot);
 
   if (error && !liveSummary) {
     return (
@@ -645,55 +357,10 @@ function LiveChartsTab({
     return <div className="p-4 text-sm text-[#9db2ce]">Loading results…</div>;
   }
 
-  // No settlement-currency field reaches PaperRunRow yet (see toRunConfig in
-  // lib/transform/runs.ts) — fall back to this file's existing currency convention (StatCard's
-  // "USDT" unit above) rather than plumb one through for two chart titles.
-  const ccy = "USDT";
-  const noEquity = liveEquity.length === 0;
-  const dailyPoints = toDailyPnl(liveEquity);
-  const weeklyPoints = toWeekdayPnl(liveEquity);
-
   return (
     <div className="flex flex-col gap-3 p-4">
       <LiveKpiGrid summary={liveSummary} />
-
-      <ChartCard title="EQUITY">
-        {equityLoading && noEquity ? (
-          <div className="flex h-[260px] items-center justify-center text-sm text-muted-foreground">Loading…</div>
-        ) : noEquity ? (
-          <div className="flex h-[260px] items-center justify-center text-sm text-muted-foreground">
-            No equity data.
-          </div>
-        ) : (
-          <PnlChart
-            series={liveEquity.map((p) => ({ date: new Date(p.ts).toISOString(), value: p.equity }))}
-            height={260}
-          />
-        )}
-      </ChartCard>
-
-      <div className="grid grid-cols-2 gap-4">
-        <ChartCard title={`Net Daily PNL (${ccy})`}>
-          {noEquity ? (
-            <div className="flex h-[240px] items-center justify-center text-sm text-muted-foreground">
-              No daily PnL.
-            </div>
-          ) : (
-            <BaseChart option={dailyBarOption(dailyPoints)} />
-          )}
-        </ChartCard>
-        <ChartCard title={`Weekly performance (${ccy})`}>
-          {noEquity ? (
-            <div className="flex h-[240px] items-center justify-center text-sm text-muted-foreground">
-              No weekly PnL.
-            </div>
-          ) : (
-            <BaseChart option={dailyBarOption(weeklyPoints)} />
-          )}
-        </ChartCard>
-      </div>
-
-      <DerivedCharts runId={runId} equity={liveEquity} />
+      <ResultsViews runId={runId} isLive />
     </div>
   );
 }
@@ -1262,7 +929,9 @@ function RunDetailBody({
   const activeTab: Tab = visibleTabs.includes(tab) ? tab : "Charts";
   // Summary + equity are fetched here — only when the panel is open for a run — not per-row on the
   // list. Skipped in mock mode (synthetic ids the real endpoints can't resolve; the mock row
-  // already carries its metrics).
+  // already carries its metrics). The equity curve only feeds `detail`'s series fields now that
+  // the Results views draw the charts; it costs no extra request, since those views query the
+  // same `["run-equity", id]` key.
   const summaryQ = useRunSummary(!USE_MOCK ? run.id : undefined);
   const equityQ = useRunEquity(!USE_MOCK ? run.id : undefined);
   const detail: RunDetail =
@@ -1278,28 +947,23 @@ function RunDetailBody({
           pnlChartSeries: run.pnlChartSeries,
         }
       : toRunDetail(summaryQ.data ?? null, equityQ.data ?? [], run.startingEquity);
-  // The equity-derived charts (daily/weekday PnL, drawdown, rolling Sharpe) need the raw curve,
-  // not just `detail`'s chart-ready projection of it. Mock rows have no curve endpoint behind
-  // them, so rebuild one from the row's own series.
-  const equityPoints = useMemo<EquityPoint[]>(
-    () =>
-      USE_MOCK
-        ? run.pnlChartSeries.map((p) => ({ ts: Date.parse(p.date), equity: p.value, pnl: p.value }))
-        : equityQ.data ?? [],
-    [run.pnlChartSeries, equityQ.data],
-  );
   const lazy = !USE_MOCK;
-  // Metrics come from /summary, the equity chart from /equity-curve — track them separately so a
-  // slow/flaky equity fetch doesn't hide already-loaded metrics behind "Loading results…".
+  const isLive = run.status === "running";
+  // Live frames name symbols by dense index only, so the manifest supplies the tickers — without
+  // it every live fill in the Results views' trade tables reads "#0". Only a running run has
+  // frames to label, so the extra fetch is scoped to one.
+  const { data: runRecord } = useRun(isLive && lazy ? run.id : undefined);
+  const symbolNames = useMemo(() => symbolNamesOf(runRecord), [runRecord]);
+  // Only /summary gates the KPI grid's "Loading results…" — each Results view owns the loading and
+  // error state of whatever curve it draws, so a slow equity fetch no longer blanks the tab.
   const summaryLoading = lazy && summaryQ.isLoading;
-  const equityLoading = lazy && equityQ.isLoading;
   const summaryError = lazy ? summaryQ.error : null;
 
   return (
     <>
       {/* One `/live/stream` subscription for the whole panel — Open position reads its frames
           instead of polling `/live`. Scoped here so it closes when the panel unmounts. */}
-      <LiveSnapshotProvider runId={run.id} isLive={run.status === "running"}>
+      <LiveSnapshotProvider runId={run.id} isLive={isLive} symbolNames={symbolNames}>
         {run.mode === "live" ? (
           <LiveHeaderBar run={run} padRight={inline} />
         ) : (
@@ -1341,19 +1005,16 @@ function RunDetailBody({
               <LiveChartsTab
                 runId={lazy ? run.id : undefined}
                 summary={summaryQ.data}
-                equity={equityPoints}
                 summaryLoading={summaryLoading}
-                equityLoading={equityLoading}
                 error={summaryError}
               />
             ) : (
               <ChartsTab
                 runId={lazy ? run.id : undefined}
                 detail={detail}
-                equity={equityPoints}
+                isLive={isLive}
                 error={summaryError}
                 summaryLoading={summaryLoading}
-                equityLoading={equityLoading}
               />
             ))}
           {activeTab === "Trades" && <TradesTab run={run} />}

@@ -210,6 +210,28 @@ export function startingCapital(summary: RunSummary | undefined): number | null 
   return Number.isFinite(capital) && capital > 0 ? capital : null;
 }
 
+// Gross edge below which the Cost Drag ratio stops meaning anything — see `costDragPct`.
+const MIN_GROSS_EDGE_BPS = 0.1;
+
+/**
+ * What share of the gross edge the fees eat, as a percentage — `null` when it isn't meaningful.
+ *
+ * The ratio only says something while the strategy has gross edge to erode. A run that hands its
+ * whole edge back in fees lands on `edge_gross_bps ≈ 0`, and dividing by that prints percentages
+ * in the tens of thousands (one dev run reads -62,206%) — worse than useless, since a bigger
+ * number there looks like a worse result when it actually means "no edge either way". Below the
+ * floor, callers show a dash; `cost_bps` is the figure that still holds.
+ *
+ * `cost_bps`/`edge_gross_bps` are REST-only — a running run's summary comes off the live frame,
+ * which doesn't publish them — so presence is checked rather than assumed.
+ */
+export function costDragPct(summary: RunSummary | undefined | null): number | null {
+  const gross = summary?.edge_gross_bps;
+  if (summary?.cost_bps == null || gross == null) return null;
+  if (Math.abs(gross) < MIN_GROSS_EDGE_BPS) return null;
+  return (summary.cost_bps / gross) * 100;
+}
+
 const YEAR_MS = 365.25 * 86_400_000;
 // Annualizing a handful of days produces nonsense (a good week reads as +40,000%), so CAGR is
 // only defined once the run spans enough calendar time for the exponent to mean something.

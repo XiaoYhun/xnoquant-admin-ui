@@ -7,7 +7,7 @@ import { useState } from "react";
 import type { EChartsOption } from "echarts";
 import { CheckCircle, CloseCircle, AltArrowDown, Record as RecordIcon } from "@solar-icons/react";
 
-import { cn } from "@/lib/utils";
+import { cn, formatAmount } from "@/lib/utils";
 import { BaseChart } from "@/components/charts/base-chart";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
@@ -63,14 +63,14 @@ const PERCENT_METRICS = new Set(["cagr", "max_drawdown"]);
 
 function formatThreshold(metric?: string, threshold?: number): string {
   if (threshold == null) return "--";
-  if (metric && PERCENT_METRICS.has(metric)) return `${(threshold * 100).toFixed(0)}%`;
+  if (metric && PERCENT_METRICS.has(metric)) return `${formatAmount(threshold * 100, 0)}%`;
   return `${threshold}`;
 }
 
 function formatEvalValue(metric?: string, value?: number | null): string {
   if (value == null) return "--";
-  if (metric && PERCENT_METRICS.has(metric)) return `${(value * 100).toFixed(1)}%`;
-  return value.toFixed(2);
+  if (metric && PERCENT_METRICS.has(metric)) return `${formatAmount(value * 100, 1)}%`;
+  return formatAmount(value, 2);
 }
 
 function EvaluationRow({ result }: { result: EvaluationRecord }) {
@@ -229,8 +229,8 @@ function SelfCorrelationGauge({ items }: { items: StrategyEventCorrelationItem[]
         />
       </div>
       <div className="flex items-center gap-4">
-        <CorrelationLegendDot color="#67e1c1" label={`Min ${selfMin.toFixed(2)}`} />
-        <CorrelationLegendDot color="#ff135b" label={`Max ${selfMax.toFixed(2)}`} />
+        <CorrelationLegendDot color="#67e1c1" label={`Min ${formatAmount(selfMin, 2)}`} />
+        <CorrelationLegendDot color="#ff135b" label={`Max ${formatAmount(selfMax, 2)}`} />
       </div>
     </div>
   );
@@ -253,7 +253,7 @@ function CrossCorrelationTable({ items }: { items: StrategyEventCorrelationItem[
                 {c.strategy_id ?? "--"}
               </TableCell>
               <TableCell className={(c.correlation ?? 0) >= 0 ? "text-primary" : "text-[#ff135b]"}>
-                {(c.correlation ?? 0).toFixed(4)}
+                {formatAmount(c.correlation ?? 0, 4)}
               </TableCell>
             </TableRow>
           ))}
@@ -290,7 +290,7 @@ function CorrelationDetails({
       <div className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-sm font-medium text-white">Self correlation</span>
-          {score != null && <span className="text-xs text-muted-foreground">Score: {score.toFixed(4)}</span>}
+          {score != null && <span className="text-xs text-muted-foreground">Score: {formatAmount(score, 4)}</span>}
         </div>
         <SelfCorrelationGauge items={self} />
       </div>
@@ -325,7 +325,7 @@ function buildComparisonOption(
     },
     yAxis: {
       type: "value",
-      axisLabel: { formatter: (v: number) => `${v.toFixed(0)}%` },
+      axisLabel: { formatter: (v: number) => `${formatAmount(v, 0)}%` },
     },
     series: [
       {

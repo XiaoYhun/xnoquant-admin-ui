@@ -24,7 +24,7 @@ import { CostCapacityView } from "../create-strategy/cost-capacity-view";
 import { LatencyView } from "../create-strategy/latency-view";
 import { ReorderDotsVerticalIcon } from "@/components/icons/reorder-dots-vertical";
 import { CloseIcon } from "@/components/icons/close";
-import { cn } from "@/lib/utils";
+import { cn, formatAmount } from "@/lib/utils";
 import { canMutate } from "@/lib/rbac";
 import { useTradeHistory } from "@/hooks/api/use-paper-runs";
 import { useRunSummary, useRunEquity, useRun, symbolNamesOf, useStopRun } from "@/hooks/api/use-runs";
@@ -112,7 +112,7 @@ function KpiCell({
 function ResultsKpiGrid({ detail }: { detail: RunDetail }) {
   const m = detail.metrics;
   const netPnlTone = m.netPnl < 0 ? GRAD_RED : GRAD_GREEN;
-  const amount = (n: number) => `${Math.abs(n).toLocaleString()} ₫`;
+  const amount = (n: number) => `${formatAmount(Math.abs(n))} ₫`;
 
   return (
     <div className="flex flex-col gap-2 rounded-[12px] border border-[#1d2939] bg-[rgba(29,33,38,0.2)] px-3 py-2">
@@ -122,14 +122,14 @@ function ResultsKpiGrid({ detail }: { detail: RunDetail }) {
           size="sm"
           value={`${m.netPnl >= 0 ? "+" : "-"}${amount(m.netPnl)}`}
           valueClassName={netPnlTone}
-          extra={`(${detail.returnPct >= 0 ? "+" : ""}${detail.returnPct.toFixed(1)}%)`}
+          extra={`(${detail.returnPct >= 0 ? "+" : ""}${formatAmount(detail.returnPct, 1)}%)`}
           extraClassName={cn("text-xs font-medium", netPnlTone)}
         />
         <KpiCell label="Trades" size="base" value={m.trades.toLocaleString()} valueClassName="text-white" />
         <KpiCell
           label="Win rate"
           size="sm"
-          value={`${m.winRate.toFixed(2)}%`}
+          value={`${formatAmount(m.winRate, 2)}%`}
           valueClassName="text-white"
           extra="—"
           extraClassName="text-xs text-[#9db2ce]"
@@ -150,15 +150,15 @@ function ResultsKpiGrid({ detail }: { detail: RunDetail }) {
           size="sm"
           value={`-${amount(detail.maxDrawdown)}`}
           valueClassName={GRAD_RED}
-          extra={`(-${Math.abs(detail.maxDrawdownPct).toFixed(1)}%)`}
+          extra={`(-${formatAmount(Math.abs(detail.maxDrawdownPct), 1)}%)`}
           extraClassName={cn("text-xs font-medium", GRAD_RED)}
         />
-        <KpiCell label="Sharpe Ratio" size="base" value={detail.sharpe.toFixed(2)} valueClassName="text-white" />
-        <KpiCell label="Cost Drag" size="base" value={`${m.costDragPct.toFixed(2)}%`} valueClassName="text-white" />
+        <KpiCell label="Sharpe Ratio" size="base" value={formatAmount(detail.sharpe, 2)} valueClassName="text-white" />
+        <KpiCell label="Cost Drag" size="base" value={`${formatAmount(m.costDragPct, 2)}%`} valueClassName="text-white" />
         <KpiCell
           label="Edge net"
           size="base"
-          value={m.edgeNetBp.toFixed(2)}
+          value={formatAmount(m.edgeNetBp, 2)}
           valueClassName="text-white"
           extra="bp"
           extraClassName="text-[10px] leading-[14px] text-[#9db2ce]"
@@ -223,9 +223,9 @@ function LiveKpiGrid({ summary }: { summary: RunSummary | undefined }) {
         <KpiCell
           label="Net PnL"
           size="sm"
-          value={netPnl == null ? "—" : `${netPnl >= 0 ? "+" : "-"}${Math.abs(netPnl).toLocaleString()}`}
+          value={netPnl == null ? "—" : `${netPnl >= 0 ? "+" : "-"}${formatAmount(Math.abs(netPnl))}`}
           valueClassName={netPnl == null ? "text-muted-foreground" : netPnlTone}
-          extra={returnPct == null ? undefined : `(${returnPct >= 0 ? "+" : ""}${(returnPct * 100).toFixed(1)}%)`}
+          extra={returnPct == null ? undefined : `(${returnPct >= 0 ? "+" : ""}${formatAmount(returnPct * 100, 1)}%)`}
           extraClassName={cn("text-xs font-medium", netPnlTone)}
         />
         <KpiCell
@@ -237,7 +237,7 @@ function LiveKpiGrid({ summary }: { summary: RunSummary | undefined }) {
         <KpiCell
           label="Win rate"
           size="sm"
-          value={winRate == null ? "—" : `${(winRate * 100).toFixed(2)}%`}
+          value={winRate == null ? "—" : `${formatAmount(winRate * 100, 2)}%`}
           valueClassName="text-white"
           extra="—"
           extraClassName="text-xs text-[#9db2ce]"
@@ -256,27 +256,27 @@ function LiveKpiGrid({ summary }: { summary: RunSummary | undefined }) {
         <KpiCell
           label="Max Drawdown"
           size="sm"
-          value={mdd == null ? "—" : `-${Math.abs(mdd).toLocaleString()}`}
+          value={mdd == null ? "—" : `-${formatAmount(Math.abs(mdd))}`}
           valueClassName={mdd == null ? "text-muted-foreground" : GRAD_RED}
-          extra={mddPct == null ? undefined : `(-${Math.abs(mddPct * 100).toFixed(1)}%)`}
+          extra={mddPct == null ? undefined : `(-${formatAmount(Math.abs(mddPct * 100), 1)}%)`}
           extraClassName={cn("text-xs font-medium", GRAD_RED)}
         />
         <KpiCell
           label="Sharpe Ratio"
           size="base"
-          value={sharpe == null ? "—" : sharpe.toFixed(2)}
+          value={sharpe == null ? "—" : formatAmount(sharpe, 2)}
           valueClassName="text-white"
         />
         <KpiCell
           label="Cost Drag"
           size="base"
-          value={costBps == null ? "—" : costBps.toFixed(2)}
+          value={costBps == null ? "—" : formatAmount(costBps, 2)}
           valueClassName="text-white"
         />
         <KpiCell
           label="Edge net"
           size="base"
-          value={edgeNet == null ? "—" : edgeNet.toFixed(2)}
+          value={edgeNet == null ? "—" : formatAmount(edgeNet, 2)}
           valueClassName="text-white"
           extra={edgeNet == null ? undefined : "bp"}
           extraClassName="text-[10px] text-[#9db2ce]"

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatCurrency, formatPercent, formatCompact } from "./utils";
+import { formatCurrency, formatPercent, formatCompact, formatAmount, formatSignedAmount } from "./utils";
 
 describe("formatters", () => {
   it("formats VND currency without decimals", () => {
@@ -11,5 +11,21 @@ describe("formatters", () => {
   });
   it("formats compact numbers", () => {
     expect(formatCompact(1_200_000)).toBe("1.2M");
+  });
+
+  describe("formatAmount", () => {
+    it("groups thousands and always keeps two decimals", () => {
+      expect(formatAmount(1_000_000)).toBe("1,000,000.00");
+      expect(formatAmount(0)).toBe("0.00");
+    });
+    it("rounds rather than truncating, so no third decimal leaks through", () => {
+      // The old bare toLocaleString() rendered this as "-50,014.108".
+      expect(formatAmount(-50_014.10819994224)).toBe("-50,014.11");
+    });
+    it("puts an explicit + only on gains", () => {
+      expect(formatSignedAmount(1_234.5)).toBe("+1,234.50");
+      expect(formatSignedAmount(-1_234.5)).toBe("-1,234.50");
+      expect(formatSignedAmount(0)).toBe("0.00");
+    });
   });
 });

@@ -15,7 +15,7 @@ import { RunStatusPill } from "@/components/run-status-pill";
 import { RunId } from "@/components/run-id";
 import { StartLiveTradingDialog } from "../../paper-trading/start-live-trading-dialog";
 import { isApprovalStale } from "@/hooks/api/use-live-basket";
-import { cn, formatPercent } from "@/lib/utils";
+import { cn, formatAmount, formatPercent } from "@/lib/utils";
 import type { PaperRunRow } from "@/lib/mock/paper-runs";
 import type { AlphaPoolRow } from "./page";
 
@@ -153,7 +153,7 @@ export function AlphaPoolTable({
                 )}
               </TableCell>
               <TableCell className="text-right text-xs text-white">
-                {run?.sharpe == null ? DASH : <FlashValue value={run.sharpe}>{run.sharpe.toFixed(2)}</FlashValue>}
+                {run?.sharpe == null ? DASH : <FlashValue value={run.sharpe}>{formatAmount(run.sharpe, 2)}</FlashValue>}
               </TableCell>
               <TableCell className="text-right text-xs">
                 {run?.maxDrawdownPct == null ? (

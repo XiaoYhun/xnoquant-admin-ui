@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/table";
 import { Sparkline } from "@/components/charts/sparkline";
 import { FlashValue } from "@/components/ui/flash-value";
-import { cn, formatPercent } from "@/lib/utils";
+import { cn, formatAmount, formatPercent } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { isShared } from "@/lib/rbac";
 import { RunStatusPill } from "@/components/run-status-pill";
@@ -169,7 +169,7 @@ export function PaperRunsTable({
               {r.sharpe == null ? (
                 <span className="text-muted-foreground">—</span>
               ) : (
-                <FlashValue value={r.sharpe}>{r.sharpe.toFixed(2)}</FlashValue>
+                <FlashValue value={r.sharpe}>{formatAmount(r.sharpe, 2)}</FlashValue>
               )}
             </TableCell>
             <TableCell className="text-right text-xs">

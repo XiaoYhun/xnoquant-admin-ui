@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   equityStats,
   startingCapital,
+  padDailyPnl,
   toDailyPnlPoints,
   toDrawdown,
   toMonthlyPnl,
@@ -184,5 +185,61 @@ describe("toReturnHistogram", () => {
     const flat = toReturnHistogram([0, 0, 0], 4);
     expect(flat.reduce((s, b) => s + b.count, 0)).toBe(3);
     expect(toReturnHistogram([])).toEqual([]);
+  });
+});
+
+describe("padDailyPnl", () => {
+  const DAY = 86_400_000;
+  const localMidnight = (ts: number) => {
+    const d = new Date(ts);
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  };
+  // A fixed "now" so these assertions don't drift with the wall clock.
+  const now = new Date(2026, 7, 20, 14, 30).getTime();
+  const today = localMidnight(now);
+
+  it("leaves no data empty, so callers keep their own empty state", () => {
+    expect(padDailyPnl([], 7, now)).toEqual([]);
+  });
+
+  it("centres a single old day as 3 blanks, the day, 3 blanks", () => {
+    const day = today - 10 * DAY;
+    const out = padDailyPnl([{ ts: day + 3_600_000, value: 42 }], 7, now);
+    expect(out).toHaveLength(7);
+    expect(out.map((d) => d.value)).toEqual([0, 0, 0, 42, 0, 0, 0]);
+  });
+
+  it("slides back so the right-most column is today rather than the future", () => {
+    // Centring a day that IS today would put three bars in the future.
+    const out = padDailyPnl([{ ts: now, value: 42 }], 7, now);
+    expect(out).toHaveLength(7);
+    expect(out.map((d) => d.value)).toEqual([0, 0, 0, 0, 0, 0, 42]);
+  });
+
+  it("keeps the window a full week when only part of the padding overflows", () => {
+    const out = padDailyPnl([{ ts: today - 2 * DAY, value: 7 }], 7, now);
+    expect(out).toHaveLength(7);
+    // today-6 … today, with the data on today-2 → index 4.
+    expect(out.map((d) => d.value)).toEqual([0, 0, 0, 0, 7, 0, 0]);
+  });
+
+  it("does not shrink a run that already spans more than the minimum", () => {
+    const points = Array.from({ length: 10 }, (_, i) => ({ ts: today - (9 - i) * DAY + 3_600_000, value: i + 1 }));
+    const out = padDailyPnl(points, 7, now);
+    expect(out).toHaveLength(10);
+    expect(out.map((d) => d.value)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  });
+
+  it("fills interior gaps as well as the edges", () => {
+    const out = padDailyPnl(
+      [
+        { ts: today - 6 * DAY + 3_600_000, value: 5 },
+        { ts: today - 2 * DAY + 3_600_000, value: 9 },
+      ],
+      7,
+      now,
+    );
+    // Data spans 5 days, so one blank is added each side: today-7 … today-1.
+    expect(out.map((d) => d.value)).toEqual([0, 5, 0, 0, 0, 9, 0]);
   });
 });

@@ -7,7 +7,7 @@ import { useState } from "react";
 import type { EChartsOption } from "echarts";
 import { MaximizeSquareMinimalistic, AltArrowDown, Danger } from "@solar-icons/react";
 
-import { cn } from "@/lib/utils";
+import { cn, formatAmount } from "@/lib/utils";
 import { USE_MOCK } from "@/lib/constant";
 import { CloseIcon } from "@/components/icons/close";
 import { BaseChart } from "@/components/charts/base-chart";
@@ -81,7 +81,7 @@ function formatMetricNumber(n?: number, fixed = 2): string {
 function formatMetricPercent(n?: number, fixed = 2): string {
   if (!n) return "0";
   const sign = n >= 0 ? "+" : "";
-  return `${sign}${(n * 100).toFixed(fixed)}%`;
+  return `${sign}${formatAmount(n * 100, fixed)}%`;
 }
 
 function formatTimestamp(unixSeconds: number): string {

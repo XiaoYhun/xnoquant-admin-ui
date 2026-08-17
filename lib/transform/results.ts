@@ -61,6 +61,73 @@ export function toDailyPnl(points: EquityPoint[]): DayPoint[] {
   return toDailyPnlPoints(points).map((d) => ({ label: equityDayLabel(d.ts), value: d.value }));
 }
 
+/** Local midnight for a timestamp — the calendar day a reader would say it falls on. */
+function startOfLocalDay(ts: number): number {
+  const d = new Date(ts);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+}
+
+/** Default width of the padded daily-PnL window, in calendar days. */
+export const MIN_DAILY_PNL_DAYS = 7;
+
+/**
+ * Daily PnL widened to at least `minDays` calendar days, so an intraday run (the norm for HFT)
+ * charts as a bar in context rather than one lonely column filling the panel.
+ *
+ * The real days are centred in the window and the rest are filled with `0` — a day the run did
+ * not trade genuinely earned nothing, so the zero is truthful, and a zero-height bar reads as
+ * empty. One day of data with `minDays = 7` gives three blanks, the day, three blanks.
+ *
+ * The window never extends past today: if centring would put bars in the future it slides back so
+ * the right-most column is today, keeping its width. A run whose data is old enough that centring
+ * stays in the past is left centred rather than padded out to today — otherwise a month-old run
+ * would render as a month of blank space with its data pushed off the left edge.
+ */
+export function padDailyPnl(
+  points: DatedPnl[],
+  minDays = MIN_DAILY_PNL_DAYS,
+  now = Date.now(),
+): DayPoint[] {
+  // No data at all stays empty, so callers keep showing their "no daily PnL" state rather than a
+  // week of zeroes implying the run traded flat.
+  if (points.length === 0) return [];
+
+  const byDay = new Map<number, number>();
+  for (const p of points) {
+    const day = startOfLocalDay(p.ts);
+    byDay.set(day, (byDay.get(day) ?? 0) + p.value);
+  }
+
+  const days = [...byDay.keys()].sort((a, b) => a - b);
+  const dataFirst = days[0];
+  const dataLast = days[days.length - 1];
+  const today = startOfLocalDay(now);
+
+  let first = dataFirst;
+  let last = dataLast;
+  const span = Math.round((dataLast - dataFirst) / DAY_MS) + 1;
+  if (span < minDays) {
+    const missing = minDays - span;
+    // Odd remainders bias to the left, so the data sits at or right of centre.
+    const before = Math.ceil(missing / 2);
+    first -= before * DAY_MS;
+    last += (missing - before) * DAY_MS;
+  }
+
+  // Slide back off the future. Guarded on `dataLast` so a clock-skewed run whose fills are
+  // stamped ahead of now still has every real day drawn.
+  if (last > today && dataLast <= today) {
+    first -= last - today;
+    last = today;
+  }
+
+  const out: DayPoint[] = [];
+  for (let ts = first; ts <= last; ts = startOfLocalDay(ts + DAY_MS + DAY_MS / 2)) {
+    out.push({ label: equityDayLabel(ts), value: byDay.get(ts) ?? 0 });
+  }
+  return out;
+}
+
 /**
  * `toDailyPnl` keeping each day's timestamp — the input for monthly/histogram regrouping.
  *

@@ -35,7 +35,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
+import { cn, formatAmount, formatCompact } from "@/lib/utils";
 import { MockNote } from "./results-chart-card";
 
 const GRAD_GREEN =
@@ -88,11 +88,11 @@ function withLiveRatios(snapshot: LiveSnapshot | undefined): { row1: RatioItem[]
   const mddPct = snapshot.maxDrawdownPct;
   const overlay = (item: RatioItem): RatioItem => {
     if (item.live === "sharpe" && sharpe !== undefined) {
-      return { ...item, value: sharpe.toFixed(2), tone: sharpe >= 0 ? "green" : "red" };
+      return { ...item, value: formatAmount(sharpe, 2), tone: sharpe >= 0 ? "green" : "red" };
     }
     // `max_drawdown_pct` is a fraction (0.0032 = 0.32%), matching `RunSummary.max_drawdown_pct`.
     if (item.live === "maxDrawdown" && mddPct !== undefined) {
-      return { ...item, value: `${(-Math.abs(mddPct) * 100).toFixed(2)}%`, tone: "red" };
+      return { ...item, value: `${formatAmount(-Math.abs(mddPct) * 100, 2)}%`, tone: "red" };
     }
     return item;
   };
@@ -205,7 +205,7 @@ function buildDrawdownOption(points: DrawdownPoint[], unit: DrawdownUnit): EChar
     tooltip: {
       trigger: "axis",
       valueFormatter: (v: unknown) =>
-        isPercent ? `${Number(v).toFixed(2)}%` : Number(v).toLocaleString("en-US", { maximumFractionDigits: 2 }),
+        isPercent ? `${formatAmount(Number(v), 2)}%` : formatAmount(Number(v)),
     },
     grid: { left: 8, right: 8, top: 16, bottom: 24, containLabel: true },
     xAxis: { type: "category", data: labels, boundaryGap: false, axisLabel: { hideOverlap: true } },
@@ -214,8 +214,9 @@ function buildDrawdownOption(points: DrawdownPoint[], unit: DrawdownUnit): EChar
       min,
       max: 0,
       axisLabel: {
+        // Compact on the axis, exact in the tooltip — a drawdown in the millions needs the room.
         formatter: (value: string | number) =>
-          isPercent ? `${value}%` : `${Number(value).toLocaleString()}`,
+          isPercent ? `${value}%` : formatCompact(Number(value)),
       },
     },
     series: [
@@ -292,7 +293,7 @@ function buildRollingSharpeOption(
   const padY = Math.max(0.25, (hi - lo) * 0.15);
 
   return {
-    tooltip: { trigger: "axis", valueFormatter: (v: unknown) => Number(v).toFixed(2) },
+    tooltip: { trigger: "axis", valueFormatter: (v: unknown) => formatAmount(Number(v), 2) },
     grid: { left: 8, right: 8, top: 16, bottom: 24, containLabel: true },
     xAxis: { type: "category", data: labels, boundaryGap: false, axisLabel: { hideOverlap: true } },
     yAxis: {
@@ -300,7 +301,7 @@ function buildRollingSharpeOption(
       min: Math.floor((lo - padY) * 10) / 10,
       max: Math.ceil((hi + padY) * 10) / 10,
       axisLabel: {
-        formatter: (value: string | number) => (Number(value) === 0 ? "0" : Number(value).toFixed(1)),
+        formatter: (value: string | number) => (Number(value) === 0 ? "0" : formatAmount(Number(value), 1)),
       },
     },
     series: [

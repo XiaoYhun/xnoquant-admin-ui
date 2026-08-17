@@ -18,7 +18,7 @@ import { useMemo, useState } from "react";
 import type { EChartsOption } from "echarts";
 import { MaximizeSquareMinimalistic } from "@solar-icons/react";
 
-import { cn } from "@/lib/utils";
+import { cn, formatAmount, formatSignedAmount } from "@/lib/utils";
 import { BaseChart } from "@/components/charts/base-chart";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -72,13 +72,12 @@ const DASH = "—";
 
 const SPARK_POINTS = 16;
 
-function fmtSigned(v: number, digits = 0): string {
-  const s = v.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
-  return v > 0 ? `+${s}` : s;
+function fmtSigned(v: number, digits = 2): string {
+  return formatSignedAmount(v, digits);
 }
 
 function fmtPct(v: number, digits = 2): string {
-  return `${v > 0 ? "+" : ""}${v.toFixed(digits)}%`;
+  return `${v > 0 ? "+" : ""}${formatAmount(v, digits)}%`;
 }
 
 function formatCompactUsd(n: number): string {
@@ -131,13 +130,13 @@ function buildMetrics(
     },
     {
       label: "Sharpe Ratio",
-      value: summary?.sharpe == null ? DASH : summary.sharpe.toFixed(2),
+      value: summary?.sharpe == null ? DASH : formatAmount(summary.sharpe, 2),
       valueClassName: ORANGE_TEXT,
       // Headline is the API's plain `sharpe` (per closing trade), with the annualized figure
       // beneath — the same pairing the HFT control plane's run page shows. Annualizing scales by
       // sqrt(trades per year) off the run's own fill rate, so an HFT run that fills hundreds of
       // times a second annualizes to five or six digits; on its own it reads as a broken number.
-      sub: summary?.sharpe_annualized == null ? "Per closing trade" : `Ann. ${summary.sharpe_annualized.toFixed(2)}`,
+      sub: summary?.sharpe_annualized == null ? "Per closing trade" : `Ann. ${formatAmount(summary.sharpe_annualized, 2)}`,
       sparkKind: "line",
       sparkColor: GREEN,
       sparkData: sample(toRollingSharpe(equity).map((p) => p.value)),
@@ -160,7 +159,7 @@ function buildMetrics(
     {
       label: "Return / Turnover",
       // REST-only: absent while the summary is coming off the live frame.
-      value: summary?.edge_net_bps == null ? DASH : summary.edge_net_bps.toFixed(2),
+      value: summary?.edge_net_bps == null ? DASH : formatAmount(summary.edge_net_bps, 2),
       unit: summary?.edge_net_bps == null ? undefined : "bp",
       sub: "per $ traded",
       sparkKind: "line",
@@ -169,11 +168,11 @@ function buildMetrics(
     },
     {
       label: "Cost Drag",
-      value: costDrag == null ? DASH : `${costDrag.toFixed(2)}%`,
+      value: costDrag == null ? DASH : `${formatAmount(costDrag, 2)}%`,
       sub:
         summary?.total_fee == null
           ? DASH
-          : `${summary.total_fee.toLocaleString("en-US", { maximumFractionDigits: 0 })} USDT`,
+          : `${formatAmount(summary.total_fee)} USDT`,
       sparkKind: "bar",
       sparkColor: GOLD,
       sparkData: sample(cost.map((p) => Number(p.cumulative))),
@@ -214,7 +213,7 @@ function buildStats(
     { label: "MDD Duration", value: DASH },
     {
       label: "Profit Days",
-      value: stats ? `${stats.profitDayPct.toFixed(0)}%` : DASH,
+      value: stats ? `${formatAmount(stats.profitDayPct, 0)}%` : DASH,
       className: GREEN_TEXT,
     },
     { label: "Trading Days", value: stats ? String(stats.tradingDays) : DASH },
@@ -226,7 +225,7 @@ function buildStats(
     { label: "Avg Latency", value: DASH },
     {
       label: "Fill Rate",
-      value: summary?.fill_rate == null ? DASH : `${(summary.fill_rate * 100).toFixed(1)}%`,
+      value: summary?.fill_rate == null ? DASH : `${formatAmount(summary.fill_rate * 100, 1)}%`,
       className: GREEN_TEXT,
     },
   ];
@@ -405,7 +404,7 @@ function equityChartOption(points: EquityPoint[], gross: number[] | null): EChar
         max: 0,
         position: "right",
         splitLine: { show: false },
-        axisLabel: { formatter: (v: number) => `${v.toFixed(0)}%` },
+        axisLabel: { formatter: (v: number) => `${formatAmount(v, 0)}%` },
       },
     ],
     series: [

@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { AltArrowDown } from "@solar-icons/react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
+import { cn, formatAmount } from "@/lib/utils";
 import { RunId } from "@/components/run-id";
 import { useStrategyRuns } from "@/hooks/api/use-strategy-runs";
 import type { Run } from "@/types/domain";
@@ -109,7 +109,7 @@ export function RunHistoryPicker({
                         <span className={badge.text}>{badge.label}</span>
                       </span>
                       <span className="text-xs text-[#9db2ce]">
-                        Sharpe: {r.sharpe_annualized == null ? "—" : r.sharpe_annualized.toFixed(2)}
+                        Sharpe: {r.sharpe_annualized == null ? "—" : formatAmount(r.sharpe_annualized, 2)}
                       </span>
                     </span>
                   </button>

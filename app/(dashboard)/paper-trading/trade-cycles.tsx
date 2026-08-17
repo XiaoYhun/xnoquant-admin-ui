@@ -46,6 +46,8 @@ function dotColor(stage: string): string {
 
 const nf = (n: number, dp = 2) => n.toLocaleString("en-US", { minimumFractionDigits: dp, maximumFractionDigits: dp });
 // Quantities are whole-ish; don't force 2dp onto "1", and don't leak float noise either.
+// Numeric round-trip, NOT display formatting: `Number("1,234.5")` is NaN, so this must stay
+// on toFixed. Trailing zeros are stripped by the Number() pass.
 const qtyText = (q: number) => (Number.isInteger(q) ? String(q) : String(Number(q.toFixed(8))));
 
 /**

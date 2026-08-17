@@ -2,7 +2,7 @@
 // Create Strategy "Results" tab (MFT) — "Performance" view. Ported from xno-builder's strategy
 // "Performance" tab: 3 stat cards (Transaction Analysis / Performance Metrics / Advanced Metrics),
 // no charts. Fed by GET /strategies/{id}/stages/{stage}/performance.
-import { cn } from "@/lib/utils";
+import { cn, formatAmount } from "@/lib/utils";
 import {
   useStrategyPerformance,
   type StrategyPerformanceDetail,
@@ -27,11 +27,11 @@ function fmtCcy(v: number | undefined, market?: string): string {
 }
 
 function fmtPct(v: number | undefined): string {
-  return v == null ? "-" : `${(v * 100).toFixed(2)}%`;
+  return v == null ? "-" : `${formatAmount(v * 100, 2)}%`;
 }
 
 function fmtNum(v: number | undefined, d = 2): string {
-  return v == null ? "-" : v.toFixed(d);
+  return v == null ? "-" : formatAmount(v, d);
 }
 
 // Tone helpers — pick the value's color class. Fixed tones ignore the value; sign/threshold

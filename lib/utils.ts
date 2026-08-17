@@ -10,7 +10,8 @@ export function formatCurrency(n: number): string {
 }
 export function formatPercent(n: number): string {
   const sign = n > 0 ? "+" : "";
-  return `${sign}${n.toFixed(2)}%`;
+  // Grouped: an annualized figure can run to four digits before the decimal point.
+  return `${sign}${formatAmount(n)}%`;
 }
 /**
  * Short, readable handle for a run — `#019f4559-e48b` rather than a full uuid (Figma
@@ -31,4 +32,23 @@ export function formatCompact(n: number): string {
   return new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 })
     .format(n)
     .replace(/\s/g, "");
+}
+
+/**
+ * A money-like magnitude: grouped thousands and a fixed two decimals — `1,000,000.00`.
+ *
+ * Every PnL, drawdown, fee and turnover figure goes through this so they line up column to column.
+ * Bare `toLocaleString()` was the old default in several places and gives *up to* three decimals
+ * with no minimum, so the same run rendered `-50,014.108` in one card and `-50,014` in the next.
+ *
+ * Counts keep their own integer formatting — a fill count has no cents. Chart AXIS labels keep
+ * `formatCompact`, since a 111,000,000.00 tick would not fit; their tooltips use this.
+ */
+export function formatAmount(n: number, digits = 2): string {
+  return n.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+}
+
+/** `formatAmount` with an explicit leading `+` on gains — `+1,000.00` / `-1,000.00`. */
+export function formatSignedAmount(n: number, digits = 2): string {
+  return `${n > 0 ? "+" : ""}${formatAmount(n, digits)}`;
 }

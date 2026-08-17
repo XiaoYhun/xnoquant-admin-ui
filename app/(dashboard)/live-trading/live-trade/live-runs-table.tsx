@@ -26,7 +26,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Sparkline } from "@/components/charts/sparkline";
 import { FlashValue } from "@/components/ui/flash-value";
-import { cn, formatPercent } from "@/lib/utils";
+import { cn, formatAmount, formatPercent } from "@/lib/utils";
 import { useStopRun } from "@/hooks/api/use-runs";
 import { useDemoteStrategy } from "@/hooks/api/use-live-basket";
 import type { PaperRunRow } from "@/lib/mock/paper-runs";
@@ -173,7 +173,7 @@ export function LiveRunsTable({
                   {r.sharpe == null ? (
                     <span className="text-muted-foreground">—</span>
                   ) : (
-                    <FlashValue value={r.sharpe}>{r.sharpe.toFixed(2)}</FlashValue>
+                    <FlashValue value={r.sharpe}>{formatAmount(r.sharpe, 2)}</FlashValue>
                   )}
                 </TableCell>
                 <TableCell className="text-right text-xs">

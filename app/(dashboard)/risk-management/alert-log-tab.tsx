@@ -8,6 +8,7 @@ import { resourceErrorMessage } from "@/lib/api-client";
 import { useRiskAuditLog, useRiskStatus, useRiskThresholds } from "@/hooks/api/use-risk";
 import { useRunningRuns, strategiesByAccount } from "@/hooks/api/use-runs";
 import { DASH, GRAD_RED, Pill, TimeCell, pctLabel } from "./risk-bits";
+import { formatAmount } from "@/lib/utils";
 import { ResetRiskDialog } from "./reset-risk-dialog";
 import type { RiskAuditEntry } from "@/types/domain";
 
@@ -80,7 +81,7 @@ function systemAction(e: RiskAuditEntry): string {
     const base = e.new_baseline_equity;
     return base == null
       ? "Halt lifted, baseline re-confirmed"
-      : `Halt lifted, re-baselined to ${Math.round(base).toLocaleString("en-US")} ₫`;
+      : `Halt lifted, re-baselined to ${formatAmount(base)} ₫`;
   }
   if (e.level === "red") {
     const n = e.stopped_run_ids?.length ?? 0;

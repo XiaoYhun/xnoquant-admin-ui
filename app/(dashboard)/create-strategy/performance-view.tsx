@@ -23,13 +23,13 @@ import {
   curveSpanMs,
   equityStats,
   startingCapital,
-  toDailyPnl,
+  padDailyPnl,
   toDailyPnlPoints,
   toMonthlyPnl,
   toReturnHistogram,
   type MonthPnl,
 } from "@/lib/transform/results";
-import { cn } from "@/lib/utils";
+import { cn, formatAmount, formatSignedAmount } from "@/lib/utils";
 import { MockNote } from "./results-chart-card";
 
 // Gradient text — Figma cells/values use these clipped gradients (angles vary 143–165° per
@@ -41,13 +41,12 @@ const RED_TEXT =
 
 const DASH = "—";
 
-function fmtSigned(v: number, digits = 0): string {
-  const s = v.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
-  return v > 0 ? `+${s}` : s;
+function fmtSigned(v: number, digits = 2): string {
+  return formatSignedAmount(v, digits);
 }
 
 function fmtPct(v: number, digits = 2): string {
-  return `${v > 0 ? "+" : ""}${v.toFixed(digits)}%`;
+  return `${v > 0 ? "+" : ""}${formatAmount(v, digits)}%`;
 }
 
 // ---------------------------------------------------------------------------
@@ -190,7 +189,8 @@ function MonthlyReturnPanel({
   isPct: boolean;
   note?: string;
 }) {
-  const fmt = (v: number) => (isPct ? fmtPct(v, 1) : fmtSigned(v));
+  // Heatmap cells are ~48px wide; two decimals do not fit.
+  const fmt = (v: number) => (isPct ? fmtPct(v, 1) : fmtSigned(v, 0));
   return (
     <PanelCard>
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -330,7 +330,8 @@ function buildDistributionOption(
 ): EChartsOption {
   // Bins are symmetric around 0, so the first half is exactly the loss side.
   const negative = bins.length / 2;
-  const label = (v: number) => (isPct ? `${v.toFixed(1)}%` : fmtSigned(v));
+  // Bar labels stay integral — a "1,000,000.00" caption over a narrow bar is unreadable.
+  const label = (v: number) => (isPct ? `${formatAmount(v, 1)}%` : fmtSigned(v, 0));
   return {
     tooltip: {
       trigger: "axis",
@@ -413,7 +414,8 @@ export function PerformanceView({ runId }: { runId?: string }) {
   const scale = capital === null ? 1 : 100 / capital; // PnL → % of starting capital
 
   const stats = useMemo(() => equityStats(equity), [equity]);
-  const daily = useMemo(() => toDailyPnl(equity), [equity]);
+  // Padded to a week so a single-day HFT run reads as a bar in context, not one lone column.
+  const daily = useMemo(() => padDailyPnl(toDailyPnlPoints(equity)), [equity]);
   const monthly = useMemo(() => toMonthlyPnl(equity), [equity]);
 
   const monthlyRows = useMemo(() => toYearlyRows(monthly, scale), [monthly, scale]);

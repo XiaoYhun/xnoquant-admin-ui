@@ -1,5 +1,5 @@
 "use client";
-import { cn } from "@/lib/utils";
+import { cn, formatAmount } from "@/lib/utils";
 import type { RiskLevel } from "@/types/domain";
 
 // Shared presentation for both Risk Management tabs (Figma 14975:41599 / 14975:44103).
@@ -49,18 +49,18 @@ export function AccountLevelPill({ level }: { level: RiskLevel }) {
 export function pctLabel(fraction: number | null | undefined, digits = 1): string | null {
   if (fraction == null || !Number.isFinite(fraction)) return null;
   const pct = Math.abs(fraction) * 100;
-  if (pct === 0) return `${(0).toFixed(digits)}%`;
+  if (pct === 0) return `${formatAmount(0, digits)}%`;
   // A real but sub-resolution figure (the dev platform has thresholds as tight as 0.0001) must
   // not print as "-0.0%" — that reads as flat, which is the opposite of what it means.
   const floor = 10 ** -digits;
-  if (pct < floor) return `-<${floor.toFixed(digits)}%`;
-  return `-${pct.toFixed(digits)}%`;
+  if (pct < floor) return `-<${formatAmount(floor, digits)}%`;
+  return `-${formatAmount(pct, digits)}%`;
 }
 
 /** Capital, in the settlement currency the rest of the app prints for run figures. */
 export function moneyLabel(amount: number | null | undefined): string | null {
   if (amount == null || !Number.isFinite(amount)) return null;
-  return `${Math.round(amount).toLocaleString("en-US")} ₫`;
+  return `${formatAmount(amount)} ₫`;
 }
 
 /** `2026-06-11` over `09:20:47.123` — two lines, same split the Trades tab uses. */

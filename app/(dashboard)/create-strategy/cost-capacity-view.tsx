@@ -22,7 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { lastCumulative, toCostSeries } from "@/lib/cost-curve";
 import { aggregateTurnover, type TurnoverPeriod } from "@/lib/turnover-curve";
 import { costDragPct } from "@/lib/transform/results";
-import { cn } from "@/lib/utils";
+import { cn, formatAmount, formatCompact } from "@/lib/utils";
 import { ChartCard, MockNote } from "./results-chart-card";
 
 // Figma 14180:39849 "Total Fee" swatch — the only component the cost-curve can populate.
@@ -35,7 +35,10 @@ const GRAD_GREEN = "bg-[linear-gradient(158deg,#cff8ea_0%,#67e1c1_100%)] bg-clip
 const DASH = "—";
 
 const money = (n: number | null | undefined) =>
-  n == null || !Number.isFinite(n) ? DASH : `${n < 0 ? "-" : ""}$${Math.abs(Math.round(n)).toLocaleString("en-US")}`;
+  n == null || !Number.isFinite(n) ? DASH : `${n < 0 ? "-" : ""}$${formatAmount(Math.abs(n))}`;
+
+/** Chart axis ticks only — a `111,000,000.00` label does not fit; tooltips use `money`. */
+const axisMoney = (n: number) => `$${formatCompact(n)}`;
 
 /** ECharts linear gradient matching a swatch, top-left → bottom-right. */
 const grad = (from: string, to: string) => ({
@@ -65,6 +68,7 @@ const CAPACITY_LABELS = ["1M", "5M", "10M", "20M", "30M", "40M", "50M", "60M"];
 // Sharpe decays as deployed capital grows — flat, then a knee, then a steep fall.
 const CAPACITY_SERIES = Array.from({ length: 64 }, (_, i) => {
   const x = i / 63;
+  // Numeric rounding for the mock series, not a label — grouping here would yield NaN.
   return Number((3.5 - 2.9 * x ** 3 + Math.sin(i * 0.9) * 0.09).toFixed(3));
 });
 
@@ -125,7 +129,7 @@ export function CostCapacityView({ runId }: { runId?: string }) {
   // Dashes rather than printing a five-digit percentage when there is no gross edge to erode —
   // see costDragPct. `cost_bps` in the Cost Over Time card is the figure that still holds.
   const drag = costDragPct(summary);
-  const costDrag = drag == null ? DASH : `${drag.toFixed(2)}%`;
+  const costDrag = drag == null ? DASH : `${formatAmount(drag, 2)}%`;
 
   const breakdown = useMemo(() => {
     if (totalCost == null || !Number.isFinite(totalCost) || totalCost === 0) return [];
@@ -169,7 +173,7 @@ export function CostCapacityView({ runId }: { runId?: string }) {
         boundaryGap: false,
         axisLabel: { hideOverlap: true },
       },
-      yAxis: { type: "value", axisLabel: { formatter: (v: string | number) => money(Number(v)) } },
+      yAxis: { type: "value", axisLabel: { formatter: (v: string | number) => axisMoney(Number(v)) } },
       series: [
         {
           name: "Total Fee",
@@ -205,14 +209,14 @@ export function CostCapacityView({ runId }: { runId?: string }) {
   const turnoverOption = useMemo<EChartsOption>(
     () => ({
       grid: { left: 8, right: 8, top: 16, bottom: 8, containLabel: true },
-      tooltip: { trigger: "axis" },
+      tooltip: { trigger: "axis", valueFormatter: (v: unknown) => formatAmount(Number(v)) },
       xAxis: {
         type: "category",
         data: turnoverSeries.map((d) => d.label),
         axisTick: { show: false },
         axisLabel: { hideOverlap: true },
       },
-      yAxis: { type: "value" },
+      yAxis: { type: "value", axisLabel: { formatter: (v: string | number) => formatCompact(Number(v)) } },
       series: [
         {
           type: "bar",
@@ -310,10 +314,10 @@ export function CostCapacityView({ runId }: { runId?: string }) {
                     </span>
                     <span className="flex shrink-0 items-center gap-1">
                       <span className="text-xs leading-[18px] font-semibold text-white">
-                        {Math.round(b.value).toLocaleString("en-US")}
+                        {formatAmount(b.value)}
                       </span>
                       <span className="text-[10px] leading-[14px] text-muted-foreground">
-                        ({(b.share * 100).toFixed(1)}%)
+                        ({formatAmount(b.share * 100, 1)}%)
                       </span>
                     </span>
                   </div>

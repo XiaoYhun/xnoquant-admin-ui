@@ -24,7 +24,7 @@ import {
   deriveTraceExecutionMetrics,
   type TracePeriod,
 } from "@/lib/trace-execution-metrics";
-import { cn } from "@/lib/utils";
+import { cn, formatAmount } from "@/lib/utils";
 import { ChartCard, MockNote } from "./results-chart-card";
 
 // Stroke/Linear yellow — the colour every chart on this tab is drawn in.
@@ -78,13 +78,13 @@ function MetricCard({ top, bottom }: { top: Metric[]; bottom: Metric[] }) {
 // Distributions still mocked — trace events carry neither slippage nor latency.
 // ---------------------------------------------------------------------------
 
-const SLIPPAGE_BUCKETS = Array.from({ length: 25 }, (_, i) => `${(-3 + i * 0.25).toFixed(2)}%`);
+const SLIPPAGE_BUCKETS = Array.from({ length: 25 }, (_, i) => `${formatAmount(-3 + i * 0.25, 2)}%`);
 /** Bell-shaped bucket counts, peaked at `centre`. */
 const SLIPPAGE_COUNTS = Array.from({ length: 25 }, (_, i) =>
   Math.round(100 * Math.exp(-((i - 12) ** 2) / (2 * 4.2 ** 2))),
 );
 
-const LATENCY_BUCKETS = Array.from({ length: 25 }, (_, i) => `${(0.4 + i * 0.2).toFixed(1)}ms`);
+const LATENCY_BUCKETS = Array.from({ length: 25 }, (_, i) => `${formatAmount(0.4 + i * 0.2, 1)}ms`);
 // Latency is right-skewed — a tight mode plus a long tail, not a symmetric bell.
 const LATENCY_COUNTS = LATENCY_BUCKETS.map((_, i) =>
   Math.round(100 * Math.exp(-((i - 4) ** 2) / 18) + 34 * Math.exp(-((i - 13) ** 2) / 26)),
@@ -122,7 +122,7 @@ function fillRateOption(labels: string[], values: number[]): EChartsOption {
   const pad = Math.max(1, (hi - lo) * 0.15);
   return {
     grid: { left: 8, right: 8, top: 16, bottom: 24, containLabel: true },
-    tooltip: { trigger: "axis", valueFormatter: (v: unknown) => `${Number(v).toFixed(2)}%` },
+    tooltip: { trigger: "axis", valueFormatter: (v: unknown) => `${formatAmount(Number(v), 2)}%` },
     xAxis: { type: "category", data: labels, boundaryGap: false, axisLabel: { hideOverlap: true } },
     yAxis: {
       type: "value",
@@ -188,8 +188,8 @@ function PillSelect({
   );
 }
 
-const pct = (n: number | null) => (n == null ? DASH : `${n.toFixed(2)}%`);
-const ratio = (n: number | null) => (n == null ? DASH : n.toFixed(2));
+const pct = (n: number | null) => (n == null ? DASH : `${formatAmount(n, 2)}%`);
+const ratio = (n: number | null) => (n == null ? DASH : formatAmount(n, 2));
 
 export function ExecutionView({ runId, isLive }: { runId?: string; isLive?: boolean }) {
   const [period, setPeriod] = useState<string>("Daily");

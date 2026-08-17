@@ -11,6 +11,7 @@
 // (`ExecutionSettings.latency` / `LatencyModel` in the spec is unrelated — a simulation *input*
 // shaping the backtest gateway, not a measurement.)
 import { useLiveSnapshot, type AlphaTiming } from "@/hooks/api/use-run-live-snapshot";
+import { formatAmount } from "@/lib/utils";
 
 type Stage = {
   title: string;
@@ -31,8 +32,8 @@ const MILLI_NS = 1_000_000;
 export function formatLatencyNs(ns: number | undefined): string {
   if (ns === undefined || !Number.isFinite(ns)) return "—";
   if (ns < MICRO_NS) return `${Math.round(ns)} ns`;
-  if (ns < MILLI_NS) return `${(ns / MICRO_NS).toFixed(1)} µs`;
-  return `${(ns / MILLI_NS).toFixed(2)} ms`;
+  if (ns < MILLI_NS) return `${formatAmount(ns / MICRO_NS, 1)} µs`;
+  return `${formatAmount(ns / MILLI_NS, 2)} ms`;
 }
 
 function stagesFrom(timing: AlphaTiming | undefined): Stage[] {

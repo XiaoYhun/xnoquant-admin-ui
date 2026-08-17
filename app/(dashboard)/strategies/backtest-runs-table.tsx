@@ -22,7 +22,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Sparkline } from "@/components/charts/sparkline";
 import { PlaybackSpeedIcon } from "@/components/icons/playback-speed";
-import { formatPercent } from "@/lib/utils";
+import { formatAmount, formatPercent } from "@/lib/utils";
 import { resourceErrorMessage } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
 import { canMutate, isShared } from "@/lib/rbac";
@@ -165,7 +165,7 @@ export function BacktestRunsTable({
                   )}
                 </TableCell>
                 <TableCell className="text-right text-xs text-white">
-                  {r.sharpe == null ? <span className="text-muted-foreground">—</span> : r.sharpe.toFixed(2)}
+                  {r.sharpe == null ? <span className="text-muted-foreground">—</span> : formatAmount(r.sharpe, 2)}
                 </TableCell>
                 <TableCell className="text-right text-xs">
                   {r.maxDrawdownPct == null ? (

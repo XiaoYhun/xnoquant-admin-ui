@@ -14,6 +14,7 @@ import { useHftStrategies, useCreateHftStrategy, useUpdateHftStrategy, useDelete
 import { CreateStrategyModal } from "@/components/layout/create-strategy-modal";
 import { useConsoleLog } from "@/store/console-log-store";
 import { useMode, type Mode } from "@/store/mode-store";
+import { useActiveEditorStore } from "@/store/active-editor-store";
 import { useAuth } from "@/hooks/use-auth";
 import { canMutate } from "@/lib/rbac";
 import { resourceErrorMessage } from "@/lib/api-client";
@@ -95,7 +96,20 @@ function StrategyBuilder({ mode, initialEditors }: { mode: Mode; initialEditors:
   const [savedCodes, setSavedCodes] = useState<Record<string, string>>(() =>
     Object.fromEntries(initialEditors.map((e) => [e.id, e.code])),
   );
-  const [activeId, setActiveId] = useState(initialEditors[0]?.id ?? "");
+  // Restore the tab this lab was last on. Validated against what actually loaded: a remembered
+  // strategy may have been deleted since, or belong to another account on this browser.
+  const rememberedId = useActiveEditorStore((s) => s.byMode[mode]);
+  const setRememberedEditor = useActiveEditorStore((s) => s.setActiveEditor);
+  const [activeId, setActiveIdState] = useState(() =>
+    rememberedId && initialEditors.some((e) => e.id === rememberedId)
+      ? rememberedId
+      : (initialEditors[0]?.id ?? ""),
+  );
+  // Every selection goes through here so the remembered tab can't drift from the rendered one.
+  const setActiveId = (id: string) => {
+    setActiveIdState(id);
+    setRememberedEditor(mode, id);
+  };
   const active = editors.find((e) => e.id === activeId) ?? editors[0];
   const [consoleOpen, setConsoleOpen] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);

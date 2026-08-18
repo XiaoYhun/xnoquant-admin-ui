@@ -504,19 +504,25 @@ export function OverviewView({ runId }: { runId?: string }) {
           : undefined;
 
   return (
-    <div className="flex min-w-0 flex-col gap-4">
-      <div className="flex flex-wrap gap-2">
+    <div className="@container flex min-w-0 flex-col gap-4">
+      {/* Six cards. A fixed grid rather than `flex-wrap` so the rows stay aligned: wrapping left a
+          ragged 4+2 whose second row stretched to fill, giving two different card widths. Keyed to
+          the CONTAINER, not the viewport — this panel lives in a resizable split, so its width is
+          independent of the window's. 6 across needs ~120px each plus gaps; below that, 3+3. */}
+      <div className="grid min-w-0 grid-cols-3 gap-2 @[720px]:grid-cols-6">
         {metrics.map((m) => (
           <div
             key={m.label}
-            className="flex min-w-0 flex-1 basis-[120px] flex-col gap-1 rounded-[12px] border border-border bg-[rgba(29,33,38,0.2)] p-2"
+            className="flex min-w-0 flex-col gap-1 rounded-[12px] border border-border bg-[rgba(29,33,38,0.2)] p-2"
           >
             <span className="truncate text-xs text-muted-foreground">{m.label}</span>
-            <div className="flex items-end gap-1">
-              <span className={cn("text-base font-semibold whitespace-nowrap", m.valueClassName ?? "text-white")}>
+            {/* `min-w-0` + `truncate`: a nine-figure PnL used to overflow the card and collide with
+                the neighbouring one. The full value stays available via the title. */}
+            <div className="flex min-w-0 items-end gap-1" title={m.unit ? `${m.value} ${m.unit}` : m.value}>
+              <span className={cn("min-w-0 truncate text-base font-semibold", m.valueClassName ?? "text-white")}>
                 {m.value}
               </span>
-              {m.unit && <span className="text-[10px] text-muted-foreground">{m.unit}</span>}
+              {m.unit && <span className="shrink-0 text-[10px] text-muted-foreground">{m.unit}</span>}
             </div>
             <span className="truncate text-[10px] text-muted-foreground">{m.sub}</span>
             <div className="h-[42px] w-full overflow-hidden">

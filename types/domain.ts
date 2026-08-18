@@ -56,7 +56,10 @@ export type TradeRow = HftComponents["schemas"]["TradeRow"];
 export type TradePage = HftComponents["schemas"]["TradePage"];
 export type EquityPoint = HftComponents["schemas"]["EquityPoint"];
 
-// --- Live basket (the "Alpha pool" screen) ---
-// A strategy's live-trading approval, pinned to the strategy version an admin reviewed.
-export type LiveBasketMember = HftComponents["schemas"]["LiveBasketMember"];
+// --- Promotions (the "Alpha pool" screen) ---
+// A strategy's approval for a stage, pinned to the strategy version an admin reviewed. Replaces
+// the old single global live-basket: promotion is now per stage ("paper" | "live") and the API
+// enforces the sequence backtest -> paper -> live.
+export type StrategyPromotion = HftComponents["schemas"]["StrategyPromotion"];
+export type PromotionStage = HftComponents["schemas"]["PromotionStage"];
 export type PromoteRequest = HftComponents["schemas"]["PromoteRequest"];

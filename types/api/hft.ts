@@ -724,7 +724,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/live-basket": {
+    "/api/promotions/{stage}": {
         parameters: {
             query?: never;
             header?: never;
@@ -732,26 +732,29 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * GET /api/live-basket — list every strategy currently promoted to the live basket
-         * @description (admin-only). Includes strategies whose approval has gone stale (`current_version !=
-         *     approved_version`) because they were edited after promotion.
+         * GET /api/promotions/:stage — list every strategy currently promoted to the given stage's
+         * @description basket (admin-only). Includes strategies whose approval has gone stale
+         *     (`current_version != approved_version`) because they were edited after promotion.
          */
         get: {
             parameters: {
                 query?: never;
                 header?: never;
-                path?: never;
+                path: {
+                    /** @description "paper" or "live" */
+                    stage: string;
+                };
                 cookie?: never;
             };
             requestBody?: never;
             responses: {
-                /** @description Live basket members, most recently promoted first */
+                /** @description Promotion basket members, most recently promoted first */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["LiveBasketMember"][];
+                        "application/json": components["schemas"]["StrategyPromotion"][];
                     };
                 };
                 /** @description Unauthorized */
@@ -768,6 +771,13 @@ export interface paths {
                     };
                     content?: never;
                 };
+                /** @description Unknown stage */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
             };
         };
         put?: never;
@@ -778,7 +788,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/live-basket/{strategy_id}": {
+    "/api/promotions/{stage}/{strategy_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -788,15 +798,20 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * POST /api/live-basket/:strategy_id — promote (or re-promote) a strategy into the live
-         * @description basket, pinned to its current version (admin-only). Re-promoting after an edit updates the
-         *     pinned version, `based_on_run_id` and `note`.
+         * POST /api/promotions/:stage/:strategy_id — promote (or re-promote) a strategy into the
+         * @description given stage's basket, pinned to its current version (admin-only). Re-promoting after an
+         *     edit updates the pinned version, `based_on_run_id` and `note`. Enforces the full
+         *     backtest -> paper -> live sequence: promoting to `paper` requires a completed backtest
+         *     run at this exact version, and promoting to `live` requires an existing, version-matching
+         *     `paper` promotion.
          */
         post: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @description "paper" or "live" */
+                    stage: string;
                     /** @description Strategy ID */
                     strategy_id: string;
                 };
@@ -814,7 +829,7 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["LiveBasketMember"];
+                        "application/json": components["schemas"]["StrategyPromotion"];
                     };
                 };
                 /** @description Unauthorized */
@@ -838,7 +853,7 @@ export interface paths {
                     };
                     content?: never;
                 };
-                /** @description based_on_run_id belongs to a different strategy */
+                /** @description Unknown stage, based_on_run_id belongs to a different strategy, (for paper) no completed backtest exists at this version, or (for live) the strategy hasn't been promoted to paper at this version */
                 422: {
                     headers: {
                         [name: string]: unknown;
@@ -847,12 +862,17 @@ export interface paths {
                 };
             };
         };
-        /** DELETE /api/live-basket/:strategy_id — demote a strategy from the live basket (admin-only). */
+        /**
+         * DELETE /api/promotions/:stage/:strategy_id — demote a strategy from the given stage's
+         * @description basket (admin-only).
+         */
         delete: {
             parameters: {
                 query?: never;
                 header?: never;
                 path: {
+                    /** @description "paper" or "live" */
+                    stage: string;
                     /** @description Strategy ID */
                     strategy_id: string;
                 };
@@ -881,8 +901,15 @@ export interface paths {
                     };
                     content?: never;
                 };
-                /** @description Strategy is not a live basket member */
+                /** @description Strategy is not a member of this stage's basket */
                 404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unknown stage */
+                422: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -3108,6 +3135,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             name: string;
+            owner_email?: string | null;
             /**
              * @description The owner's display username, from the local `user_roles` mirror. `None` if the owner
              *     has never authenticated against this API (roster not yet populated), has no username set
@@ -3131,6 +3159,7 @@ export interface components {
             /** Format: date-time */
             assigned_at: string;
             assigned_by: string;
+            email?: string | null;
             /** Format: uuid */
             id: string;
             note?: string | null;
@@ -3405,34 +3434,6 @@ export interface components {
             symbol_ids: string[];
         };
         /**
-         * @description A strategy's live-trading approval. There is a single global basket — a strategy is either
-         *     a member (eligible to launch `live` runs) or not, pinned to the exact `strategies.version`
-         *     an admin reviewed. Editing the strategy's Rhai code bumps `version`, which immediately
-         *     revokes eligibility (`current_version != approved_version`) until an admin re-promotes.
-         */
-        LiveBasketMember: {
-            /** Format: int32 */
-            approved_version: number;
-            /** Format: uuid */
-            based_on_run_id?: string | null;
-            /**
-             * Format: int32
-             * @description The strategy's current version. Differs from `approved_version` when the strategy has
-             *     been edited since promotion — still listed here (stale) until an admin demotes or
-             *     re-promotes it.
-             */
-            current_version: number;
-            note?: string | null;
-            owner_id: string;
-            owner_username?: string | null;
-            /** Format: date-time */
-            promoted_at: string;
-            promoted_by: string;
-            /** Format: uuid */
-            strategy_id: string;
-            strategy_name: string;
-        };
-        /**
          * @description Virtual-channel cost model + queue sizing (mirrors the engine `LiveConditionConfig`).
          *     being `Some` selects the backtest pipeline, and the queue caps size the backtest drop-sim —
          *     paper/live use the live pipeline and ignore this. Kept per-run so the bridge can feed it
@@ -3592,18 +3593,25 @@ export interface components {
             updated_by: string;
         };
         /**
-         * @description Request body for `POST /api/live-basket/:strategy_id` — promotes (or re-promotes) a
-         *     strategy into the live basket, pinned to its current version.
+         * @description Request body for `POST /api/promotions/:stage/:strategy_id` — promotes (or re-promotes) a
+         *     strategy into the given stage's basket, pinned to its current version.
          */
         PromoteRequest: {
             /**
              * Format: uuid
-             * @description The paper/backtest run whose results justified this promotion, if the admin promoted
-             *     from a specific run's result page. Must belong to the strategy being promoted.
+             * @description The run whose results justified this promotion, if the admin promoted from a
+             *     specific run's result page. Must belong to the strategy being promoted.
              */
             based_on_run_id?: string | null;
             note?: string | null;
         };
+        /**
+         * @description The two admin-gated checkpoints a strategy passes through before it may launch a
+         *     `live` run: it must first be promoted to `Paper`, then to `Live`. Each stage is
+         *     tracked independently, pinned to the exact `strategies.version` an admin reviewed.
+         * @enum {string}
+         */
+        PromotionStage: "paper" | "live";
         /**
          * @description POST /api/risk/reset — only callable while the portfolio is halted. The admin supplies the
          *     confirmed real capital for the portfolio and for each affected account after the
@@ -3724,6 +3732,7 @@ export interface components {
              *     be `running` and `needs_otp` at the same time.
              */
             needs_otp: boolean;
+            owner_email?: string | null;
             /**
              * @description The run's owner (external auth service user id). Only informative to callers who can
              *     see other users' resources (admin, or a quant-lab peer on a backtest/paper run) — an
@@ -3966,7 +3975,7 @@ export interface components {
             /**
              * Format: int32
              * @description The live basket's pinned version for this strategy, if it's currently a member (see
-             *     `domain::live_basket`). `None` if never promoted. Compare against `version` to tell
+             *     `domain::promotion`). `None` if never promoted. Compare against `version` to tell
              *     whether the approval is still current or has gone stale from a later edit.
              */
             live_approved_version?: number | null;
@@ -3979,6 +3988,16 @@ export interface components {
              *     always sees their own id here.
              */
             owner_id: string;
+            /**
+             * Format: int32
+             * @description The paper basket's pinned version for this strategy, if it's currently a member (see
+             *     `domain::promotion`). `None` if never promoted. Compare against `version` to tell
+             *     whether the approval is still current or has gone stale from a later edit. A strategy
+             *     must hold a current paper approval before it can be promoted to live.
+             */
+            paper_approved_version?: number | null;
+            /** Format: date-time */
+            paper_promoted_at?: string | null;
             strategy_type: components["schemas"]["StrategyType"];
             /** Format: date-time */
             updated_at: string;
@@ -3995,6 +4014,40 @@ export interface components {
             features?: components["schemas"]["FeatureDef"][];
             name: string;
             strategy_type: components["schemas"]["StrategyType"];
+        };
+        /**
+         * @description A strategy's approval for one promotion stage (`paper` or `live`). A strategy is either
+         *     a member of a given stage's basket (eligible to launch runs of that mode) or not, pinned
+         *     to the exact `strategies.version` an admin reviewed. Editing the strategy's Rhai code
+         *     bumps `version`, which immediately revokes eligibility (`current_version !=
+         *     approved_version`) until an admin re-promotes. Promotion enforces the full
+         *     backtest -> paper -> live sequence: promoting to `paper` requires a completed backtest
+         *     run at this exact version, and promoting to `live` requires an existing, version-matching
+         *     `paper` promotion (see `routes::promotion::promote`).
+         */
+        StrategyPromotion: {
+            /** Format: int32 */
+            approved_version: number;
+            /** Format: uuid */
+            based_on_run_id?: string | null;
+            /**
+             * Format: int32
+             * @description The strategy's current version. Differs from `approved_version` when the strategy has
+             *     been edited since promotion — still listed here (stale) until an admin demotes or
+             *     re-promotes it.
+             */
+            current_version: number;
+            note?: string | null;
+            owner_email?: string | null;
+            owner_id: string;
+            owner_username?: string | null;
+            /** Format: date-time */
+            promoted_at: string;
+            promoted_by: string;
+            stage: components["schemas"]["PromotionStage"];
+            /** Format: uuid */
+            strategy_id: string;
+            strategy_name: string;
         };
         /**
          * @description The execution style of a strategy. Snake_case is the canonical wire/storage form, shared
@@ -4145,6 +4198,7 @@ export interface components {
          *     limitation — `user_roles` is populated opportunistically on login).
          */
         UserRosterEntry: {
+            email?: string | null;
             roles: string[];
             user_id: string;
             username?: string | null;

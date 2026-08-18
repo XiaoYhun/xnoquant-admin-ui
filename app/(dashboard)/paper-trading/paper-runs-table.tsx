@@ -182,7 +182,7 @@ export function PaperRunsTable({
               )}
             </TableCell>
             <TableCell sticky="right" className="text-right">
-              {/* Promotion is admin-only (POST /api/live-basket/{strategy_id}). */}
+              {/* Promotion is admin-only (POST /api/promotions/live/{strategy_id}). */}
               {isAdmin && (
                 <Tooltip>
                   <TooltipTrigger asChild>

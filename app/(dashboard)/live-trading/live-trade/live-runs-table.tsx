@@ -28,7 +28,7 @@ import { Sparkline } from "@/components/charts/sparkline";
 import { FlashValue } from "@/components/ui/flash-value";
 import { cn, formatAmount, formatPercent } from "@/lib/utils";
 import { useStopRun } from "@/hooks/api/use-runs";
-import { useDemoteStrategy } from "@/hooks/api/use-live-basket";
+import { useDemoteStrategy } from "@/hooks/api/use-promotions";
 import type { PaperRunRow } from "@/lib/mock/paper-runs";
 
 // Gradient text tokens straight from the Figma design (green / yellow / red).
@@ -188,7 +188,7 @@ export function LiveRunsTable({
                 <TableCell sticky="right" className="text-right">
                   {/* Hide write controls for runs the caller can't mutate (e.g. a lab-mate's run). */}
                   {/* Design 14773:24424: a running bot can be stopped; anything already halted can be
-                      demoted out of the live basket. Demote is admin-only (DELETE /api/live-basket). */}
+                      demoted out of the live basket. Demote is admin-only (DELETE /api/promotions/live). */}
                   {!canMutate(r, { userId, isAdmin }) ? null : r.status === "running" ? (
                     <button
                       type="button"
@@ -280,7 +280,7 @@ export function LiveRunsTable({
           </DialogHeader>
           {demoteStrategy.isError && (
             <p className="text-xs text-destructive">
-              {resourceErrorMessage(demoteStrategy.error, "the live basket")}
+              {resourceErrorMessage(demoteStrategy.error, "the live promotion basket")}
             </p>
           )}
           <DialogFooter>
@@ -293,7 +293,10 @@ export function LiveRunsTable({
               disabled={demoteStrategy.isPending}
               onClick={() => {
                 if (pendingDemote?.strategyId) {
-                  demoteStrategy.mutate(pendingDemote.strategyId, { onSuccess: () => setPendingDemote(null) });
+                  demoteStrategy.mutate(
+                    { stage: "live", strategyId: pendingDemote.strategyId },
+                    { onSuccess: () => setPendingDemote(null) },
+                  );
                 }
               }}
             >

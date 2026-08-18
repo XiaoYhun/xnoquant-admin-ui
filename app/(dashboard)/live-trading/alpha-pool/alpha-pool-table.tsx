@@ -14,7 +14,7 @@ import { FlashValue } from "@/components/ui/flash-value";
 import { RunStatusPill } from "@/components/run-status-pill";
 import { RunId } from "@/components/run-id";
 import { StartLiveTradingDialog } from "../../paper-trading/start-live-trading-dialog";
-import { isApprovalStale } from "@/hooks/api/use-live-basket";
+import { isApprovalStale } from "@/hooks/api/use-promotions";
 import { cn, formatAmount, formatPercent } from "@/lib/utils";
 import type { PaperRunRow } from "@/lib/mock/paper-runs";
 import type { AlphaPoolRow } from "./page";

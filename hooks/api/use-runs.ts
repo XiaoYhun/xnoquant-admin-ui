@@ -56,7 +56,7 @@ export function fetchRunEquity(id: string): Promise<EquityPoint[]> {
   return apiGet<EquityPoint[]>(`${HFT_API_URL}/api/runs/${id}/equity-curve`);
 }
 
-// All runs, unfiltered — the Alpha pool joins each live-basket member to the run named by its
+// All runs, unfiltered — the Alpha pool joins each promotion to the run named by its
 // `based_on_run_id` (a paper *or* backtest run), so it can't use the mode-filtered hooks.
 export function useRuns() {
   return useQuery({

@@ -17,7 +17,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import { useLiveBasket } from "@/hooks/api/use-live-basket";
+import { usePromotions } from "@/hooks/api/use-promotions";
 import { useRuns } from "@/hooks/api/use-runs";
 import { toPaperRunRow } from "@/lib/transform/runs";
 import { resourceErrorMessage } from "@/lib/api-client";
@@ -25,12 +25,12 @@ import { AlphaPoolTable } from "./alpha-pool-table";
 import { MarketTabs, matchesMarket, marketFromParam, marketOf, type Market } from "@/components/market-tabs";
 import { RunDetailPanel } from "../../paper-trading/run-detail-panel";
 import type { PaperRunRow } from "@/lib/mock/paper-runs";
-import type { LiveBasketMember } from "@/types/domain";
+import type { StrategyPromotion } from "@/types/domain";
 
-// Alpha pool = the live basket (Figma 14756:46805). Each member is a strategy an admin approved
+// Alpha pool = the LIVE promotion basket (Figma 14756:46805). Each member is a strategy an admin approved
 // for live trading; `based_on_run_id` points at the paper/backtest run whose results justified it,
 // which is where the row's status/account/symbol/metric columns come from.
-export type AlphaPoolRow = { member: LiveBasketMember; run: PaperRunRow | null };
+export type AlphaPoolRow = { member: StrategyPromotion; run: PaperRunRow | null };
 
 const PAGE_SIZE = 9;
 const STATUS_FILTERS = [
@@ -54,7 +54,7 @@ export default function Page() {
 function AlphaPool() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { data: members = [], isLoading, isError, error } = useLiveBasket();
+  const { data: members = [], isLoading, isError, error } = usePromotions("live");
   const { data: runs = [] } = useRuns();
 
   // Promotion links here with `?market=` so the promoted run's tab opens selected.

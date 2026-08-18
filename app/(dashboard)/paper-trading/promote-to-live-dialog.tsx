@@ -3,11 +3,11 @@ import { useState } from "react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { resourceErrorMessage } from "@/lib/api-client";
-import { usePromoteStrategy } from "@/hooks/api/use-live-basket";
+import { usePromoteStrategy } from "@/hooks/api/use-promotions";
 import type { PaperRunRow } from "@/lib/mock/paper-runs";
 
 // Figma 14791:23301 ("Promote to Live Basket") — opened from a paper run's row action. Promotion
-// is per *strategy* (POST /api/live-basket/{strategy_id}); the run this was judged from rides
+// is per *strategy* (POST /api/promotions/live/{strategy_id}); the run this was judged from rides
 // along as `based_on_run_id` so the Alpha pool can show its metrics.
 
 export function PromoteToLiveDialog({
@@ -35,7 +35,9 @@ export function PromoteToLiveDialog({
   const handleSubmit = () => {
     if (!run?.strategyId) return;
     promote.mutate(
-      { strategyId: run.strategyId, note: note.trim() || null, based_on_run_id: run.id },
+      // This dialog promotes to LIVE; the paper stage is granted by its own promotion, which the
+      // API requires to already exist and to match this version.
+      { stage: "live", strategyId: run.strategyId, note: note.trim() || null, based_on_run_id: run.id },
       { onSuccess: onPromoted },
     );
   };

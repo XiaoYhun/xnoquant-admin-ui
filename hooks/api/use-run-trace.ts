@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { apiGet } from "@/lib/api-client";
 import { useAuthStore } from "@/store/auth-store";
 import { USE_MOCK, HFT_API_URL } from "@/lib/constant";
 
@@ -79,15 +78,80 @@ export function normalizeTrace(raw: unknown): TraceEvent[] {
   return list.map(toTraceEvent).filter((e): e is TraceEvent => e !== null);
 }
 
+/**
+ * Largest `trace/history` body worth downloading, in bytes.
+ *
+ * The endpoint takes no `page`/`limit` and always returns the run's ENTIRE journal as one JSON
+ * array. A busy HFT run makes that enormous — a 12-minute dev run measured 201 MB / 696,078
+ * events, and a 2-minute one 27 MB / 97,255. `res.json()` on that blocks the main thread for long
+ * enough that the whole tab stops responding: the Results tab appears to hang the moment the
+ * Execution view is opened, and any later click (switching back to Cost & Capacity, say) does
+ * nothing because the thread is still parsing.
+ *
+ * 8 MB is roughly 25k events — far more than the console renders — and parses in well under a
+ * frame budget's worth of jank. Anything larger is refused and reported, rather than silently
+ * freezing the page. Remove this once the endpoint learns to paginate.
+ *
+ * Measured against the decompressed body, which is what `JSON.parse` has to chew through; the
+ * wire is gzipped and roughly 20× smaller.
+ */
+export const TRACE_HISTORY_MAX_BYTES = 8 * 1024 * 1024;
+
+/** Thrown when the journal is too large to load; the view renders this message verbatim. */
+export class TraceTooLargeError extends Error {
+  constructor(public bytes: number) {
+    const mb = (bytes / (1024 * 1024)).toFixed(0);
+    super(
+      `Trade-cycle log is too large to display (${mb} MB). The API returns the whole journal in ` +
+        `one response with no paging, so loading it would freeze the page.`,
+    );
+    this.name = "TraceTooLargeError";
+  }
+}
+
 export function useRunTraceHistory(runId: string | undefined) {
   return useQuery({
     queryKey: ["run-trace", runId],
     queryFn: async (): Promise<TraceEvent[]> => {
       if (USE_MOCK) return [];
-      const raw = await apiGet<unknown>(`${HFT_API_URL}/api/runs/${runId}/trace/history`);
-      return normalizeTrace(raw);
+      const token = useAuthStore.getState().accessToken;
+      const res = await fetch(`${HFT_API_URL}/api/runs/${runId}/trace/history`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error(`Trade-cycle log unavailable (${res.status})`);
+      // Read incrementally and abort the moment the cap is passed. `content-length` is NOT usable
+      // here — the API answers `transfer-encoding: chunked` with `content-encoding: gzip`, so no
+      // length is advertised and `res.text()` would happily buffer the whole 192 MB before any
+      // size check could run. `res.body` yields already-decompressed bytes, which is exactly the
+      // cost that matters, and cancelling the reader stops the transfer.
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("Trade-cycle log unavailable (no response body)");
+      const chunks: Uint8Array[] = [];
+      let received = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        received += value.byteLength;
+        if (received > TRACE_HISTORY_MAX_BYTES) {
+          await reader.cancel();
+          throw new TraceTooLargeError(received);
+        }
+        chunks.push(value);
+      }
+      const buf = new Uint8Array(received);
+      let offset = 0;
+      for (const c of chunks) {
+        buf.set(c, offset);
+        offset += c.byteLength;
+      }
+      return normalizeTrace(JSON.parse(new TextDecoder().decode(buf)));
     },
     enabled: !!runId,
+    // Re-downloading a multi-megabyte journal on every remount is what made cycling the Results
+    // views so slow; it never changes for a terminal run, so cache it for the session.
+    staleTime: Infinity,
+    gcTime: 10 * 60_000,
+    retry: false,
   });
 }
 

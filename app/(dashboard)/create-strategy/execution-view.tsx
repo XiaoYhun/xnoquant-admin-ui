@@ -18,7 +18,7 @@ import type { EChartsOption } from "echarts";
 
 import { BaseChart } from "@/components/charts/base-chart";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useRunTraceHistory, useRunTraceStream } from "@/hooks/api/use-run-trace";
+import { useRunTraceHistory, useRunTraceStream, TraceTooLargeError } from "@/hooks/api/use-run-trace";
 import {
   deriveFillRateSeries,
   deriveTraceExecutionMetrics,
@@ -196,7 +196,7 @@ export function ExecutionView({ runId, isLive }: { runId?: string; isLive?: bool
   const [slippageScope, setSlippageScope] = useState<string>("All");
   const [latencyScope, setLatencyScope] = useState<string>("All");
 
-  const { data: history = [], isLoading, isError } = useRunTraceHistory(runId);
+  const { data: history = [], isLoading, isError, error } = useRunTraceHistory(runId);
   const { events: streamed, state: streamState } = useRunTraceStream(runId, !!isLive);
   const events = useMemo(() => [...history, ...streamed], [history, streamed]);
 
@@ -232,7 +232,11 @@ export function ExecutionView({ runId, isLive }: { runId?: string; isLive?: bool
   const fillNote = !runId
     ? "Pick a run"
     : isError
-      ? "Trace unavailable"
+      // A journal too big to parse is a specific, actionable state — say so rather than the
+      // generic "unavailable", which reads like the endpoint is down.
+      ? error instanceof TraceTooLargeError
+        ? `Log too large (${(error.bytes / (1024 * 1024)).toFixed(0)} MB)`
+        : "Trace unavailable"
       : isLoading
         ? "Loading…"
         : fillSeries.length === 0

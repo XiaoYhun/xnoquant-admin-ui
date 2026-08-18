@@ -45,7 +45,10 @@ export function formatCompact(n: number): string {
  * `formatCompact`, since a 111,000,000.00 tick would not fit; their tooltips use this.
  */
 export function formatAmount(n: number, digits = 2): string {
-  return n.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  // `-0` and values that round to it must not print "-0.00": callers prefix their own sign from
+  // `n >= 0`, which is TRUE for -0, so the raw output collided into "+-0.0%".
+  const safe = Object.is(n, -0) || Number(n.toFixed(digits)) === 0 ? 0 : n;
+  return safe.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
 
 /** `formatAmount` with an explicit leading `+` on gains — `+1,000.00` / `-1,000.00`. */

@@ -29,3 +29,11 @@ describe("formatters", () => {
     });
   });
 });
+
+describe("formatAmount negative zero", () => {
+  it("never emits a signed zero, which callers' own sign prefix turned into '+-0.0'", () => {
+    expect(formatAmount(-0)).toBe("0.00");
+    expect(formatAmount(-0.0001, 1)).toBe("0.0");
+    expect(formatSignedAmount(-0)).toBe("0.00");
+  });
+});

@@ -16,7 +16,7 @@ import type { EChartsOption } from "echarts";
 
 import { BaseChart } from "@/components/charts/base-chart";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useRunEquity, useRunSummary } from "@/hooks/api/use-runs";
+import { useRunCurrency, useRunEquity, useRunSummary } from "@/hooks/api/use-runs";
 import { mergeLiveSummary, preferLiveEquity, useLiveSnapshot } from "@/hooks/api/use-run-live-snapshot";
 import {
   annualizedReturn,
@@ -413,6 +413,7 @@ export function PerformanceView({ runId }: { runId?: string }) {
   const isPct = capital !== null;
   const scale = capital === null ? 1 : 100 / capital; // PnL → % of starting capital
 
+  const currency = useRunCurrency(runId);
   const stats = useMemo(() => equityStats(equity), [equity]);
   // Padded to a week so a single-day HFT run reads as a bar in context, not one lone column.
   const daily = useMemo(() => padDailyPnl(toDailyPnlPoints(equity)), [equity]);
@@ -449,14 +450,14 @@ export function PerformanceView({ runId }: { runId?: string }) {
         {
           label: "Gross PnL",
           value: fmtSigned(grossPnl),
-          unit: "USDT",
+          unit: currency,
           delta: `Fees ${fmtSigned(-summary.total_fee)}`,
           tone: toneOf(grossPnl),
         },
         {
           label: "Net PnL",
           value: fmtSigned(summary.net_pnl),
-          unit: "USDT",
+          unit: currency,
           delta: summary.return_pct == null ? undefined : fmtPct(summary.return_pct * 100),
           tone: toneOf(summary.net_pnl),
         },
@@ -471,23 +472,23 @@ export function PerformanceView({ runId }: { runId?: string }) {
         {
           label: "Avg Daily PnL",
           value: stats ? fmtSigned(stats.avgDailyPnl, 2) : DASH,
-          unit: stats ? "USDT" : undefined,
+          unit: stats ? currency : undefined,
         },
         {
           label: "Best day",
           value: stats ? fmtSigned(stats.bestDay) : DASH,
-          unit: stats ? "USDT" : undefined,
+          unit: stats ? currency : undefined,
           tone: stats ? "green" : undefined,
         },
         {
           label: "Worst day",
           value: stats ? fmtSigned(stats.worstDay) : DASH,
-          unit: stats ? "USDT" : undefined,
+          unit: stats ? currency : undefined,
           tone: stats ? "red" : undefined,
         },
       ],
     ];
-  }, [summary, stats, equity]);
+  }, [summary, stats, equity, currency]);
 
   // One note drives every panel: which of "no run / loading / failed / empty" applies, plus the
   // absolute-instead-of-% caveat once data is actually on screen.

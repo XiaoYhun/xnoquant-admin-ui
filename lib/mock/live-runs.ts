@@ -6,6 +6,7 @@ import {
   symbolIdsFor,
   type PaperRunBase,
   type PaperRunRow,
+  mockSettlementCurrency,
 } from "./paper-runs";
 
 // OWNED BY: Live Trading ("Live trade" screen).
@@ -67,6 +68,12 @@ export const liveRunMocks = {
     await delay();
     // Fresh copy — mirrors lib/mock/index.ts's listVenues comment: React Query needs a
     // new array reference to detect changes if this dataset is ever mutated.
-    return MOCK_LIVE_RUNS.map((r) => ({ ...r, ...buildDetail(r), owner: "demo-user", startingEquity: 1_000_000 }));
+    return MOCK_LIVE_RUNS.map((r) => ({
+      ...r,
+      ...buildDetail(r),
+      owner: "demo-user",
+      startingEquity: 1_000_000,
+      settlementCurrency: mockSettlementCurrency(r),
+    }));
   },
 };

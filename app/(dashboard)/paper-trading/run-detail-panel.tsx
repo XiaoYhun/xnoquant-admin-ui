@@ -30,7 +30,7 @@ import { useTradeHistory } from "@/hooks/api/use-paper-runs";
 import { useRunSummary, useRunEquity, useRun, symbolNamesOf, useStopRun } from "@/hooks/api/use-runs";
 import { ApiError, resourceErrorMessage } from "@/lib/api-client";
 import { USE_MOCK } from "@/lib/constant";
-import { toRunDetail, type RunDetail } from "@/lib/transform/runs";
+import { currencySymbol, toRunDetail, type RunDetail } from "@/lib/transform/runs";
 import type { PaperRunRow, TradeHistoryRow } from "@/lib/mock/paper-runs";
 import type { RunSummary } from "@/types/domain";
 import { RUN_STATUS_META } from "@/components/run-status-pill";
@@ -109,10 +109,10 @@ function KpiCell({
 // wins|losses breakdown have no source in RunSummary (no profit-factor field; total_trades counts
 // fills, not closing trades), so those render "—" with an explanatory title — same convention as
 // LiveKpiGrid below.
-function ResultsKpiGrid({ detail }: { detail: RunDetail }) {
+function ResultsKpiGrid({ detail, currency }: { detail: RunDetail; currency: string }) {
   const m = detail.metrics;
   const netPnlTone = m.netPnl < 0 ? GRAD_RED : GRAD_GREEN;
-  const amount = (n: number) => `${formatAmount(Math.abs(n))} ₫`;
+  const amount = (n: number) => `${formatAmount(Math.abs(n))} ${currencySymbol(currency)}`;
 
   return (
     <div className="flex flex-col gap-2 rounded-[12px] border border-[#1d2939] bg-[rgba(29,33,38,0.2)] px-3 py-2">
@@ -171,12 +171,14 @@ function ResultsKpiGrid({ detail }: { detail: RunDetail }) {
 function ChartsTab({
   runId,
   detail,
+  currency,
   isLive,
   error,
   summaryLoading,
 }: {
   runId: string | undefined;
   detail: RunDetail;
+  currency: string;
   isLive: boolean;
   error: unknown;
   summaryLoading: boolean;
@@ -195,7 +197,7 @@ function ChartsTab({
   }
   return (
     <div className="flex flex-col gap-3 p-4">
-      <ResultsKpiGrid detail={detail} />
+      <ResultsKpiGrid detail={detail} currency={currency} />
       <ResultsViews runId={runId} isLive={isLive} />
     </div>
   );
@@ -205,7 +207,7 @@ function ChartsTab({
 // Two rows of 4 KPIs off RunSummary. Profit Factor and the win-rate wins|losses breakdown have no
 // API source (no profit-factor field; total_trades counts fills, not closing trades) — those two
 // render "—" with an explanatory title, same convention as the live-trade page's KpiCard.
-function LiveKpiGrid({ summary }: { summary: RunSummary | undefined }) {
+function LiveKpiGrid({ summary, currency }: { summary: RunSummary | undefined; currency: string }) {
   const netPnl = summary?.net_pnl;
   const netPnlTone = netPnl != null && netPnl < 0 ? GRAD_RED : GRAD_GREEN;
   const returnPct = summary?.return_pct;
@@ -223,7 +225,7 @@ function LiveKpiGrid({ summary }: { summary: RunSummary | undefined }) {
         <KpiCell
           label="Net PnL"
           size="sm"
-          value={netPnl == null ? "—" : `${netPnl >= 0 ? "+" : "-"}${formatAmount(Math.abs(netPnl))}`}
+          value={netPnl == null ? "—" : `${netPnl >= 0 ? "+" : "-"}${formatAmount(Math.abs(netPnl))} ${currencySymbol(currency)}`}
           valueClassName={netPnl == null ? "text-muted-foreground" : netPnlTone}
           extra={returnPct == null ? undefined : `(${returnPct >= 0 ? "+" : ""}${formatAmount(returnPct * 100, 1)}%)`}
           extraClassName={cn("text-xs font-medium", netPnlTone)}
@@ -256,7 +258,7 @@ function LiveKpiGrid({ summary }: { summary: RunSummary | undefined }) {
         <KpiCell
           label="Max Drawdown"
           size="sm"
-          value={mdd == null ? "—" : `-${formatAmount(Math.abs(mdd))}`}
+          value={mdd == null ? "—" : `-${formatAmount(Math.abs(mdd))} ${currencySymbol(currency)}`}
           valueClassName={mdd == null ? "text-muted-foreground" : GRAD_RED}
           extra={mddPct == null ? undefined : `(-${formatAmount(Math.abs(mddPct * 100), 1)}%)`}
           extraClassName={cn("text-xs font-medium", GRAD_RED)}
@@ -330,11 +332,13 @@ function ResultsViews({ runId, isLive }: { runId: string | undefined; isLive: bo
 function LiveChartsTab({
   runId,
   summary,
+  currency,
   summaryLoading,
   error,
 }: {
   runId: string | undefined;
   summary: RunSummary | undefined;
+  currency: string;
   summaryLoading: boolean;
   error: unknown;
 }) {
@@ -359,7 +363,7 @@ function LiveChartsTab({
 
   return (
     <div className="flex flex-col gap-3 p-4">
-      <LiveKpiGrid summary={liveSummary} />
+      <LiveKpiGrid summary={liveSummary} currency={currency} />
       <ResultsViews runId={runId} isLive />
     </div>
   );
@@ -1005,6 +1009,7 @@ function RunDetailBody({
               <LiveChartsTab
                 runId={lazy ? run.id : undefined}
                 summary={summaryQ.data}
+                currency={run.settlementCurrency}
                 summaryLoading={summaryLoading}
                 error={summaryError}
               />
@@ -1012,6 +1017,7 @@ function RunDetailBody({
               <ChartsTab
                 runId={lazy ? run.id : undefined}
                 detail={detail}
+                currency={run.settlementCurrency}
                 isLive={isLive}
                 error={summaryError}
                 summaryLoading={summaryLoading}

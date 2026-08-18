@@ -30,7 +30,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useTradeHistory } from "@/hooks/api/use-paper-runs";
-import { useRunCostCurve, useRunEquity, useRunSummary } from "@/hooks/api/use-runs";
+import { useRunCostCurve, useRunCurrency, useRunEquity, useRunSummary } from "@/hooks/api/use-runs";
 import {
   mergeLiveSummary,
   mergeLiveTrades,
@@ -111,6 +111,7 @@ function buildMetrics(
   summary: RunSummary | undefined,
   equity: EquityPoint[],
   cost: CostPoint[],
+  currency: string,
 ): Metric[] {
   const netPnl = summary?.net_pnl;
   const ddPct = summary?.max_drawdown_pct;
@@ -121,7 +122,7 @@ function buildMetrics(
     {
       label: "Net PnL",
       value: netPnl == null ? DASH : fmtSigned(netPnl),
-      unit: netPnl == null ? undefined : "USDT",
+      unit: netPnl == null ? undefined : currency,
       valueClassName: netPnl == null ? undefined : netPnl >= 0 ? GREEN_TEXT : RED_TEXT,
       sub: summary?.return_pct == null ? "Cumulative realized" : fmtPct(summary.return_pct * 100),
       sparkKind: "area",
@@ -149,9 +150,9 @@ function buildMetrics(
           : mdd != null
             ? fmtSigned(-Math.abs(mdd))
             : DASH,
-      unit: ddPct == null && mdd != null ? "USDT" : undefined,
+      unit: ddPct == null && mdd != null ? currency : undefined,
       valueClassName: RED_TEXT,
-      sub: mdd == null ? DASH : `${fmtSigned(-Math.abs(mdd))} USDT`,
+      sub: mdd == null ? DASH : `${fmtSigned(-Math.abs(mdd))} ${currency}`,
       sparkKind: "line",
       sparkColor: RED,
       sparkData: sample(toDrawdown(equity).map((p) => p.pct)),
@@ -172,7 +173,7 @@ function buildMetrics(
       sub:
         summary?.total_fee == null
           ? DASH
-          : `${formatAmount(summary.total_fee)} USDT`,
+          : `${formatAmount(summary.total_fee)} ${currency}`,
       sparkKind: "bar",
       sparkColor: GOLD,
       sparkData: sample(cost.map((p) => Number(p.cumulative))),
@@ -480,7 +481,8 @@ export function OverviewView({ runId }: { runId?: string }) {
   const equity = useMemo(() => preferLiveEquity(restEquity, snapshot), [restEquity, snapshot]);
   const trades = useMemo(() => mergeLiveTrades(restTrades, snapshot), [restTrades, snapshot]);
 
-  const metrics = useMemo(() => buildMetrics(summary, equity, cost), [summary, equity, cost]);
+  const currency = useRunCurrency(runId);
+  const metrics = useMemo(() => buildMetrics(summary, equity, cost, currency), [summary, equity, cost, currency]);
   const stats = useMemo(() => buildStats(summary, equity), [summary, equity]);
 
   const windowed = useMemo(() => inRange(equity, range), [equity, range]);

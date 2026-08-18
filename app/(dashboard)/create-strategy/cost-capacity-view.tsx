@@ -16,13 +16,14 @@ import { useMemo, useState } from "react";
 import type { EChartsOption } from "echarts";
 
 import { BaseChart } from "@/components/charts/base-chart";
-import { useRunCostCurve, useRunSummary, useRunTurnover } from "@/hooks/api/use-runs";
+import { useRunCostCurve, useRunCurrency, useRunSummary, useRunTurnover } from "@/hooks/api/use-runs";
 import { mergeLiveSummary, useLiveSnapshot } from "@/hooks/api/use-run-live-snapshot";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { lastCumulative, toCostSeries } from "@/lib/cost-curve";
 import { aggregateTurnover, type TurnoverPeriod } from "@/lib/turnover-curve";
 import { costDragPct } from "@/lib/transform/results";
 import { cn, formatAmount, formatCompact } from "@/lib/utils";
+import { currencySymbol } from "@/lib/transform/runs";
 import { ChartCard, MockNote } from "./results-chart-card";
 
 // Figma 14180:39849 "Total Fee" swatch — the only component the cost-curve can populate.
@@ -34,11 +35,15 @@ const GREEN = "#67e1c1";
 const GRAD_GREEN = "bg-[linear-gradient(158deg,#cff8ea_0%,#67e1c1_100%)] bg-clip-text text-transparent";
 const DASH = "—";
 
-const money = (n: number | null | undefined) =>
-  n == null || !Number.isFinite(n) ? DASH : `${n < 0 ? "-" : ""}$${formatAmount(Math.abs(n))}`;
+// Money is denominated in the RUN's settlement currency, not a hardcoded "$" — a crypto run
+// accounts in USDT and a DNSE one in VND. Both are suffixed, as everywhere else in Results.
+const moneyIn = (currency: string) => (n: number | null | undefined) =>
+  n == null || !Number.isFinite(n)
+    ? DASH
+    : `${n < 0 ? "-" : ""}${formatAmount(Math.abs(n))} ${currencySymbol(currency)}`;
 
 /** Chart axis ticks only — a `111,000,000.00` label does not fit; tooltips use `money`. */
-const axisMoney = (n: number) => `$${formatCompact(n)}`;
+const axisMoneyIn = (currency: string) => (n: number) => `${formatCompact(n)} ${currencySymbol(currency)}`;
 
 /** ECharts linear gradient matching a swatch, top-left → bottom-right. */
 const grad = (from: string, to: string) => ({
@@ -104,6 +109,9 @@ function PillSelect({
 }
 
 export function CostCapacityView({ runId }: { runId?: string }) {
+  const currency = useRunCurrency(runId);
+  const money = useMemo(() => moneyIn(currency), [currency]);
+  const axisMoney = useMemo(() => axisMoneyIn(currency), [currency]);
   const { data: restSummary } = useRunSummary(runId);
   // While the run is streaming, the live frame wins over the persisted `/summary` snapshot.
   const { snapshot } = useLiveSnapshot();
@@ -155,7 +163,7 @@ export function CostCapacityView({ runId }: { runId?: string }) {
         },
       ],
     }),
-    [breakdown],
+    [breakdown, money],
   );
 
   const costSeries = useMemo(() => toCostSeries(costCurve), [costCurve]);
@@ -188,7 +196,7 @@ export function CostCapacityView({ runId }: { runId?: string }) {
         },
       ],
     }),
-    [costSeries],
+    [costSeries, money, axisMoney],
   );
 
   const costNote = !runId
@@ -288,7 +296,7 @@ export function CostCapacityView({ runId }: { runId?: string }) {
       </div>
 
       <div className="grid min-w-0 gap-4 lg:grid-cols-2">
-        <ChartCard title="Cost Breakdown (USDT)" controls={costNote ? <MockNote>{costNote}</MockNote> : undefined}>
+        <ChartCard title={`Cost Breakdown (${currency})`} controls={costNote ? <MockNote>{costNote}</MockNote> : undefined}>
           <div className="flex min-w-0 flex-wrap items-center justify-center gap-4">
             <div className="relative size-[148px] shrink-0">
               <BaseChart option={donutOption} style={{ height: 148 }} />

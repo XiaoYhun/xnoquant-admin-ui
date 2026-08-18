@@ -4,6 +4,7 @@ import { HFT_API_URL, USE_MOCK } from "@/lib/constant";
 import { normalizeCostCurve, type CostPoint } from "@/lib/cost-curve";
 import { normalizeTurnover, type TurnoverPoint } from "@/lib/turnover-curve";
 import type { EquityPoint, Run, RunPage, RunSummary } from "@/types/domain";
+import { settlementCurrencyOf } from "@/lib/transform/runs";
 import type { components } from "@/types/api/hft";
 
 export type { TurnoverPoint, CostPoint };
@@ -131,6 +132,19 @@ export function useRun(id: string | undefined) {
     enabled: !!id && !USE_MOCK,
     retry: retryUnlessForbidden,
   });
+}
+
+/**
+ * The currency a run accounts in, for the Results views — they receive only a `runId`, so the
+ * manifest has to be fetched. Rides the shared ["run", id] query, so the six views (and anything
+ * else already reading that key) cost one request between them.
+ *
+ * Defaults to USDT until the record resolves: the crypto venues are the common case, and a
+ * momentary "USDT" that settles to "VND" reads better than a bare number with no unit.
+ */
+export function useRunCurrency(runId: string | undefined): string {
+  const { data } = useRun(runId);
+  return data?.manifest ? settlementCurrencyOf(data.manifest) : "USDT";
 }
 
 /** `symbol_id` → ticker, off a run's manifest. Empty until the run record resolves. */

@@ -59,6 +59,8 @@ export type PaperRunRow = {
   // Manifest-derived starting equity — kept so the detail panel can compute % metrics from the
   // lazily-fetched summary. See lib/transform/runs.ts.
   startingEquity: number;
+  /** Accounting currency for every money figure about this run — "USDT", "VND", … */
+  settlementCurrency: string;
   pnlSeries: number[];
   // Summary/equity-derived — null/empty until the run's detail panel is opened (then fetched).
   returnPct: number | null;
@@ -79,7 +81,15 @@ export type PaperRunRow = {
 // (metrics/config/code) are synthesized in listPaperRuns so the literals stay compact.
 // Exported (with the builders below) so lib/mock/live-runs.ts composes its live rows from the
 // same machinery instead of duplicating it.
-export type PaperRunBase = Omit<PaperRunRow, "metrics" | "config" | "code" | "startingEquity" | "owner">;
+export type PaperRunBase = Omit<
+  PaperRunRow,
+  "metrics" | "config" | "code" | "startingEquity" | "owner" | "settlementCurrency"
+>;
+
+/** Mock rows carry a market, not a manifest — crypto settles in USDT, the VN markets in VND. */
+export function mockSettlementCurrency(r: Pick<PaperRunRow, "symbols">): string {
+  return r.symbols.some((s) => s.market === "Crypto") ? "USDT" : "VND";
+}
 
 // UI-only row for the detail view's "Trade history" table.
 export type TradeHistoryRow = {
@@ -262,7 +272,13 @@ export const paperRunMocks = {
     await delay();
     // Fresh copy — mirrors lib/mock/index.ts's listVenues comment: React Query needs a
     // new array reference to detect changes if this dataset is ever mutated.
-    return MOCK_PAPER_RUNS.map((r) => ({ ...r, ...buildDetail(r), owner: "demo-user", startingEquity: 1_000_000 }));
+    return MOCK_PAPER_RUNS.map((r) => ({
+      ...r,
+      ...buildDetail(r),
+      owner: "demo-user",
+      startingEquity: 1_000_000,
+      settlementCurrency: mockSettlementCurrency(r),
+    }));
   },
   async getTradeHistory(id: string): Promise<TradeHistoryRow[]> {
     await delay();

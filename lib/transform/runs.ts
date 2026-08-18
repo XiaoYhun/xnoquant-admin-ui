@@ -20,6 +20,29 @@ function startingEquity(manifest: RunManifest): number {
   }, 0);
 }
 
+/**
+ * The currency a run accounts in, for every money figure the UI prints about it.
+ *
+ * Derived from the VENUE first, because that is physically determined: a Binance account settles
+ * in USDT and a DNSE/TCBS one in VND, whatever the launch form recorded. `settlement_currency` is
+ * only consulted for venues not listed here.
+ *
+ * Deliberately NOT the other way round. The field is a free-text launch-dialog value and dev data
+ * shows it going wrong — run 01a00f11 is a BTCUSDT run on binance_futures stamped "VND", and
+ * trusting it printed "₫" against a crypto strategy. Some runs leave it empty entirely.
+ */
+export function settlementCurrencyOf(manifest: RunManifest): string {
+  const venueType = manifest.account?.venue_type;
+  if (venueType === "binance_spot" || venueType === "binance_futures") return "USDT";
+  if (venueType === "dnse" || venueType === "tcbs") return "VND";
+  return manifest.account?.settlement_currency?.trim() || "USDT";
+}
+
+/** Display symbol for a currency — VND prints as the ₫ sign, everything else as its code. */
+export function currencySymbol(currency: string): string {
+  return currency === "VND" ? "₫" : currency;
+}
+
 function returnPctFrom(summary: RunSummary | null, startEquity: number): number {
   if (!summary || !startEquity) return 0;
   return Number(((summary.net_pnl / startEquity) * 100).toFixed(2));
@@ -171,6 +194,7 @@ export function toPaperRunRow(run: Run): PaperRunRow {
     executionType: manifest.strategy.strategy_type,
     owner: run.owner_username ?? null,
     startingEquity: startingEquity(manifest),
+    settlementCurrency: settlementCurrencyOf(manifest),
     pnlSeries: [],
     returnPct: runReturnPct(run),
     sharpe: run.sharpe_annualized ?? null,

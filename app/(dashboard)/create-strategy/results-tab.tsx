@@ -85,7 +85,12 @@ export function ResultsTab({
         and so six views share one connection instead of opening six.
       */}
       <LiveSnapshotProvider runId={selectedRun?.id} isLive={isLive} symbolNames={symbolNames}>
-        <div className="min-w-0">
+        {/* Remount every view when the run changes. ECharts merges options by default, so a
+            series that is conditional — Overview's Gross PnL line only exists when the run has a
+            cost curve — survives into the next run's chart and draws data that isn't its own.
+            Keying here also resets each view's local toggles (range, period) for the new run.
+            Kept off the provider so the live subscription isn't torn down on a view switch. */}
+        <div key={selectedRun?.id ?? strategyId ?? "no-run"} className="min-w-0">
           {view === "Overview" && <OverviewView runId={selectedRun?.id} />}
           {view === "Performance" && <PerformanceView runId={selectedRun?.id} />}
           {view === "Risk" && <RiskView runId={selectedRun?.id} isLive={isLive} />}

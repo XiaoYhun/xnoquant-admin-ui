@@ -24,6 +24,28 @@ function statusBadge(status: string): { label: string; bg: string; text: string 
   };
 }
 
+// Which engine mode produced the run — a backtest replays history, a paper run simulates fills
+// off the live feed, and a live run trades for real. Tinted like the status badge beside it, but
+// in its own palette so the two never read as one signal.
+const MODE_META: Record<string, { label: string; bg: string; text: string }> = {
+  backtest: { label: "Backtest", bg: "rgba(157,178,206,0.15)", text: "text-[#9db2ce]" },
+  paper: { label: "Paper", bg: "rgba(45,132,255,0.15)", text: "text-[#7fb2ff]" },
+  live: { label: "Live", bg: "rgba(241,198,23,0.15)", text: "text-[#f1c617]" },
+};
+
+function ModePill({ mode }: { mode: string }) {
+  const meta = MODE_META[mode];
+  if (!meta) return null;
+  return (
+    <span
+      className={cn("shrink-0 rounded-[20px] px-1.5 py-0.5 text-[10px] leading-4", meta.text)}
+      style={{ backgroundColor: meta.bg }}
+    >
+      {meta.label}
+    </span>
+  );
+}
+
 const pad = (n: number) => String(n).padStart(2, "0");
 
 /**
@@ -73,6 +95,7 @@ export function RunHistoryPicker({
             className="inline-flex h-8 cursor-pointer items-center gap-2 rounded-[40px] border border-border bg-background px-3 text-xs text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {isLoading ? "Loading…" : selected ? <RunId id={selected.id} /> : "No runs"}
+            {selected && <ModePill mode={selected.mode} />}
             <AltArrowDown weight="Outline" className="size-4" />
           </button>
         </PopoverTrigger>
@@ -98,7 +121,10 @@ export function RunHistoryPicker({
                     )}
                   >
                     <span className="flex min-w-0 flex-col gap-1">
-                      <RunId id={r.id} className="truncate text-xs text-white" />
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        <RunId id={r.id} className="truncate text-xs text-white" />
+                        <ModePill mode={r.mode} />
+                      </span>
                       <span className="truncate text-xs text-[#9db2ce]">{formatRunTime(r.created_at)}</span>
                     </span>
                     <span className="flex shrink-0 flex-col items-end gap-1">

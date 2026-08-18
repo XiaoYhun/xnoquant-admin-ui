@@ -30,9 +30,12 @@ const TAB_TRIGGER =
 export function ResultsTab({
   variant = "hft",
   strategyId,
+  focusRun,
 }: {
   variant?: "mft" | "hft";
   strategyId?: string;
+  /** A just-launched run to select, overriding the picker's newest-run default. */
+  focusRun?: Run;
 }) {
   const [view, setView] = useState<string>("Overview");
   // Which run the views describe. Undefined = the picker's default (the newest run).
@@ -44,6 +47,14 @@ export function ResultsTab({
   if (prevStrategyId !== strategyId) {
     setPrevStrategyId(strategyId);
     setSelectedRun(undefined);
+  }
+  // Jump to a newly launched run. Compared during render rather than synced in an effect (the
+  // pattern above, and what react-hooks/set-state-in-effect requires); keyed on the id so
+  // re-launching the SAME run id doesn't fight a selection the user has since changed.
+  const [prevFocusId, setPrevFocusId] = useState(focusRun?.id);
+  if (focusRun && prevFocusId !== focusRun.id) {
+    setPrevFocusId(focusRun.id);
+    setSelectedRun(focusRun);
   }
   // Only a running run publishes live snapshots; anything else reads the persisted artifacts.
   const isLive = selectedRun?.status === "running";

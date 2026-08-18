@@ -6,6 +6,8 @@ import { EditorsBar } from "./editors-bar";
 import { Toolbar } from "./toolbar";
 import { ConsolePanel } from "./console-panel";
 import { ResultsPanel, type ResultsPanelTab } from "./results-panel";
+import { shortRunId } from "@/lib/utils";
+import type { Run } from "@/types/domain";
 import { type EditorTab } from "@/lib/mock/strategy-builder";
 import { useEditors, useCreateEditor, useSimulateEditor, useUpdateEditor, useDeleteEditor, fetchEditors } from "@/hooks/api/use-strategy-builder";
 import { useHftStrategies, useCreateHftStrategy, useUpdateHftStrategy, useDeleteHftStrategy, type HftStrategyType, type FeatureDef } from "@/hooks/api/use-hft-strategies";
@@ -98,6 +100,10 @@ function StrategyBuilder({ mode, initialEditors }: { mode: Mode; initialEditors:
   const [consoleOpen, setConsoleOpen] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [resultsTab, setResultsTab] = useState<ResultsPanelTab>("Results");
+  // The run the Simulate modal just launched. Handed to the Results tab so it opens on that run
+  // rather than on the picker's newest-run default, which is a beat behind until `GET /api/runs`
+  // catches up with the create.
+  const [launchedRun, setLaunchedRun] = useState<Run | undefined>(undefined);
   const createHftStrategy = useCreateHftStrategy();
   const createEditor = useCreateEditor();
   const simulateEditor = useSimulateEditor();
@@ -212,6 +218,12 @@ function StrategyBuilder({ mode, initialEditors }: { mode: Mode; initialEditors:
         onRenamed={(nextName) =>
           setEditors((prev) => prev.map((e) => (e.id === activeId ? { ...e, name: nextName } : e)))
         }
+        onLaunched={(run) => {
+          // Surface the run straight away: reveal the Results tab and point it at the new run.
+          setLaunchedRun(run);
+          setResultsTab("Results");
+          addLog("success", `Run ${shortRunId(run.id)} launched in ${run.mode} mode`);
+        }}
       />
       <CodeEditor
         code={active?.code ?? ""}
@@ -236,7 +248,14 @@ function StrategyBuilder({ mode, initialEditors }: { mode: Mode; initialEditors:
               left={left}
               right={
                 <div className="h-full min-h-0 overflow-hidden bg-background">
-                  <ResultsPanel onUseTemplate={applyTemplate} variant={active.type} strategyId={resultsStrategyId} tab={resultsTab} onTabChange={setResultsTab} />
+                  <ResultsPanel
+                    onUseTemplate={applyTemplate}
+                    variant={active.type}
+                    strategyId={resultsStrategyId}
+                    tab={resultsTab}
+                    onTabChange={setResultsTab}
+                    focusRun={launchedRun}
+                  />
                 </div>
               }
             />

@@ -17,6 +17,7 @@ import { useMarkets } from "@/hooks/api/use-markets";
 import { useUpdateEditor } from "@/hooks/api/use-strategy-builder";
 import { useHftStrategy, useUpdateHftStrategy, type HftStrategyType } from "@/hooks/api/use-hft-strategies";
 import { useConsoleLog } from "@/store/console-log-store";
+import type { Run } from "@/types/domain";
 
 // Toolbar row above the code editor — Figma node 13964:52172 (inside 13964:50200).
 // Self-contained: strategy name is local state, all buttons are no-ops (page-level
@@ -249,6 +250,8 @@ function SettingsMenu({
   pillItems: string[];
   onSettingsSaved?: (changes: { market?: string; universe?: string; train_ratio?: number }) => void;
   onRenamed?: (name: string) => void;
+  /** Bubbles the launched run up so the page can show it in Results. */
+  onLaunched?: (run: Run) => void;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -309,6 +312,7 @@ export function Toolbar({
   onSimulate,
   onSettingsSaved,
   onRenamed,
+  onLaunched,
 }: {
   name: string;
   type: "mft" | "hft";
@@ -323,6 +327,8 @@ export function Toolbar({
   onSimulate?: (editorId: string) => Promise<void>;
   onSettingsSaved?: (changes: { market?: string; universe?: string; train_ratio?: number }) => void;
   onRenamed?: (name: string) => void;
+  /** Bubbles the launched run up so the page can show it in Results. */
+  onLaunched?: (run: Run) => void;
 }) {
   const [simulateOpen, setSimulateOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -507,6 +513,7 @@ export function Toolbar({
         onHftMarketChange={setHftMarket}
         hftInterval={hftInterval}
         onHftIntervalChange={setHftInterval}
+        onLaunched={onLaunched}
       />
     </div>
   );

@@ -16,7 +16,7 @@ import { useSymbols } from "@/hooks/api/use-symbols";
 import { useLaunchRun, type LaunchRequest } from "@/hooks/api/use-runs";
 import { resourceErrorMessage } from "@/lib/api-client";
 import type { HftStrategyType } from "@/hooks/api/use-hft-strategies";
-import type { Account, RunMode } from "@/types/domain";
+import type { Account, Run, RunMode } from "@/types/domain";
 
 // Figma node 14197:30033 — "Simulate" configuration modal opened from the toolbar's Simulate
 // button. Builds a real `LaunchRequest` and POSTs it via `useLaunchRun` (`POST /api/runs`).
@@ -353,11 +353,14 @@ export function SimulateModal({
   onHftMarketChange,
   hftInterval,
   onHftIntervalChange,
+  onLaunched,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   strategyName: string;
   strategyId: string;
+  /** The run `POST /api/runs` created, so the caller can point the Results tab straight at it. */
+  onLaunched?: (run: Run) => void;
   /** `strategy_type` from the API — read-only here; the Settings popover is where it's edited. */
   hftType?: HftStrategyType;
   // Market/interval are launch-time only (no strategy field maps to them) and are picked here.
@@ -520,7 +523,12 @@ export function SimulateModal({
       },
       ...(isDnseAccount && mode === "live" && otpPasscode.trim() ? { otp_passcode: otpPasscode.trim() } : {}),
     };
-    launchRun.mutate(req, { onSuccess: () => onOpenChange(false) });
+    launchRun.mutate(req, {
+      onSuccess: (run) => {
+        onOpenChange(false);
+        onLaunched?.(run);
+      },
+    });
   };
 
   return (

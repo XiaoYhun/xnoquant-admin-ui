@@ -198,10 +198,26 @@ export function useLaunchRun() {
       }
       return apiPost<Run>(`${HFT_API_URL}/api/runs`, req);
     },
-    onSuccess: () => {
+    onSuccess: (run) => {
+      // `POST /api/runs` answers with the created Run, so the Results tab's run-history picker can
+      // show it before any refetch lands — the list is derived from `GET /api/runs`, which is
+      // eventually consistent and would otherwise leave the picker a beat behind the launch.
+      // Seeded only when the query already exists: writing into a key nothing has fetched would
+      // plant a one-row list that later reads mistake for the whole history.
+      const strategyId = run.strategy_id ?? run.manifest?.strategy?.id;
+      if (strategyId) {
+        qc.setQueryData<Run[]>(["strategy-runs", strategyId], (prev) =>
+          prev ? [run, ...prev.filter((r) => r.id !== run.id)] : prev,
+        );
+      }
+      // The detail views read this key directly (useRun), so the panel opens populated.
+      qc.setQueryData<Run>(["run", run.id], run);
+
+      // `["runs"]` also covers useRunningRuns' ["runs","running"] by prefix.
       qc.invalidateQueries({ queryKey: ["runs"] });
       qc.invalidateQueries({ queryKey: ["live-runs"] });
       qc.invalidateQueries({ queryKey: ["paper-runs"] });
+      qc.invalidateQueries({ queryKey: ["strategy-runs"] });
     },
   });
 }

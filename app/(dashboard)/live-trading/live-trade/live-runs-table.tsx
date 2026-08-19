@@ -109,7 +109,7 @@ export function LiveRunsTable({
             return (
               <TableRow opaque key={r.id} className="cursor-pointer" onClick={() => onOpenDetail(r)}>
                 <TableCell sticky="left">
-                  <RunStatusPill status={r.status} showDot />
+                  <RunStatusPill status={r.status} showDot reason={r.error} />
                 </TableCell>
                 <TableCell className="truncate text-sm text-white">
                   <RunId id={r.id} />

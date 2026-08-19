@@ -89,7 +89,7 @@ export function AlphaPoolTable({
               className="cursor-pointer"
               onClick={() => onOpenDetail({ member, run })}
             >
-              <TableCell sticky="left">{run ? <RunStatusPill status={run.status} /> : DASH}</TableCell>
+              <TableCell sticky="left">{run ? <RunStatusPill status={run.status} reason={run.error} /> : DASH}</TableCell>
               <TableCell className="truncate text-sm text-white">
                 {run ? <RunId id={run.id} /> : DASH}
               </TableCell>

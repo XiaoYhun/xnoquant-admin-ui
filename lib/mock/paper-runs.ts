@@ -48,6 +48,8 @@ export type PaperRunRow = {
   /** Run.mode — the Trade cycles panel is paper/live only (backtests never journal a trace). */
   mode?: "paper" | "live" | "backtest";
   status: RunStatus;
+  /** Run.error — the failure reason, shown on the status pill's tooltip. */
+  error?: string | null;
   accounts: string[];
   symbols: { symbol: string; market: string }[];
   timeframe: string;

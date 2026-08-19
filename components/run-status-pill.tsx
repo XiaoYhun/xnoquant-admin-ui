@@ -1,3 +1,4 @@
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { RunStatus } from "@/types/domain";
 
 // Run-status pill, shared by the Live Trading / Paper Trading / Backtesting lists.
@@ -16,10 +17,23 @@ export const RUN_STATUS_META: Record<RunStatus, { label: string; dot: string; bg
   pending: { label: "Pending", dot: "#9db2ce", bg: "rgba(157,178,206,0.1)", text: "text-[#9db2ce]" },
 };
 
-export function RunStatusPill({ status, showDot = false }: { status: RunStatus; showDot?: boolean }) {
+/**
+ * `reason` is the run's `error` — surfaced on hover for a failed run, where "Failed" on its own
+ * leaves the reader to go digging. A failed run with no recorded reason still gets a tooltip
+ * saying so, rather than a pill that looks hoverable and does nothing.
+ */
+export function RunStatusPill({
+  status,
+  showDot = false,
+  reason,
+}: {
+  status: RunStatus;
+  showDot?: boolean;
+  reason?: string | null;
+}) {
   const s = RUN_STATUS_META[status];
   if (!s) return <span className="text-xs text-muted-foreground">{status}</span>;
-  return (
+  const pill = (
     <span
       className="inline-flex items-center gap-2 rounded-[20px] px-2 py-1 text-xs"
       style={{ backgroundColor: s.bg }}
@@ -27,5 +41,17 @@ export function RunStatusPill({ status, showDot = false }: { status: RunStatus; 
       {showDot && <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: s.dot }} />}
       <span className={s.text}>{s.label}</span>
     </span>
+  );
+  if (status !== "failed") return pill;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="cursor-help">{pill}</span>
+      </TooltipTrigger>
+      {/* Engine errors are long and often carry a stack-ish tail, so let it wrap and break. */}
+      <TooltipContent className="max-w-[360px] break-words whitespace-pre-wrap">
+        {reason?.trim() || "This run failed, but the API recorded no reason."}
+      </TooltipContent>
+    </Tooltip>
   );
 }

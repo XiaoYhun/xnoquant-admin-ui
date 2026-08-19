@@ -116,7 +116,7 @@ export function BacktestRunsTable({
                 className="cursor-pointer"
               >
                 <TableCell sticky="left">
-                  <RunStatusPill status={r.status} />
+                  <RunStatusPill status={r.status} reason={r.error} />
                 </TableCell>
                 <TableCell className="truncate text-sm text-white">
                   <RunId id={r.id} />

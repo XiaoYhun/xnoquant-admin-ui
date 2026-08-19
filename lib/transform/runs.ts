@@ -186,6 +186,7 @@ export function toPaperRunRow(run: Run): PaperRunRow {
     strategyName: manifest.strategy.name,
     strategyType: strategyGroup(manifest.data_kind),
     status: run.status,
+    error: run.error,
     accounts: accountNames(manifest),
     symbols: symbolRows(manifest),
     timeframe: timeframeLabel(manifest.data_kind),

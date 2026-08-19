@@ -10,12 +10,10 @@
 // Percent framing needs starting capital, which the API only publishes indirectly as
 // `return_pct = net_pnl / capital`; when that's null (always for live runs, per the spec) the
 // heatmap and histogram fall back to absolute PnL and say so in the panel header.
-import { useMemo, useState } from "react";
-import { MaximizeSquareMinimalistic } from "@solar-icons/react";
+import { useMemo } from "react";
 import type { EChartsOption } from "echarts";
 
 import { BaseChart } from "@/components/charts/base-chart";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useRunCurrency, useRunEquity, useRunSummary } from "@/hooks/api/use-runs";
 import { mergeLiveSummary, preferLiveEquity, useLiveSnapshot } from "@/hooks/api/use-run-live-snapshot";
 import {
@@ -27,10 +25,12 @@ import {
   toDailyPnlPoints,
   toMonthlyPnl,
   toReturnHistogram,
+  toWeekdayPnl,
+  type DayPoint,
   type MonthPnl,
 } from "@/lib/transform/results";
 import { cn, formatAmount, formatSignedAmount } from "@/lib/utils";
-import { MockNote } from "./results-chart-card";
+import { ChartCard, MockNote } from "./results-chart-card";
 
 // Gradient text — Figma cells/values use these clipped gradients (angles vary 143–165° per
 // node; the canonical project angles below are visually identical).
@@ -118,28 +118,65 @@ function SummaryCard({ rows }: { rows: [SummaryMetric[], SummaryMetric[]] }) {
 }
 
 // ---------------------------------------------------------------------------
-// Shared panel chrome
+// Shared bar + axis vocabulary (Figma 15039:41614)
 // ---------------------------------------------------------------------------
 
-function PanelCard({ children }: { children: React.ReactNode }) {
-  return (
-    <section className="flex min-w-0 flex-col gap-3 rounded-xl border border-border bg-surface p-4">
-      {children}
-    </section>
-  );
+// Every bar in this tab fades away from its baseline: fully saturated where it meets the zero
+// line, washing out toward the tip. Exact stops read off the exported bar SVGs — gains
+// #02795F→#05E6B5, losses #FF135B→#FFCCE2. Gradient coordinates are relative to each bar's own
+// bounding box, where y=0 is its top edge, so a bar growing UP needs the opposite stop order to
+// one hanging DOWN.
+const grad = (from: string, to: string) => ({
+  type: "linear" as const,
+  x: 0,
+  y: 0,
+  x2: 0,
+  y2: 1,
+  colorStops: [
+    { offset: 0, color: from },
+    { offset: 1, color: to },
+  ],
+});
+/** Gain, growing up: dark at the tip, bright at the zero line. */
+const BAR_GAIN = grad("#02795f", "#05e6b5");
+/** Loss, hanging down from zero: hot at the zero line, pale at the tip. */
+const BAR_LOSS_DOWN = grad("#ff135b", "#ffcce2");
+/** Loss, growing up (the histogram's counts): pale at the tip, hot at the baseline. */
+const BAR_LOSS_UP = grad("#ffcce2", "#ff135b");
+
+/** Only the outer tip is rounded; the end sitting on the axis stays square. */
+const RADIUS_UP: [number, number, number, number] = [3, 3, 0, 0];
+const RADIUS_DOWN: [number, number, number, number] = [0, 0, 3, 3];
+
+/** 12,000 → "10K" style ticks; the design's axes are always compact. */
+function compactTick(value: number): string {
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000) return `${value / 1_000_000}M`;
+  if (abs >= 1000) return `${value / 1000}K`;
+  return `${value}`;
 }
 
-function ExpandButton({ label }: { label: string }) {
-  return (
-    <button
-      type="button"
-      aria-label={`Expand ${label}`}
-      className="shrink-0 cursor-pointer text-muted-foreground transition-colors hover:text-white"
-    >
-      <MaximizeSquareMinimalistic className="size-4" />
-    </button>
-  );
+/**
+ * A round bound that covers the data, so the axis can be mirrored around zero the way the design
+ * draws it (10K / 5K / 0 / -5K / -10K) instead of ECharts' asymmetric auto-scale, which puts the
+ * zero line at a different height in every panel.
+ */
+export function niceSymmetricMax(values: number[]): number | undefined {
+  const peak = Math.max(0, ...values.map(Math.abs));
+  if (peak === 0) return undefined; // all-flat: let ECharts pick, there's nothing to mirror
+  const magnitude = 10 ** Math.floor(Math.log10(peak));
+  for (const f of [1, 1.5, 2, 2.5, 5]) {
+    if (peak <= f * magnitude) return f * magnitude;
+  }
+  return 10 * magnitude;
 }
+
+/** Horizontal rules only, no axis spine — the design draws no vertical gridlines or ticks. */
+const CATEGORY_AXIS = {
+  type: "category" as const,
+  axisTick: { show: false },
+  axisLine: { lineStyle: { color: "#1d2939" } },
+} as const;
 
 // ---------------------------------------------------------------------------
 // Monthly Return heatmap
@@ -152,6 +189,8 @@ type MonthCell = number | null;
 interface YearlyReturns {
   year: number;
   months: MonthCell[]; // 12 entries, Jan..Dec
+  /** Sum of the year's populated months; null for a year with no data at all. */
+  ytd: MonthCell;
 }
 
 /** Pivot the flat monthly series into one row per year, gaps left null. */
@@ -160,10 +199,14 @@ function toYearlyRows(months: MonthPnl[], scale: number): YearlyReturns[] {
   for (const m of months) {
     let row = byYear.get(m.year);
     if (!row) {
-      row = { year: m.year, months: Array<MonthCell>(12).fill(null) };
+      row = { year: m.year, months: Array<MonthCell>(12).fill(null), ytd: null };
       byYear.set(m.year, row);
     }
     row.months[m.month] = m.value * scale;
+  }
+  for (const row of byYear.values()) {
+    const seen = row.months.filter((v): v is number => v !== null);
+    row.ytd = seen.length === 0 ? null : seen.reduce((a, b) => a + b, 0);
   }
   return [...byYear.values()].sort((a, b) => a.year - b.year);
 }
@@ -192,24 +235,24 @@ function MonthlyReturnPanel({
   // Heatmap cells are ~48px wide; two decimals do not fit.
   const fmt = (v: number) => (isPct ? fmtPct(v, 1) : fmtSigned(v, 0));
   return (
-    <PanelCard>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="text-sm font-medium text-white">Monthly Return</h3>
-        <div className="flex items-center gap-3">
+    <ChartCard
+      title="Monthly Return"
+      controls={
+        <>
           {note && <MockNote>{note}</MockNote>}
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <span>Loss</span>
             <span className="h-1.5 w-16 rounded-full bg-[linear-gradient(90deg,#ff135b_0%,#67e1c1_100%)]" />
             <span>Gain</span>
           </div>
-          <ExpandButton label="Monthly Return" />
-        </div>
-      </div>
+        </>
+      }
+    >
 
       {/* Full-bleed cells (flex-1, no gaps) that fill each row; rows split by a border.
           Scrolls horizontally inside the panel when narrow rather than overflowing the page. */}
       <div className="min-w-0 overflow-x-auto">
-        <div className="min-w-[680px]">
+        <div className="min-w-[740px]">
           <div className="flex items-center border-b border-border">
             <span className="flex-1 px-3 py-2 text-xs text-muted-foreground">Year</span>
             {MONTHS.map((m) => (
@@ -217,6 +260,7 @@ function MonthlyReturnPanel({
                 {m}
               </span>
             ))}
+            <span className="flex-1 px-3 py-2 text-center text-xs text-muted-foreground">YTD</span>
           </div>
           {rows.length === 0 ? (
             <div className="px-3 py-6 text-center text-xs text-muted-foreground">
@@ -247,76 +291,103 @@ function MonthlyReturnPanel({
                     </span>
                   </div>
                 ))}
+                {/* YTD closes the row: the year's realised total, summing only months that
+                    actually have equity points so a part-year reads as its own progress. */}
+                <div className="flex flex-1 items-center justify-center px-3 py-2.5">
+                  <span
+                    className={cn(
+                      "text-xs font-semibold",
+                      row.ytd === null ? "text-muted-foreground" : row.ytd >= 0 ? GREEN_TEXT : RED_TEXT,
+                    )}
+                  >
+                    {row.ytd === null ? DASH : fmt(row.ytd)}
+                  </span>
+                </div>
               </div>
             ))
           )}
         </div>
       </div>
-    </PanelCard>
+    </ChartCard>
   );
 }
 
 // ---------------------------------------------------------------------------
-// PnL bar chart (By Day / By Month)
+// Net Daily PNL + Weekly performance (Figma 15039:42982 / 15039:43339)
 // ---------------------------------------------------------------------------
 
-interface PnlPoint {
-  label: string;
-  value: number;
-}
-
-function buildPnlOption(points: PnlPoint[], mode: "day" | "month"): EChartsOption {
+/**
+ * Signed PnL bars on a zero-mirrored axis — shared by the by-date and by-weekday panels, which
+ * differ only in bar width and how many categories they carry.
+ */
+export function buildSignedPnlOption(points: DayPoint[], barWidth: number | string): EChartsOption {
+  const bound = niceSymmetricMax(points.map((p) => p.value));
   return {
     tooltip: { trigger: "axis" },
     grid: { left: 8, right: 8, top: 16, bottom: 8, containLabel: true },
-    xAxis: {
-      type: "category",
-      data: points.map((p) => p.label),
-      axisTick: { show: false },
-    },
+    xAxis: { ...CATEGORY_AXIS, data: points.map((p) => p.label) },
     yAxis: {
       type: "value",
-      // Auto-scaled: real runs span anything from a few hundred to millions.
-      axisLabel: {
-        formatter: (value: number) =>
-          Math.abs(value) >= 1000 ? `${value / 1000}K` : `${value}`,
-      },
+      ...(bound === undefined ? {} : { min: -bound, max: bound, interval: bound / 2 }),
+      axisLabel: { formatter: compactTick },
+      axisLine: { show: false },
     },
     series: [
       {
         type: "bar" as const,
-        barWidth: mode === "day" ? "70%" : "40%",
+        barWidth,
         data: points.map((p) => ({
           value: p.value,
-          itemStyle: { color: p.value >= 0 ? "#67e1c1" : "#ff135b" },
+          itemStyle:
+            p.value >= 0
+              ? { color: BAR_GAIN, borderRadius: RADIUS_UP }
+              : { color: BAR_LOSS_DOWN, borderRadius: RADIUS_DOWN },
         })),
       },
     ],
   };
 }
 
-function PnlPanel({ daily, monthly, note }: { daily: PnlPoint[]; monthly: PnlPoint[]; note?: string }) {
-  const [mode, setMode] = useState<"day" | "month">("day");
-  const points = mode === "day" ? daily : monthly;
-  const option = useMemo(() => buildPnlOption(points, mode), [points, mode]);
-
+function NetDailyPnlPanel({
+  points,
+  currency,
+  note,
+}: {
+  points: DayPoint[];
+  currency: string;
+  note?: string;
+}) {
+  const option = useMemo(() => buildSignedPnlOption(points, "42%"), [points]);
   return (
-    <PanelCard>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="text-sm font-medium text-white">PnL</h3>
-        <div className="flex items-center gap-3">
-          {note && <MockNote>{note}</MockNote>}
-          <Tabs value={mode} onValueChange={(v) => v && setMode(v as "day" | "month")}>
-            <TabsList>
-              <TabsTrigger value="day">By Day</TabsTrigger>
-              <TabsTrigger value="month">By Month</TabsTrigger>
-            </TabsList>
-          </Tabs>
-          <ExpandButton label="PnL" />
-        </div>
-      </div>
+    <ChartCard
+      title={`Net Daily PNL (${currency})`}
+      controls={note ? <MockNote>{note}</MockNote> : undefined}
+      expandable={false}
+    >
       <BaseChart option={option} />
-    </PanelCard>
+    </ChartCard>
+  );
+}
+
+function WeeklyPerformancePanel({
+  points,
+  currency,
+  note,
+}: {
+  points: DayPoint[];
+  currency: string;
+  note?: string;
+}) {
+  // Wider bars: seven categories at most, and the design draws them as 20px slabs.
+  const option = useMemo(() => buildSignedPnlOption(points, 20), [points]);
+  return (
+    <ChartCard
+      title={`Weekly performance (${currency})`}
+      controls={note ? <MockNote>{note}</MockNote> : undefined}
+      expandable={false}
+    >
+      <BaseChart option={option} />
+    </ChartCard>
   );
 }
 
@@ -324,7 +395,7 @@ function PnlPanel({ daily, monthly, note }: { daily: PnlPoint[]; monthly: PnlPoi
 // Daily Return Distribution histogram
 // ---------------------------------------------------------------------------
 
-function buildDistributionOption(
+export function buildDistributionOption(
   bins: { center: number; count: number }[],
   isPct: boolean,
 ): EChartsOption {
@@ -345,19 +416,19 @@ function buildDistributionOption(
     },
     grid: { left: 8, right: 8, top: 16, bottom: 8, containLabel: true },
     xAxis: {
-      type: "category",
+      ...CATEGORY_AXIS,
       // Label every 3rd bin so a 20-bin axis stays readable (matches the Figma cadence).
       data: bins.map((b, i) => (i % 3 === 0 ? label(b.center) : "")),
-      axisTick: { show: false },
     },
-    yAxis: { type: "value", minInterval: 1 },
+    yAxis: { type: "value", minInterval: 1, axisLine: { show: false } },
     series: [
       {
         type: "bar" as const,
-        barWidth: "90%",
+        barWidth: "62%",
         data: bins.map((b, i) => ({
           value: b.count,
-          itemStyle: { color: i < negative ? "#ff135b" : "#67e1c1" },
+          // Counts always grow upward, so the loss side needs the up-facing stop order.
+          itemStyle: { color: i < negative ? BAR_LOSS_UP : BAR_GAIN, borderRadius: RADIUS_UP },
         })),
       },
     ],
@@ -375,16 +446,12 @@ function DistributionPanel({
 }) {
   const option = useMemo(() => buildDistributionOption(bins, isPct), [bins, isPct]);
   return (
-    <PanelCard>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 className="text-sm font-medium text-white">Daily Return Distribution</h3>
-        <div className="flex items-center gap-3">
-          {note && <MockNote>{note}</MockNote>}
-          <ExpandButton label="Daily Return Distribution" />
-        </div>
-      </div>
+    <ChartCard
+      title="Daily Return Distribution"
+      controls={note ? <MockNote>{note}</MockNote> : undefined}
+    >
       <BaseChart option={option} />
-    </PanelCard>
+    </ChartCard>
   );
 }
 
@@ -418,6 +485,12 @@ export function PerformanceView({ runId }: { runId?: string }) {
   // Padded to a week so a single-day HFT run reads as a bar in context, not one lone column.
   const daily = useMemo(() => padDailyPnl(toDailyPnlPoints(equity)), [equity]);
   const monthly = useMemo(() => toMonthlyPnl(equity), [equity]);
+  // Weekdays the run never traded are dropped rather than drawn as empty columns: a VN30 run then
+  // reads Mon..Fri like the design, while a crypto run keeps all seven.
+  const weekly = useMemo(() => {
+    const traded = new Set(toDailyPnlPoints(equity).map((d) => (new Date(d.ts).getDay() + 6) % 7));
+    return toWeekdayPnl(equity).filter((_, i) => traded.has(i));
+  }, [equity]);
 
   const monthlyRows = useMemo(() => toYearlyRows(monthly, scale), [monthly, scale]);
   // One alpha band = 1 percentage point in % mode; in absolute mode spread the same 3 bands
@@ -428,10 +501,6 @@ export function PerformanceView({ runId }: { runId?: string }) {
     return maxAbs / 3 || 1;
   }, [isPct, monthly]);
 
-  const monthlyPoints = useMemo(
-    () => monthly.map((m) => ({ label: `${MONTHS[m.month]} ${m.year}`, value: m.value })),
-    [monthly],
-  );
   const histogram = useMemo(
     () => toReturnHistogram(toDailyPnlPoints(equity).map((d) => d.value * scale)),
     [equity, scale],
@@ -512,9 +581,10 @@ export function PerformanceView({ runId }: { runId?: string }) {
       <SummaryCard rows={summaryRows} />
       <MonthlyReturnPanel rows={monthlyRows} step={heatStep} isPct={isPct} note={note} />
       <div className="grid min-w-0 grid-cols-1 gap-4 @[560px]:grid-cols-2">
-        <PnlPanel daily={daily} monthly={monthlyPoints} note={note} />
-        <DistributionPanel bins={histogram} isPct={isPct} note={note} />
+        <NetDailyPnlPanel points={daily} currency={currency} note={note} />
+        <WeeklyPerformancePanel points={weekly} currency={currency} note={note} />
       </div>
+      <DistributionPanel bins={histogram} isPct={isPct} note={note} />
     </div>
   );
 }

@@ -8,7 +8,7 @@
 // Wired: Risk Drawdown (`toDrawdown`); Risk Rolling Sharpe uses live/stream while running and
 // `toRollingSharpe` from equity otherwise. Performance uses `toDailyPnl` / `toMonthlyPnl` /
 // `toReturnHistogram` / `equityStats`; Overview's stats strip uses `equityStats`.
-// `toWeekdayPnl` still has no side-panel home.
+// Performance's "Weekly performance" panel uses `toWeekdayPnl`.
 import type { EquityPoint, RunSummary } from "@/types/domain";
 
 export type DayPoint = { label: string; value: number };

@@ -16,17 +16,13 @@ import type { EChartsOption } from "echarts";
 
 import { BaseChart } from "@/components/charts/base-chart";
 import {
-  mergeLiveTrades,
   preferLiveEquity,
   useLiveSnapshot,
   type LiveSharpeSample,
   type LiveSnapshot,
 } from "@/hooks/api/use-run-live-snapshot";
 import { useRunEquity } from "@/hooks/api/use-runs";
-import { useTradeHistory } from "@/hooks/api/use-paper-runs";
 import { equityDayLabel, toDrawdown, toRollingSharpe, type DrawdownPoint } from "@/lib/transform/results";
-import { downloadTradeHistoryCsv } from "@/lib/trade-history-csv";
-import { TradeHistoryExportButton } from "@/components/trade-history-export-button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
@@ -360,13 +356,6 @@ function WindowSelect({ value, onChange }: { value: string; onChange: (value: st
   );
 }
 
-/** Is this fill inside the selected window, in the reader's own timezone? */
-function inWindow(iso: string, window: TimeWindow): boolean {
-  if (window === "All") return true;
-  const t = new Date(iso).getTime();
-  return inWindowTs(t, window);
-}
-
 export function RiskView({ runId, isLive }: { runId?: string; isLive?: boolean }) {
   const [drawdownUnit, setDrawdownUnit] = useState<DrawdownUnit>("%");
   const [rollingWindow, setRollingWindow] = useState<string>("30D");
@@ -441,18 +430,6 @@ export function RiskView({ runId, isLive }: { runId?: string; isLive?: boolean }
             ? "Need more equity points"
             : undefined;
 
-  // The trading history lives on another tab; this view only exports it, so it rides the same
-  // cached ["trade-history", runId] query rather than fetching its own copy.
-  const { data: restTrades = [], isLoading: tradesLoading } = useTradeHistory(runId);
-  // Live fills come off the stream, so a running run still has something to export.
-  const trades = useMemo(() => mergeLiveTrades(restTrades, snapshot), [restTrades, snapshot]);
-  const exportable = trades.filter((t) => inWindow(t.time, timeWindow));
-
-  const handleExport = () => {
-    if (exportable.length === 0) return;
-    downloadTradeHistoryCsv(`trading-history-${runId}-${timeWindow.toLowerCase()}.csv`, exportable);
-  };
-
   return (
     <div className="flex min-w-0 flex-col gap-4">
       <RatioCard snapshot={snapshot} />
@@ -472,7 +449,6 @@ export function RiskView({ runId, isLive }: { runId?: string; isLive?: boolean }
               </TabsList>
             </Tabs>
             <UnitToggle value={drawdownUnit} onChange={setDrawdownUnit} />
-            <TradeHistoryExportButton disabled={!runId || tradesLoading || exportable.length === 0} onClick={handleExport} />
           </>
         }
       >

@@ -17,6 +17,7 @@ import { useMarkets } from "@/hooks/api/use-markets";
 import { useUpdateEditor } from "@/hooks/api/use-strategy-builder";
 import { useHftStrategy, useUpdateHftStrategy, type HftStrategyType } from "@/hooks/api/use-hft-strategies";
 import { useConsoleLog } from "@/store/console-log-store";
+import { StrategyStageBadge } from "@/components/strategy-stage";
 import type { Run } from "@/types/domain";
 
 // Toolbar row above the code editor — Figma node 13964:52172 (inside 13964:50200).
@@ -445,26 +446,10 @@ export function Toolbar({
             {name}
           </span>
         )}
-        <span className="flex shrink-0 items-center gap-1">
-          <span
-            className={
-              type === "hft"
-                ? "size-2 shrink-0 rounded-full bg-[#67e1c1] shadow-[0_0_6px_1px_rgba(103,225,193,0.5)]"
-                : "size-2 shrink-0 rounded-full bg-[#7b61ff] shadow-[0_0_6px_1px_rgba(123,97,255,0.5)]"
-            }
-          />
-          <span
-            className="bg-clip-text text-xs font-medium text-transparent"
-            style={{
-              backgroundImage:
-                type === "hft"
-                  ? "linear-gradient(148deg, #cff8ea 0%, #67e1c1 148%)"
-                  : "linear-gradient(148deg, #e9e8ff 0%, #b7b1ff 148%)",
-            }}
-          >
-            {type.toUpperCase()}
-          </span>
-        </span>
+        {/* The HFT/MFT badge that lived here is gone — the lab is already obvious from the
+            sidebar toggle. Its place shows where the strategy sits on the promotion ladder and
+            which version that refers to, which is what governs whether it can launch. */}
+        {hftStrategy && <StrategyStageBadge strategy={hftStrategy} />}
       </div>
 
       <div className="flex shrink-0 items-center gap-2">

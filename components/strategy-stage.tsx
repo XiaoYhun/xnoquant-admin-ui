@@ -1,0 +1,63 @@
+"use client";
+import { cn } from "@/lib/utils";
+import type { Strategy } from "@/types/domain";
+
+// How far a strategy has climbed the promotion ladder — backtest -> paper -> live.
+//
+// Read straight off the strategy record: `paper_approved_version` / `live_approved_version` are
+// the versions each basket has pinned, so comparing them to `version` says both which stage the
+// strategy is cleared for AND whether that clearance still applies. Editing the code bumps
+// `version`, which strands the approval behind it; the API then refuses to launch until an admin
+// re-promotes, so a stale approval is reported as such rather than as a live promotion.
+export type StrategyStage = "backtest" | "paper" | "live";
+
+export type StageInfo = {
+  stage: StrategyStage;
+  label: string;
+  /** True when a promotion exists but is pinned to an older version than the current code. */
+  stale: boolean;
+};
+
+export function strategyStage(strategy: Pick<Strategy, "version" | "paper_approved_version" | "live_approved_version">): StageInfo {
+  const { version, paper_approved_version: paper, live_approved_version: live } = strategy;
+  if (live != null && live === version) return { stage: "live", label: "Live trading", stale: false };
+  if (paper != null && paper === version) return { stage: "paper", label: "Paper running", stale: false };
+  // A promotion pinned to an older version no longer authorises anything — the strategy is back
+  // to backtesting until it's re-promoted.
+  const stale = (live != null && live !== version) || (paper != null && paper !== version);
+  return { stage: "backtest", label: "Backtesting", stale };
+}
+
+const STAGE_STYLE: Record<StrategyStage, { dot: string; text: string }> = {
+  backtest: { dot: "bg-[#9db2ce]", text: "text-[#9db2ce]" },
+  paper: { dot: "bg-[#2d84ff] shadow-[0_0_6px_1px_rgba(45,132,255,0.5)]", text: "text-[#7fb2ff]" },
+  live: { dot: "bg-[#67e1c1] shadow-[0_0_6px_1px_rgba(103,225,193,0.5)]", text: "text-[#67e1c1]" },
+};
+
+/** `● Paper running · v4` — the strategy's ladder position and the version it's on. */
+export function StrategyStageBadge({
+  strategy,
+  className,
+}: {
+  strategy: Pick<Strategy, "version" | "paper_approved_version" | "live_approved_version">;
+  className?: string;
+}) {
+  const { stage, label, stale } = strategyStage(strategy);
+  const style = STAGE_STYLE[stage];
+  return (
+    <span
+      className={cn("flex shrink-0 items-center gap-1.5 text-xs font-medium", className)}
+      title={
+        stale
+          ? "Promoted at an earlier version — editing the code revoked it. An admin must re-promote before this can run."
+          : undefined
+      }
+    >
+      <span className={cn("size-2 shrink-0 rounded-full", style.dot)} />
+      <span className={style.text}>{label}</span>
+      {stale && <span className="text-[#f1c617]">(stale)</span>}
+      <span className="text-[#475467]">·</span>
+      <span className="text-[#9db2ce]">v{strategy.version}</span>
+    </span>
+  );
+}

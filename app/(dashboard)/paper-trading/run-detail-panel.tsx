@@ -143,11 +143,14 @@ function ResultsViews({ runId, isLive }: { runId: string | undefined; isLive: bo
 
 function LiveChartsTab({
   runId,
+  isLive,
   summary,
   summaryLoading,
   error,
 }: {
   runId: string | undefined;
+  /** Whether the run is RUNNING — not whether its mode is live. See the call site. */
+  isLive: boolean;
   summary: RunSummary | undefined;
   summaryLoading: boolean;
   error: unknown;
@@ -173,7 +176,7 @@ function LiveChartsTab({
 
   return (
     <div className="flex flex-col gap-3 p-4">
-      <ResultsViews runId={runId} isLive />
+      <ResultsViews runId={runId} isLive={isLive} />
     </div>
   );
 }
@@ -807,6 +810,11 @@ function RunDetailBody({
             (run.mode === "live" ? (
               <LiveChartsTab
                 runId={lazy ? run.id : undefined}
+                // This branch is picked by MODE, so a stopped live run lands here too — it must
+                // still be told the run is not running. Hardcoding `isLive` here left Latency
+                // waiting on a stream that was never opened, and Risk/Execution preferring live
+                // values over the persisted ones.
+                isLive={isLive}
                 summary={summaryQ.data}
                 summaryLoading={summaryLoading}
                 error={summaryError}

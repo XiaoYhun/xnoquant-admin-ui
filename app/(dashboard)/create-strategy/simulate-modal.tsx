@@ -7,7 +7,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PlusIcon } from "@/components/icons/plus";
 import { cn } from "@/lib/utils";
 import { useAccounts } from "@/hooks/api/use-accounts";
@@ -15,7 +14,7 @@ import { useVenues } from "@/hooks/api/use-venues";
 import { useSymbols } from "@/hooks/api/use-symbols";
 import { useLaunchRun, type LaunchRequest } from "@/hooks/api/use-runs";
 import { resourceErrorMessage } from "@/lib/api-client";
-import type { HftStrategyType } from "@/hooks/api/use-hft-strategies";
+import { useHftStrategy, type HftStrategyType } from "@/hooks/api/use-hft-strategies";
 import type { Account, Run, RunMode } from "@/types/domain";
 
 // Figma node 14197:30033 — "Simulate" configuration modal opened from the toolbar's Simulate
@@ -377,6 +376,19 @@ export function SimulateModal({
   // account. The backend rejects a mismatch, so the form shape follows `hftType`.
   const isArb = hftType === "arbitrage";
 
+  // The run's mode is not a choice — it's wherever the strategy sits on the promotion ladder,
+  // which the server enforces anyway (POST /api/runs 422s on an unpromoted strategy). Backtest
+  // until an admin promotes; paper or live once an approval is pinned to the CURRENT version. An
+  // approval stranded by a later edit authorises nothing, so it drops back to backtest.
+  const { data: strategy } = useHftStrategy(strategyId);
+  const mode: RunMode =
+    strategy?.live_approved_version === strategy?.version && strategy?.live_approved_version != null
+      ? "live"
+      : strategy?.paper_approved_version === strategy?.version && strategy?.paper_approved_version != null
+        ? "paper"
+        : "backtest";
+  const MODE_LABEL: Record<RunMode, string> = { backtest: "Backtest", paper: "Paper", live: "Live" };
+
   const { data: accounts } = useAccounts();
   const { data: venues } = useVenues();
   const venueIdOf = (id?: string) => accounts?.find((a) => a.id === id)?.venue_id;
@@ -415,7 +427,6 @@ export function SimulateModal({
   // the run would use rather than an empty box.
   const [imbalanceDepth, setImbalanceDepth] = useState(10);
 
-  const [mode, setMode] = useState<RunMode>("paper");
   const [liveConfirmed, setLiveConfirmed] = useState(false);
 
   const [startDate, setStartDate] = useState("");
@@ -446,11 +457,6 @@ export function SimulateModal({
     setLeg2SymbolIds([]);
   };
 
-  const handleModeChange = (value: string) => {
-    if (value !== "paper" && value !== "live" && value !== "backtest") return;
-    setMode(value);
-    if (value !== "live") setLiveConfirmed(false);
-  };
 
   // Mirrors the server's own checks so a bad range is caught before the POST rather than as a 422.
   const rangeError =
@@ -542,7 +548,7 @@ export function SimulateModal({
 
         <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
           <p className="text-sm text-muted-foreground">
-            Bind this strategy to an account and one more symbols, then launch in paper, backtest or live mode.
+            Bind this strategy to an account and one or more symbols, then launch. The mode follows the strategy&rsquo;s promotion stage.
           </p>
 
           <div className="flex flex-col gap-2 rounded-xl border border-border bg-surface px-4 py-3">
@@ -578,13 +584,7 @@ export function SimulateModal({
             )}
             <div className={ROW}>
               <span className={ROW_LABEL}>Mode</span>
-              <Tabs value={mode} onValueChange={handleModeChange}>
-                <TabsList>
-                  <TabsTrigger value="backtest">Backtest</TabsTrigger>
-                  <TabsTrigger value="paper">Paper</TabsTrigger>
-                  <TabsTrigger value="live">Live</TabsTrigger>
-                </TabsList>
-              </Tabs>
+              <span className={ROW_VALUE}>{MODE_LABEL[mode]}</span>
             </div>
             {mode === "backtest" && (
               <>

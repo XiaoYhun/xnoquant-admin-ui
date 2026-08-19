@@ -22,7 +22,7 @@ import { useDebounced } from "@/hooks/use-debounced";
 import { resourceErrorMessage } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
 import { cn, idQueryNeedle, isIdQuery } from "@/lib/utils";
-import { StrategyStageBadge, strategyStage, PROMOTE_PILL, PAPER_RUN_SUCCEEDED } from "@/components/strategy-stage";
+import { StrategyStageBadge, strategyStage, nextPromotionStage, launchMode, PROMOTE_PILL, PAPER_RUN_SUCCEEDED } from "@/components/strategy-stage";
 import { PromoteStageDialog } from "../create-strategy/promote-stage-dialog";
 import { SimulateModal, HFT_TYPE_LABEL } from "../create-strategy/simulate-modal";
 import type { PromotionStage, Strategy, StrategyPromotion } from "@/types/domain";
@@ -79,13 +79,6 @@ function demotableStage(s: Strategy): PromotionStage | null {
   return null;
 }
 
-/** The rung above the strategy's current one, or null once it's live. */
-function nextStageOf(s: Strategy): PromotionStage | null {
-  const { stage } = strategyStage(s);
-  if (stage === "live") return null;
-  return stage === "paper" ? "live" : "paper";
-}
-
 // Whether the next rung is reachable yet.
 //
 // Paper needs a COMPLETED backtest at this exact version — the server's own precondition.
@@ -97,7 +90,7 @@ function nextStageOf(s: Strategy): PromotionStage | null {
 // run on dev is `stopped` or `running` — so demanding `completed` would disable this forever.
 // `running` is excluded on purpose: stop it, review the result, then promote.
 function PromoteCell({ strategy, onPromote }: { strategy: Strategy; onPromote: () => void }) {
-  const next = nextStageOf(strategy);
+  const next = nextPromotionStage(strategy);
   const { data: runs = [] } = useStrategyRuns(next ? strategy.id : undefined);
   if (!next) return null;
 
@@ -294,7 +287,7 @@ export default function Page() {
                                 className="inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-[32px] bg-[linear-gradient(161deg,#cff8ea_0%,#67e1c1_100%)] px-2.5 text-xs font-medium text-black transition-opacity hover:opacity-90"
                               >
                                 <SkipNext weight="Outline" className="size-3.5" />
-                                Run {stage.stage === "live" ? "live" : stage.stage === "paper" ? "paper" : "backtest"}
+                                Run {launchMode(s)}
                               </button>
                             </TooltipTrigger>
                             <TooltipContent>Launch at its current stage ({stage.label.toLowerCase()})</TooltipContent>
@@ -310,14 +303,14 @@ export default function Page() {
         </div>
       </section>
 
-      {promoting && nextStageOf(promoting) && (
+      {promoting && nextPromotionStage(promoting) && (
         <PromoteStageDialog
           open={!!promoting}
           onOpenChange={(open) => !open && setPromoting(null)}
           strategyId={promoting.id}
           strategyName={promoting.name}
           version={promoting.version}
-          stage={nextStageOf(promoting) as PromotionStage}
+          stage={nextPromotionStage(promoting) as PromotionStage}
           onPromoted={() => setPromoting(null)}
         />
       )}

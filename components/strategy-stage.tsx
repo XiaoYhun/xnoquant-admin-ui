@@ -91,3 +91,32 @@ export const PROMOTE_PILL: Record<PromotionStage, string> = {
  * promotion permanently unreachable. `running` is excluded — stop it and review before promoting.
  */
 export const PAPER_RUN_SUCCEEDED = new Set(["stopped", "completed"]);
+
+/**
+ * The rung a strategy can be promoted to next, or null once it's live.
+ *
+ * Keyed on basket membership rather than on {@link strategyStage}, which reports `backtest` for a
+ * strategy whose approval has gone stale. A stale paper approval still puts the strategy in the
+ * paper basket — it's what "Demote paper" acts on — so the forward direction from there is live,
+ * not paper again. Whether that promotion is actually allowed is a separate evidence check.
+ */
+export function nextPromotionStage(
+  strategy: Pick<Strategy, "paper_approved_version" | "live_approved_version">,
+): PromotionStage | null {
+  if (strategy.live_approved_version != null) return null;
+  return strategy.paper_approved_version != null ? "live" : "paper";
+}
+
+/**
+ * The mode a launch from this strategy runs in: the highest rung it has been promoted to.
+ *
+ * Basket membership again, for the same reason as {@link nextPromotionStage} — a strategy with a
+ * stale paper approval is still a paper strategy, and offering it a backtest run would be a step
+ * backwards from what the ladder says it is.
+ */
+export function launchMode(
+  strategy: Pick<Strategy, "paper_approved_version" | "live_approved_version">,
+): "backtest" | "paper" | "live" {
+  if (strategy.live_approved_version != null) return "live";
+  return strategy.paper_approved_version != null ? "paper" : "backtest";
+}

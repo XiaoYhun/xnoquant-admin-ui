@@ -18,7 +18,7 @@ import { useUpdateEditor } from "@/hooks/api/use-strategy-builder";
 import { useStrategyRuns } from "@/hooks/api/use-strategy-runs";
 import { useHftStrategy, useUpdateHftStrategy, type HftStrategyType } from "@/hooks/api/use-hft-strategies";
 import { useConsoleLog } from "@/store/console-log-store";
-import { StrategyStageBadge, strategyStage, PROMOTE_PILL, PAPER_RUN_SUCCEEDED } from "@/components/strategy-stage";
+import { StrategyStageBadge, nextPromotionStage, launchMode, PROMOTE_PILL, PAPER_RUN_SUCCEEDED } from "@/components/strategy-stage";
 import { PromoteStageDialog } from "./promote-stage-dialog";
 import type { PromotionStage } from "@/types/domain";
 import type { Run } from "@/types/domain";
@@ -410,9 +410,7 @@ export function Toolbar({
 
   // The launch button says what it will actually start. Mode isn't a choice any more — it follows
   // the promotion stage — so "Simulate" was vague about whether this backtests or trades.
-  const stage = hftStrategy ? strategyStage(hftStrategy) : null;
-  const runVerb =
-    stage?.stage === "live" ? "Run live" : stage?.stage === "paper" ? "Run paper" : "Run backtest";
+  const runVerb = `Run ${hftStrategy ? launchMode(hftStrategy) : "backtest"}`;
   const handleCopyCode = async () => {
     try {
       await navigator.clipboard.writeText(code);
@@ -435,9 +433,7 @@ export function Toolbar({
             ? runVerb
             : "Simulate";
 
-  // The rung above the current one. Nothing to offer once a strategy is already live.
-  const nextStage: PromotionStage | null =
-    !stage || stage.stage === "live" ? null : stage.stage === "paper" ? "live" : "paper";
+  const nextStage: PromotionStage | null = hftStrategy ? nextPromotionStage(hftStrategy) : null;
   const [copied, setCopied] = useState(false);
   const [promoteOpen, setPromoteOpen] = useState(false);
   const { isAdmin } = useAuth();

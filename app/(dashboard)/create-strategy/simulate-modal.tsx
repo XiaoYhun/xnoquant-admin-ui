@@ -14,6 +14,7 @@ import { useVenues } from "@/hooks/api/use-venues";
 import { useSymbols } from "@/hooks/api/use-symbols";
 import { useLaunchRun, type LaunchRequest } from "@/hooks/api/use-runs";
 import { resourceErrorMessage } from "@/lib/api-client";
+import { launchMode } from "@/components/strategy-stage";
 import { useHftStrategy, type HftStrategyType } from "@/hooks/api/use-hft-strategies";
 import type { Account, Run, RunMode } from "@/types/domain";
 
@@ -376,17 +377,14 @@ export function SimulateModal({
   // account. The backend rejects a mismatch, so the form shape follows `hftType`.
   const isArb = hftType === "arbitrage";
 
-  // The run's mode is not a choice — it's wherever the strategy sits on the promotion ladder,
-  // which the server enforces anyway (POST /api/runs 422s on an unpromoted strategy). Backtest
-  // until an admin promotes; paper or live once an approval is pinned to the CURRENT version. An
-  // approval stranded by a later edit authorises nothing, so it drops back to backtest.
+  // The run's mode is not a choice — it's the highest rung the strategy has been promoted to, the
+  // same `launchMode` the Run buttons label themselves with, so the button never promises a mode
+  // the dialog then quietly downgrades. A stale approval (promoted at v33, now v34) still counts:
+  // it keeps the strategy in the basket, and POST /api/runs documents no promotion precondition,
+  // so the server is the authority — a rejection surfaces here verbatim rather than being
+  // pre-empted by a guess about the version rule.
   const { data: strategy } = useHftStrategy(strategyId);
-  const mode: RunMode =
-    strategy?.live_approved_version === strategy?.version && strategy?.live_approved_version != null
-      ? "live"
-      : strategy?.paper_approved_version === strategy?.version && strategy?.paper_approved_version != null
-        ? "paper"
-        : "backtest";
+  const mode: RunMode = strategy ? launchMode(strategy) : "backtest";
   const MODE_LABEL: Record<RunMode, string> = { backtest: "Backtest", paper: "Paper", live: "Live" };
 
   const { data: accounts } = useAccounts();

@@ -1,10 +1,13 @@
 "use client";
-import { useState, type ReactNode } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Bolt } from "@solar-icons/react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { marketOf } from "@/components/market-tabs";
-import { PromoteToLiveDialog } from "./promote-to-live-dialog";
+import { PromoteStageDialog } from "../create-strategy/promote-stage-dialog";
+import { useHftStrategies } from "@/hooks/api/use-hft-strategies";
+import { strategyStage } from "@/components/strategy-stage";
+import type { PromotionStage } from "@/types/domain";
 import {
   Table,
   TableBody,
@@ -78,6 +81,19 @@ export function PaperRunsTable({
   const { userId, isAdmin } = useAuth();
   const router = useRouter();
   const [pendingPromote, setPendingPromote] = useState<PaperRunRow | null>(null);
+  // The ⚡ used to promote straight to live, which the API rejects unless a version-matching paper
+  // promotion already exists. Resolve the strategy so it targets the actual next rung, with this
+  // run as the justifying evidence. Rides the cached ["hft-strategies"] query — no extra request.
+  const { data: strategies = [] } = useHftStrategies();
+  const strategyOf = useMemo(() => new Map(strategies.map((s) => [s.id, s])), [strategies]);
+  const pendingStrategy = pendingPromote?.strategyId ? strategyOf.get(pendingPromote.strategyId) : undefined;
+  const pendingNextStage: PromotionStage | null = !pendingStrategy
+    ? null
+    : strategyStage(pendingStrategy).stage === "live"
+      ? null
+      : strategyStage(pendingStrategy).stage === "paper"
+        ? "live"
+        : "paper";
   return (
     <>
     <Table className="table-fixed min-w-[1600px]">
@@ -210,18 +226,25 @@ export function PaperRunsTable({
       </TableBody>
     </Table>
 
-    <PromoteToLiveDialog
-      run={pendingPromote}
-      open={!!pendingPromote}
-      onOpenChange={(open) => !open && setPendingPromote(null)}
-      onPromoted={() => {
-        // Land on the tab that actually contains the promoted run — Alpha pool otherwise opens
-        // on Stocks and the new row looks missing.
-        const market = pendingPromote ? marketOf(pendingPromote) : null;
-        setPendingPromote(null);
-        router.push(`/live-trading/alpha-pool${market ? `?market=${market}` : ""}`);
-      }}
-    />
+    {pendingPromote && pendingStrategy && pendingNextStage && (
+      <PromoteStageDialog
+        open={!!pendingPromote}
+        onOpenChange={(open) => !open && setPendingPromote(null)}
+        strategyId={pendingPromote.strategyId ?? ""}
+        strategyName={pendingPromote.strategyName}
+        version={pendingStrategy.version}
+        stage={pendingNextStage}
+        basedOnRunId={pendingPromote.id}
+        onPromoted={(promoted) => {
+          setPendingPromote(null);
+          // Only a live promotion puts the strategy in Alpha pool; a paper one has no screen to
+          // land on, so stay put.
+          if (promoted !== "live") return;
+          const market = pendingPromote ? marketOf(pendingPromote) : null;
+          router.push(`/live-trading/alpha-pool${market ? `?market=${market}` : ""}`);
+        }}
+      />
+    )}
     </>
   );
 }

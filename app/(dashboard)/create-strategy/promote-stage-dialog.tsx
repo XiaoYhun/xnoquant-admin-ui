@@ -40,6 +40,7 @@ export function PromoteStageDialog({
   strategyName,
   version,
   stage,
+  basedOnRunId,
   onPromoted,
 }: {
   open: boolean;
@@ -49,6 +50,9 @@ export function PromoteStageDialog({
   version: number;
   /** The rung being promoted TO. */
   stage: PromotionStage;
+  /** The run whose results justify this, when promoting from a run's row or detail panel. It is
+   *  what Alpha pool joins on to show a promotion's metrics, so it is passed wherever known. */
+  basedOnRunId?: string;
   onPromoted: (stage: PromotionStage) => void;
 }) {
   const [note, setNote] = useState("");
@@ -97,7 +101,12 @@ export function PromoteStageDialog({
             disabled={promote.isPending}
             onClick={() =>
               promote.mutate(
-                { stage, strategyId, note: note.trim() || null },
+                {
+                  stage,
+                  strategyId,
+                  note: note.trim() || null,
+                  ...(basedOnRunId ? { based_on_run_id: basedOnRunId } : {}),
+                },
                 {
                   onSuccess: () => {
                     handleOpenChange(false);

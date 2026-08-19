@@ -35,7 +35,10 @@ import type { RunSummary } from "@/types/domain";
 import { RUN_STATUS_META } from "@/components/run-status-pill";
 import { downloadTradeHistoryCsv } from "@/lib/trade-history-csv";
 import { TradeHistoryExportButton } from "@/components/trade-history-export-button";
-import { PromoteToLiveDialog } from "./promote-to-live-dialog";
+import { PromoteStageDialog } from "../create-strategy/promote-stage-dialog";
+import { useHftStrategies } from "@/hooks/api/use-hft-strategies";
+import { strategyStage } from "@/components/strategy-stage";
+import type { PromotionStage } from "@/types/domain";
 import { useAuth } from "@/hooks/use-auth";
 import { useConsoleLog } from "@/store/console-log-store";
 import { marketOf } from "@/components/market-tabs";
@@ -733,6 +736,13 @@ function RunDetailBody({
 }) {
   const [tab, setTab] = useState<Tab>("Charts");
   const [promoteOpen, setPromoteOpen] = useState(false);
+  // Target the strategy's real next rung rather than assuming live — the API rejects a live
+  // promotion without a version-matching paper one.
+  const { data: allStrategies = [] } = useHftStrategies();
+  const panelStrategy = run.strategyId ? allStrategies.find((s) => s.id === run.strategyId) : undefined;
+  const panelStage = panelStrategy ? strategyStage(panelStrategy).stage : null;
+  const panelNextStage: PromotionStage | null =
+    panelStage === "live" ? null : panelStage === "paper" ? "live" : panelStage ? "paper" : null;
   const router = useRouter();
   const { isAdmin } = useAuth();
   const visibleTabs = tabsFor(run.mode);
@@ -820,17 +830,25 @@ function RunDetailBody({
         </div>
       </LiveSnapshotProvider>
 
-      <PromoteToLiveDialog
-        run={run}
-        open={promoteOpen}
-        onOpenChange={setPromoteOpen}
-        onPromoted={() => {
-          const market = marketOf(run);
-          setPromoteOpen(false);
-          onClose();
-          router.push(`/live-trading/alpha-pool${market ? `?market=${market}` : ""}`);
-        }}
-      />
+      {panelStrategy && panelNextStage && (
+        <PromoteStageDialog
+          open={promoteOpen}
+          onOpenChange={setPromoteOpen}
+          strategyId={run.strategyId ?? ""}
+          strategyName={run.strategyName}
+          version={panelStrategy.version}
+          stage={panelNextStage}
+          basedOnRunId={run.id}
+          onPromoted={(promoted) => {
+            setPromoteOpen(false);
+            // Only a live promotion has a screen to land on; paper stays put.
+            if (promoted !== "live") return;
+            const market = marketOf(run);
+            onClose();
+            router.push(`/live-trading/alpha-pool${market ? `?market=${market}` : ""}`);
+          }}
+        />
+      )}
     </>
   );
 }

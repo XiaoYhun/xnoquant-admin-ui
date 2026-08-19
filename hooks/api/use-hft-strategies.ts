@@ -39,9 +39,18 @@ export function useHftStrategies() {
 export function useCreateHftStrategy() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ name, strategyType }: { name: string; strategyType: HftStrategyType }): Promise<EditorTab> => {
+    mutationFn: async ({
+      name,
+      strategyType,
+      code: seed,
+    }: {
+      name: string;
+      strategyType: HftStrategyType;
+      /** Source to start from. Cloning passes the original's code; omit for a fresh strategy. */
+      code?: string;
+    }): Promise<EditorTab> => {
       // Seed a new HFT strategy with the first sample template matching its type.
-      const code = HFT_SAMPLES[strategyType]?.[0]?.code ?? "";
+      const code = seed ?? HFT_SAMPLES[strategyType]?.[0]?.code ?? "";
       if (USE_MOCK) {
         return { id: crypto.randomUUID(), name, code, type: "hft" };
       }

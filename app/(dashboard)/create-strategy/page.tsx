@@ -2,6 +2,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { CodeEditor } from "./code-editor";
+import { PromotedLockDialog } from "./promoted-lock-dialog";
+import { strategyStage } from "@/components/strategy-stage";
 import { EditorsBar } from "./editors-bar";
 import { Toolbar } from "./toolbar";
 import { ConsolePanel } from "./console-panel";
@@ -10,7 +12,7 @@ import { shortRunId } from "@/lib/utils";
 import type { Run } from "@/types/domain";
 import { type EditorTab } from "@/lib/mock/strategy-builder";
 import { useEditors, useCreateEditor, useSimulateEditor, useUpdateEditor, useDeleteEditor, fetchEditors } from "@/hooks/api/use-strategy-builder";
-import { useHftStrategies, useCreateHftStrategy, useUpdateHftStrategy, useDeleteHftStrategy, type HftStrategyType, type FeatureDef } from "@/hooks/api/use-hft-strategies";
+import { useHftStrategies, useHftStrategy, useCreateHftStrategy, useUpdateHftStrategy, useDeleteHftStrategy, type HftStrategyType, type FeatureDef } from "@/hooks/api/use-hft-strategies";
 import { CreateStrategyModal } from "@/components/layout/create-strategy-modal";
 import { useConsoleLog } from "@/store/console-log-store";
 import { useMode, type Mode } from "@/store/mode-store";
@@ -132,6 +134,21 @@ function StrategyBuilder({ mode, initialEditors }: { mode: Mode; initialEditors:
   // Save/Simulate controls hidden. Strategies with no owner_id (MFT editors) stay writable.
   const canWrite = !active?.owner_id || canMutate(active, { userId, isAdmin });
 
+  // Editing a promoted strategy silently revokes its approval — `strategies.version` bumps and
+  // the paper/live basket stays pinned to the old one, so it stops launching until an admin
+  // re-promotes. Lock the editor and make the two ways forward deliberate. A STALE promotion
+  // doesn't lock: the edit that stranded it has already happened.
+  const { data: activeStrategy } = useHftStrategy(active?.type === "hft" ? active.id : undefined);
+  const stage = activeStrategy ? strategyStage(activeStrategy) : null;
+  const [unlockedIds, setUnlockedIds] = useState<string[]>([]);
+  const promotionLocked =
+    !!activeStrategy &&
+    !!stage &&
+    stage.stage !== "backtest" &&
+    !stage.stale &&
+    !unlockedIds.includes(activeStrategy.id);
+  const [lockPromptOpen, setLockPromptOpen] = useState(false);
+
   const addEditor = async (type: "mft" | "hft", name: string, hftStrategyType?: HftStrategyType) => {
     // Errors propagate to CreateStrategyModal so it can stay open + surface the failure (e.g. 409).
     const tab =
@@ -142,6 +159,22 @@ function StrategyBuilder({ mode, initialEditors }: { mode: Mode; initialEditors:
     setSavedCodes((prev) => ({ ...prev, [tab.id]: tab.code }));
     setActiveId(tab.id);
   };
+  // Clone the promoted strategy into a fresh one carrying the same code, then switch to it, so
+  // the original keeps its approval.
+  const cloneActive = async (name: string) => {
+    if (!active || active.type !== "hft") return;
+    const tab = await createHftStrategy.mutateAsync({
+      name,
+      strategyType: activeStrategy?.strategy_type ?? "taker",
+      code: active.code,
+    });
+    setEditors((prev) => [...prev, tab]);
+    setSavedCodes((prev) => ({ ...prev, [tab.id]: tab.code }));
+    setActiveId(tab.id);
+    setLockPromptOpen(false);
+    addLog("success", `Cloned “${active.name}” to “${name}”`);
+  };
+
   // Explicit code save. Simulate also persists, but a user who only edits code needs a way to
   // commit it without launching a run.
   const handleSave = async () => {
@@ -239,14 +272,45 @@ function StrategyBuilder({ mode, initialEditors }: { mode: Mode; initialEditors:
           addLog("success", `Run ${shortRunId(run.id)} launched in ${run.mode} mode`);
         }}
       />
+      {promotionLocked && activeStrategy && stage && (
+        <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-border bg-[rgba(241,198,23,0.08)] px-4 py-2">
+          <span className="text-xs text-[#f1c617]">
+            Locked — approved for {stage.label.toLowerCase()} at v{activeStrategy.version}. Editing
+            revokes that approval.
+          </span>
+          <button
+            type="button"
+            onClick={() => setLockPromptOpen(true)}
+            className="cursor-pointer rounded-full border border-border px-3 py-1 text-xs text-white transition-colors hover:border-white/25"
+          >
+            Edit or clone…
+          </button>
+        </div>
+      )}
       <CodeEditor
         code={active?.code ?? ""}
         onChange={handleCodeChange}
         language={active?.type === "hft" ? "rust" : "python"}
-        readOnly={!canWrite}
+        readOnly={!canWrite || promotionLocked}
         modelId={active?.id}
       />
       <ConsolePanel open={consoleOpen} onOpenChange={setConsoleOpen} />
+      {activeStrategy && stage && (
+        <PromotedLockDialog
+          open={lockPromptOpen}
+          onOpenChange={setLockPromptOpen}
+          strategyName={active?.name ?? ""}
+          stage={stage}
+          version={activeStrategy.version}
+          cloning={createHftStrategy.isPending}
+          cloneError={createHftStrategy.error}
+          onEditAnyway={() => {
+            setUnlockedIds((prev) => [...prev, activeStrategy.id]);
+            setLockPromptOpen(false);
+          }}
+          onClone={cloneActive}
+        />
+      )}
     </div>
   );
 

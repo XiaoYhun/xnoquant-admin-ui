@@ -253,6 +253,7 @@ function StrategyBuilder({ mode, initialEditors }: { mode: Mode; initialEditors:
         name={active?.name ?? ""}
         type={active?.type ?? "mft"}
         id={active?.id ?? ""}
+        code={active?.code ?? ""}
         ownerId={active?.owner_id}
         market={active?.market}
         universe={active?.universe}

@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Settings, Copy, SkipNext, AltArrowDown } from "@solar-icons/react";
+import { Settings, Copy, CheckCircle, SkipNext, AltArrowDown } from "@solar-icons/react";
 import type { ComponentType } from "react";
 import type { IconProps } from "@solar-icons/react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -310,6 +310,7 @@ export function Toolbar({
   market,
   universe,
   trainRatio,
+  code = "",
   canWrite = true,
   isDirty = false,
   onSave,
@@ -325,6 +326,8 @@ export function Toolbar({
   market?: string;
   universe?: string;
   trainRatio?: number;
+  /** The editor's CURRENT contents, so Copy takes unsaved edits too. */
+  code?: string;
   canWrite?: boolean;
   isDirty?: boolean;
   onSave?: () => Promise<void>;
@@ -410,6 +413,17 @@ export function Toolbar({
   const stage = hftStrategy ? strategyStage(hftStrategy) : null;
   const runVerb =
     stage?.stage === "live" ? "Run live" : stage?.stage === "paper" ? "Run paper" : "Run backtest";
+  const handleCopyCode = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch (err) {
+      // Clipboard writes need a secure context and can be denied by permissions policy.
+      addLog("error", `Copy failed: ${err instanceof Error ? err.message : "clipboard unavailable"}`);
+    }
+  };
+
   const simulateLabel =
     mftSimStatus === "running"
       ? "Simulating…"
@@ -424,6 +438,7 @@ export function Toolbar({
   // The rung above the current one. Nothing to offer once a strategy is already live.
   const nextStage: PromotionStage | null =
     !stage || stage.stage === "live" ? null : stage.stage === "paper" ? "live" : "paper";
+  const [copied, setCopied] = useState(false);
   const [promoteOpen, setPromoteOpen] = useState(false);
   const { isAdmin } = useAuth();
 
@@ -505,7 +520,7 @@ export function Toolbar({
           pillItems={pillItems}
           onSettingsSaved={onSettingsSaved}
         />
-        <IconButton icon={Copy} label="Duplicate" />
+        <IconButton icon={copied ? CheckCircle : Copy} label={copied ? "Copied" : "Copy code"} onClick={handleCopyCode} />
         {/* Save/Simulate both PUT the strategy, which 404s for a lab-mate's share — hide them there. */}
         {canWrite && (
           <>

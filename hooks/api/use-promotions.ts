@@ -46,7 +46,16 @@ export function usePromoteStrategy() {
     },
     // Both baskets are invalidated: promoting to `live` is only legal off a `paper` promotion, so
     // the two lists move together often enough that narrowing this would just cause stale views.
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["promotions"] }),
+    //
+    // The STRATEGY record matters just as much: `paper_approved_version` / `live_approved_version`
+    // live on it, and they drive the header stage badge, the Simulate modal's derived mode, the
+    // promoted-edit lock and this very button's next rung. Without these the UI keeps claiming
+    // "Backtesting" and offering "Promote to paper" after a successful promotion.
+    onSuccess: (_promotion, { strategyId }) => {
+      qc.invalidateQueries({ queryKey: ["promotions"] });
+      qc.invalidateQueries({ queryKey: ["hft-strategies"] });
+      qc.invalidateQueries({ queryKey: ["hft-strategy", strategyId] });
+    },
   });
 }
 
@@ -57,9 +66,12 @@ export function useDemoteStrategy() {
       if (USE_MOCK) return;
       await apiDelete(`${HFT_API_URL}/api/promotions/${stage}/${strategyId}`);
     },
-    onSuccess: () => {
+    // Demoting clears the approval on the strategy record too, so the same views have to refetch.
+    onSuccess: (_void, { strategyId }) => {
       qc.invalidateQueries({ queryKey: ["promotions"] });
       qc.invalidateQueries({ queryKey: ["live-runs"] });
+      qc.invalidateQueries({ queryKey: ["hft-strategies"] });
+      qc.invalidateQueries({ queryKey: ["hft-strategy", strategyId] });
     },
   });
 }

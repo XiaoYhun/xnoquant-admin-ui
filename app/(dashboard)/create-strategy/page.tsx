@@ -282,7 +282,7 @@ function StrategyBuilder({ mode, initialEditors }: { mode: Mode; initialEditors:
           <button
             type="button"
             onClick={() => setLockPromptOpen(true)}
-            className="cursor-pointer rounded-full border border-border px-3 py-1 text-xs text-white transition-colors hover:border-white/25"
+            className="inline-flex h-7 shrink-0 cursor-pointer items-center rounded-[32px] border border-[#f1c617]/40 bg-[rgba(241,198,23,0.14)] px-3 text-xs font-medium text-[#f1c617] transition-colors hover:bg-[rgba(241,198,23,0.22)]"
           >
             Edit or clone…
           </button>

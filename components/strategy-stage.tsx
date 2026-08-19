@@ -82,3 +82,12 @@ export const PROMOTE_PILL: Record<PromotionStage, string> = {
   paper: "border-[#f1c617]/40 bg-[rgba(241,198,23,0.12)] text-[#f1c617]",
   live: "border-[#67e1c1]/40 bg-[rgba(103,225,193,0.12)] text-[#67e1c1]",
 };
+
+/**
+ * Run statuses that count as a paper run having succeeded, for the live rung's evidence check.
+ *
+ * `stopped` is included deliberately: a paper run tails a live feed and never completes on its
+ * own, so every finished paper run ends up `stopped`. Requiring `completed` would make the live
+ * promotion permanently unreachable. `running` is excluded — stop it and review before promoting.
+ */
+export const PAPER_RUN_SUCCEEDED = new Set(["stopped", "completed"]);

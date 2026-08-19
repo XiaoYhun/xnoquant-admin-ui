@@ -18,7 +18,7 @@ import { useUpdateEditor } from "@/hooks/api/use-strategy-builder";
 import { useStrategyRuns } from "@/hooks/api/use-strategy-runs";
 import { useHftStrategy, useUpdateHftStrategy, type HftStrategyType } from "@/hooks/api/use-hft-strategies";
 import { useConsoleLog } from "@/store/console-log-store";
-import { StrategyStageBadge, strategyStage, PROMOTE_PILL } from "@/components/strategy-stage";
+import { StrategyStageBadge, strategyStage, PROMOTE_PILL, PAPER_RUN_SUCCEEDED } from "@/components/strategy-stage";
 import { PromoteStageDialog } from "./promote-stage-dialog";
 import type { PromotionStage } from "@/types/domain";
 import type { Run } from "@/types/domain";
@@ -442,25 +442,24 @@ export function Toolbar({
   const [promoteOpen, setPromoteOpen] = useState(false);
   const { isAdmin } = useAuth();
 
-  // Mirror the server's precondition for the paper rung: a COMPLETED backtest of this exact
-  // version. Without it the POST 422s, so offering an enabled button would just produce an error.
-  // Fetched only when it could matter — an admin looking at an HFT strategy that isn't yet paper.
-  const needsBacktestCheck = isAdmin && type === "hft" && nextStage === "paper";
-  const { data: strategyRuns = [] } = useStrategyRuns(needsBacktestCheck ? id : undefined);
-  const hasQualifyingBacktest =
-    !!hftStrategy &&
-    strategyRuns.some(
-      (r) =>
-        r.mode === "backtest" &&
-        r.status === "completed" &&
-        r.manifest?.strategy?.version === hftStrategy.version,
-    );
-  // The live rung needs a version-matching paper promotion, which is exactly what puts the
-  // strategy on the paper stage — so reaching here already satisfies it.
-  const promoteBlockedReason =
-    nextStage === "paper" && !hasQualifyingBacktest
-      ? `No completed backtest at v${hftStrategy?.version ?? "?"} — run one at this version before promoting.`
-      : undefined;
+  // Evidence for the next rung, mirroring Strategy List so both surfaces agree:
+  //   paper <- a COMPLETED backtest at this exact version (the server's own precondition)
+  //   live  <- a FINISHED paper run at this exact version (stricter than the server, which only
+  //            wants a paper promotion; approval to paper-trade isn't evidence of having done it)
+  // Paper runs never reach `completed` — they tail a live feed until stopped — so `stopped`
+  // counts. Fetched only when it could matter: an admin on an HFT strategy with a rung left.
+  const { data: strategyRuns = [] } = useStrategyRuns(isAdmin && type === "hft" && nextStage ? id : undefined);
+  const atThisVersion = (r: (typeof strategyRuns)[number]) =>
+    !!hftStrategy && r.manifest?.strategy?.version === hftStrategy.version;
+  const promoteBlockedReason = !nextStage
+    ? undefined
+    : nextStage === "paper"
+      ? strategyRuns.some((r) => r.mode === "backtest" && r.status === "completed" && atThisVersion(r))
+        ? undefined
+        : `No completed backtest at v${hftStrategy?.version ?? "?"} — run one at this version before promoting.`
+      : strategyRuns.some((r) => r.mode === "paper" && PAPER_RUN_SUCCEEDED.has(r.status) && atThisVersion(r))
+        ? undefined
+        : `No finished paper run at v${hftStrategy?.version ?? "?"} — paper-trade this version first.`;
 
   // Shown on the Settings trigger: HFT reads market + strategy type, MFT market + universe.
   const pillItems =

@@ -18,7 +18,7 @@ import { useUpdateEditor } from "@/hooks/api/use-strategy-builder";
 import { useStrategyRuns } from "@/hooks/api/use-strategy-runs";
 import { useHftStrategy, useUpdateHftStrategy, type HftStrategyType } from "@/hooks/api/use-hft-strategies";
 import { useConsoleLog } from "@/store/console-log-store";
-import { StrategyStageBadge, strategyStage } from "@/components/strategy-stage";
+import { StrategyStageBadge, strategyStage, PROMOTE_PILL } from "@/components/strategy-stage";
 import { PromoteStageDialog } from "./promote-stage-dialog";
 import type { PromotionStage } from "@/types/domain";
 import type { Run } from "@/types/domain";
@@ -544,7 +544,10 @@ export function Toolbar({
                 onClick={() => setPromoteOpen(true)}
                 disabled={!!promoteBlockedReason}
                 title={promoteBlockedReason}
-                className="inline-flex h-8 shrink-0 cursor-pointer items-center rounded-[32px] border border-[#f1c617]/40 bg-[rgba(241,198,23,0.1)] px-3 text-xs font-medium text-[#f1c617] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                className={cn(
+                  "inline-flex h-8 shrink-0 cursor-pointer items-center rounded-[32px] border px-3 text-xs font-medium transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40",
+                  PROMOTE_PILL[nextStage],
+                )}
               >
                 Promote to {nextStage}
               </button>

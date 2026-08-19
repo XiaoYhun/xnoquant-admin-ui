@@ -12,7 +12,7 @@ import { useDebounced } from "@/hooks/use-debounced";
 import { resourceErrorMessage } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
 import { cn, idQueryNeedle, isIdQuery } from "@/lib/utils";
-import { StrategyStageBadge, strategyStage } from "@/components/strategy-stage";
+import { StrategyStageBadge, strategyStage, PROMOTE_PILL } from "@/components/strategy-stage";
 import { PromoteStageDialog } from "../create-strategy/promote-stage-dialog";
 import { SimulateModal } from "../create-strategy/simulate-modal";
 import type { PromotionStage, Strategy } from "@/types/domain";
@@ -29,13 +29,15 @@ const STAGE_FILTERS = [
 ];
 
 const COLS = [
-  { key: "name", label: "Strategy", w: "24%", align: "left" },
+  { key: "name", label: "Strategy", w: "26%", align: "left" },
   { key: "owner", label: "Owner", w: "16%", align: "left" },
-  { key: "type", label: "Type", w: "10%", align: "left" },
-  { key: "stage", label: "Stage", w: "18%", align: "left" },
-  { key: "version", label: "Version", w: "8%", align: "right" },
-  { key: "promoted", label: "Promoted", w: "12%", align: "left" },
-  { key: "actions", label: "", w: "12%", align: "right" },
+  { key: "type", label: "Type", w: "9%", align: "left" },
+  // Stage and Version read as one fact, so Stage is only as wide as "Backtesting (stale)" needs
+  // and Version is left-aligned against it rather than pushed to the far edge of its own column.
+  { key: "stage", label: "Stage", w: "15%", align: "left" },
+  { key: "version", label: "Version", w: "6%", align: "left" },
+  { key: "promoted", label: "Promoted", w: "14%", align: "left" },
+  { key: "actions", label: "", w: "14%", align: "right" },
 ] as const;
 
 // Each mode has its own list screen; `?run=` opens that run's side panel on arrival (see
@@ -81,7 +83,10 @@ function PromoteCell({ strategy, onPromote }: { strategy: Strategy; onPromote: (
           type="button"
           onClick={onPromote}
           disabled={!qualified}
-          className="inline-flex h-7 shrink-0 cursor-pointer items-center rounded-[32px] border border-[#f1c617]/40 bg-[rgba(241,198,23,0.12)] px-2.5 text-xs font-medium text-[#f1c617] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+          className={cn(
+            "inline-flex h-7 shrink-0 cursor-pointer items-center rounded-[32px] border px-2.5 text-xs font-medium transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40",
+            PROMOTE_PILL[next],
+          )}
         >
           Promote
         </button>
@@ -194,7 +199,7 @@ export default function Page() {
                       <TableCell>
                         <StrategyStageBadge strategy={s} showVersion={false} />
                       </TableCell>
-                      <TableCell className="text-right text-xs text-white">v{s.version}</TableCell>
+                      <TableCell className="text-xs text-white">v{s.version}</TableCell>
                       <TableCell className={cn("text-xs", promotedAt ? "text-white" : "text-muted-foreground")}>
                         {formatWhen(promotedAt)}
                       </TableCell>

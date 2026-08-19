@@ -1,6 +1,6 @@
 "use client";
 import { cn } from "@/lib/utils";
-import type { Strategy } from "@/types/domain";
+import type { PromotionStage, Strategy } from "@/types/domain";
 
 // How far a strategy has climbed the promotion ladder — backtest -> paper -> live.
 //
@@ -72,3 +72,13 @@ export function StrategyStageBadge({
     </span>
   );
 }
+
+/**
+ * Pill colours for a "promote to <stage>" action, keyed by the rung being ENTERED — amber for
+ * paper, green for live — so the button previews where the strategy is going rather than where it
+ * is. Shared by the Create Strategy toolbar and the Strategy List row action.
+ */
+export const PROMOTE_PILL: Record<PromotionStage, string> = {
+  paper: "border-[#f1c617]/40 bg-[rgba(241,198,23,0.12)] text-[#f1c617]",
+  live: "border-[#67e1c1]/40 bg-[rgba(103,225,193,0.12)] text-[#67e1c1]",
+};

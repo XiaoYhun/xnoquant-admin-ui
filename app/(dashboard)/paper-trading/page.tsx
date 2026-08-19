@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { MinimalisticMagnifer } from "@solar-icons/react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/pagination";
 import { usePaperRuns } from "@/hooks/api/use-paper-runs";
 import { useDebounced } from "@/hooks/use-debounced";
+import { useUrlParam } from "@/hooks/use-url-param";
 import { MarketTabs, matchesMarket, DEFAULT_MARKET, type Market } from "@/components/market-tabs";
 import { resourceErrorMessage } from "@/lib/api-client";
 import { PaperRunsTable } from "./paper-runs-table";
@@ -19,13 +20,23 @@ import { RunDetailPanel } from "./run-detail-panel";
 
 const PAGE_SIZE = 9;
 
+// `useSearchParams` (via useUrlParam) needs a Suspense boundary in the App Router.
 export default function Page() {
+  return (
+    <Suspense fallback={null}>
+      <PaperTrading />
+    </Suspense>
+  );
+}
+
+function PaperTrading() {
   const [market, setMarket] = useState<Market>(DEFAULT_MARKET);
   const [search, setSearch] = useState("");
   const [symbol, setSymbol] = useState("all");
   const [status, setStatus] = useState("all");
   const [page, setPage] = useState(1);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // The open panel is in the URL (`?run=<id>`) so the view can be linked and survives reload.
+  const [selectedId, setSelectedId] = useUrlParam("run");
 
   // Search and status are served by `GET /api/runs` (`q`, `status`); symbol and paging stay
   // client-side — the API offers no symbol filter, and no `mode` filter to page paper runs by.

@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { MinimalisticMagnifer } from "@solar-icons/react";
 import {
   Pagination,
@@ -12,6 +12,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useBacktestRuns } from "@/hooks/api/use-backtest-runs";
 import { useDebounced } from "@/hooks/use-debounced";
+import { useUrlParam } from "@/hooks/use-url-param";
 import { MarketTabs, matchesMarket, DEFAULT_MARKET, type Market } from "@/components/market-tabs";
 import { resourceErrorMessage } from "@/lib/api-client";
 import { BacktestRunsTable } from "./backtest-runs-table";
@@ -29,13 +30,23 @@ const STATUS_FILTERS = [
 
 // Backtesting is a list of backtest runs (`GET /api/runs`, mode==="backtest"), laid out like the
 // Paper Trading page. Rows share the paper row contract, so the paper detail panel is reused.
+// `useSearchParams` (via useUrlParam) needs a Suspense boundary in the App Router.
 export default function Page() {
+  return (
+    <Suspense fallback={null}>
+      <Backtesting />
+    </Suspense>
+  );
+}
+
+function Backtesting() {
   const [market, setMarket] = useState<Market>(DEFAULT_MARKET);
   const [search, setSearch] = useState("");
   const [symbol, setSymbol] = useState("all");
   const [status, setStatus] = useState("all");
   const [page, setPage] = useState(1);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // The open panel is in the URL (`?run=<id>`) so the view can be linked and survives reload.
+  const [selectedId, setSelectedId] = useUrlParam("run");
 
   // Search and status are served by `GET /api/runs` (`q`, `status`); market, symbol and paging
   // stay client-side — the API filters on none of those.

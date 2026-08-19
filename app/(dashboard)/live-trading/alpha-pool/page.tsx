@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/pagination";
 import { usePromotions } from "@/hooks/api/use-promotions";
 import { useRuns } from "@/hooks/api/use-runs";
+import { useUrlParam } from "@/hooks/use-url-param";
 import { toPaperRunRow } from "@/lib/transform/runs";
 import { resourceErrorMessage } from "@/lib/api-client";
 import { AlphaPoolTable } from "./alpha-pool-table";
@@ -63,8 +64,8 @@ function AlphaPool() {
   const [symbolFilter, setSymbolFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [page, setPage] = useState(1);
-  const [selectedRun, setSelectedRun] = useState<PaperRunRow | null>(null);
-  const [detailOpen, setDetailOpen] = useState(false);
+  // The open panel is in the URL (`?run=<id>`) so the view can be linked and survives reload.
+  const [selectedId, setSelectedId] = useUrlParam("run");
 
   const rows = useMemo<AlphaPoolRow[]>(() => {
     const byId = new Map(runs.map((r) => [r.id, toPaperRunRow(r)]));
@@ -82,6 +83,8 @@ function AlphaPool() {
     }
     return [...set].sort();
   }, [rows, market]);
+
+  const selectedRun = rows.find(({ run }) => run?.id === selectedId)?.run ?? null;
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -178,11 +181,7 @@ function AlphaPool() {
           ) : (
             <AlphaPoolTable
               rows={pageRows}
-              onOpenDetail={({ run }) => {
-                if (!run) return;
-                setSelectedRun(run);
-                setDetailOpen(true);
-              }}
+              onOpenDetail={({ run }) => run && setSelectedId(run.id)}
               onStarted={(run) => {
                 const started = marketOf(run);
                 router.push(`/live-trading/live-trade${started ? `?market=${started}` : ""}`);
@@ -232,7 +231,7 @@ function AlphaPool() {
         )}
       </section>
 
-      <RunDetailPanel open={detailOpen} onOpenChange={setDetailOpen} run={selectedRun} />
+      <RunDetailPanel open={!!selectedRun} onOpenChange={(o) => !o && setSelectedId(null)} run={selectedRun} />
     </main>
   );
 }

@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/pagination";
 import { useLiveRuns } from "@/hooks/api/use-live-runs";
 import { useDebounced } from "@/hooks/use-debounced";
+import { useUrlParam } from "@/hooks/use-url-param";
 import { resourceErrorMessage } from "@/lib/api-client";
 import { cn, formatPercent } from "@/lib/utils";
 import { LiveRunsTable } from "./live-runs-table";
@@ -26,7 +27,6 @@ import { OrderbookPanel } from "./orderbook-panel";
 import { MarketTabs, matchesMarket, marketFromParam, type Market } from "@/components/market-tabs";
 import { useOrderbookSymbols } from "@/hooks/api/use-orderbook-symbols";
 import { RunDetailInline } from "../../paper-trading/run-detail-panel";
-import type { PaperRunRow } from "@/lib/mock/paper-runs";
 
 const PAGE_SIZE = 9;
 
@@ -112,8 +112,10 @@ function LiveTrade() {
     status: onlyRunning ? "running" : undefined,
   });
   const [page, setPage] = useState(1);
-  const [selectedRun, setSelectedRun] = useState<PaperRunRow | null>(null);
-  const [detailOpen, setDetailOpen] = useState(false);
+  // The open panel is in the URL (`?run=<id>`) so the view can be linked and survives reload.
+  // Derived from the loaded rows rather than held separately: one source of truth, and a link to
+  // a run that has since gone simply opens no panel.
+  const [selectedId, setSelectedId] = useUrlParam("run");
   // The orderbook rail's symbol. Separate from `symbolFilter` above: that one narrows the table
   // and carries an "all" option, whereas the rail always shows exactly one book. `null` until the
   // user picks — the panel defaults to the first active symbol. Not tied to the market tab: the
@@ -127,6 +129,8 @@ function LiveTrade() {
     for (const r of runs) if (matchesMarket(r, market)) for (const s of r.symbols) set.add(s.symbol);
     return [...set].sort();
   }, [runs, market]);
+
+  const selectedRun = runs.find((r) => r.id === selectedId) ?? null;
 
   const filtered = useMemo(
     () =>
@@ -240,14 +244,14 @@ function LiveTrade() {
             "flex min-h-0 min-w-0 flex-1 shrink-0 flex-col rounded-xl border border-border bg-background",
             // The table needs clipping for its rounded corners; the detail panel must not clip,
             // or its corner close button gets cut off.
-            detailOpen && selectedRun ? "overflow-visible" : "overflow-hidden",
+            selectedRun ? "overflow-visible" : "overflow-hidden",
           )}
         >
           {/* The run detail takes over this box rather than sliding in over the viewport (as it
               does on Paper Trading / Backtesting), so the orderbook rail stays visible beside it.
               Mounted only while open — unmounting drops the run's `/live/stream` subscription. */}
-          {detailOpen && selectedRun ? (
-            <RunDetailInline run={selectedRun} onClose={() => setDetailOpen(false)} />
+          {selectedRun ? (
+            <RunDetailInline run={selectedRun} onClose={() => setSelectedId(null)} />
           ) : (
             <>
           <div className="min-w-0 overflow-x-auto">
@@ -260,10 +264,7 @@ function LiveTrade() {
             ) : (
               <LiveRunsTable
                 rows={pageRows}
-                onOpenDetail={(run) => {
-                  setSelectedRun(run);
-                  setDetailOpen(true);
-                }}
+                onOpenDetail={(run) => setSelectedId(run.id)}
               />
             )}
           </div>

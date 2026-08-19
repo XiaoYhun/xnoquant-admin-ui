@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { CodeEditor } from "./code-editor";
 import { PromotedLockDialog } from "./promoted-lock-dialog";
@@ -12,7 +12,7 @@ import { shortRunId } from "@/lib/utils";
 import type { Run } from "@/types/domain";
 import { type EditorTab } from "@/lib/mock/strategy-builder";
 import { useEditors, useCreateEditor, useSimulateEditor, useUpdateEditor, useDeleteEditor, fetchEditors } from "@/hooks/api/use-strategy-builder";
-import { useHftStrategies, useHftStrategy, useCreateHftStrategy, useUpdateHftStrategy, useDeleteHftStrategy, type HftStrategyType, type FeatureDef } from "@/hooks/api/use-hft-strategies";
+import { useHftStrategies, useHftStrategy, toEditorTab, useCreateHftStrategy, useUpdateHftStrategy, useDeleteHftStrategy, type HftStrategyType, type FeatureDef } from "@/hooks/api/use-hft-strategies";
 import { CreateStrategyModal } from "@/components/layout/create-strategy-modal";
 import { useConsoleLog } from "@/store/console-log-store";
 import { useMode, type Mode } from "@/store/mode-store";
@@ -78,7 +78,10 @@ function ResizableSplit({ left, right }: { left: ReactNode; right: ReactNode }) 
 export default function Page() {
   const mode = useMode();
   const { data: mftEditors } = useEditors();
-  const { data: hftEditors } = useHftStrategies();
+  const { data: hftStrategies } = useHftStrategies();
+  // The builder wants editor tabs; the query now yields raw records so the Strategy List can read
+  // versions and approvals off the same cache entry.
+  const hftEditors = useMemo(() => hftStrategies?.map(toEditorTab), [hftStrategies]);
   // Editors are scoped to the active lab mode: HFT lab shows only HFT strategies, MFT lab only
   // MFT editors (Figma 13964-56847). Wait for the active mode's list to settle. `hftEditors`
   // becomes `[]` (not undefined) even on failure, so a down HFT backend never blocks the page.

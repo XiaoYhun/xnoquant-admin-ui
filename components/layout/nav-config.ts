@@ -1,4 +1,4 @@
-import { AddCircle, ServerMinimalistic, Translation, DiagramUp, DangerCircle } from "@solar-icons/react";
+import { AddCircle, ServerMinimalistic, Translation, DiagramUp, DangerCircle, ClipboardList } from "@solar-icons/react";
 import type { IconProps } from "@solar-icons/react";
 import { Receipt2 } from "@/components/icons/receipt-2";
 import { EmptyWalletTime } from "@/components/icons/empty-wallet-time";
@@ -22,6 +22,9 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Create strategy", href: "/create-strategy", icon: AddCircle, requiresAccess: true },
       { label: "Backtesting", href: "/strategies", icon: ServerMinimalistic, requiresAccess: true },
+      // Admin console for the promotion ladder — every strategy, its owner/version/stage, and the
+      // promote + launch actions. Admin-only: /api/users and /api/promotions both 403 otherwise.
+      { label: "Strategy List", href: "/strategy-list", icon: ClipboardList, adminOnly: true },
       { label: "Paper Trading", href: "/paper-trading", icon: Receipt2, requiresAccess: true },
     ],
   },

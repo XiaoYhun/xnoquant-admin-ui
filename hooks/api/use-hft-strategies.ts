@@ -15,20 +15,25 @@ type Strategy = components["schemas"]["Strategy"];
 export type HftStrategyType = components["schemas"]["StrategyType"];
 export type FeatureDef = components["schemas"]["FeatureDef"];
 
-function toEditorTab(s: Strategy): EditorTab {
+export function toEditorTab(s: Strategy): EditorTab {
   return { id: s.id, owner_id: s.owner_id, name: s.name, code: s.code, type: "hft", created_at: s.created_at };
 }
 
-// Merged into the Create Strategy editors list (page.tsx). Tolerate any failure (401, empty list,
-// network error) by falling back to `[]` so a broken HFT backend never blocks the page.
+// Returns the RAW records, not editor tabs: Strategy carries `version` and the paper/live
+// approval fields, which the Strategy List needs and `toEditorTab` throws away. The editors list
+// maps them itself (create-strategy/page.tsx). One query, so promotion invalidating
+// ["hft-strategies"] refreshes both surfaces.
+//
+// Tolerates any failure (401, empty list, network error) by falling back to `[]` so a broken HFT
+// backend never blocks the page.
 export function useHftStrategies() {
   return useQuery({
     queryKey: ["hft-strategies"],
-    queryFn: async (): Promise<EditorTab[]> => {
+    queryFn: async (): Promise<Strategy[]> => {
       if (USE_MOCK) return [];
       try {
         const data = await apiGet<Strategy[]>(`${HFT_API_URL}/api/strategies`);
-        return (data ?? []).map(toEditorTab);
+        return data ?? [];
       } catch {
         return [];
       }

@@ -218,12 +218,11 @@ export function useLaunchRun() {
       // eventually consistent and would otherwise leave the picker a beat behind the launch.
       // Seeded only when the query already exists: writing into a key nothing has fetched would
       // plant a one-row list that later reads mistake for the whole history.
-      const strategyId = run.strategy_id ?? run.manifest?.strategy?.id;
-      if (strategyId) {
-        qc.setQueryData<Run[]>(["strategy-runs", strategyId], (prev) =>
-          prev ? [run, ...prev.filter((r) => r.id !== run.id)] : prev,
-        );
-      }
+      // One shared, unfiltered entry (see useStrategyRuns) — each subscriber narrows it itself,
+      // so the new run only has to be prepended once.
+      qc.setQueryData<Run[]>(["strategy-runs"], (prev) =>
+        prev ? [run, ...prev.filter((r) => r.id !== run.id)] : prev,
+      );
       // The detail views read this key directly (useRun), so the panel opens populated.
       qc.setQueryData<Run>(["run", run.id], run);
 

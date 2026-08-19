@@ -41,6 +41,9 @@ const RED_TEXT =
 
 const DASH = "—";
 
+/** Width of the Net Daily PNL window, in calendar days. */
+const NET_DAILY_PNL_DAYS = 30;
+
 function fmtSigned(v: number, digits = 2): string {
   return formatSignedAmount(v, digits);
 }
@@ -482,8 +485,13 @@ export function PerformanceView({ runId }: { runId?: string }) {
 
   const currency = useRunCurrency(runId);
   const stats = useMemo(() => equityStats(equity), [equity]);
-  // Padded to a week so a single-day HFT run reads as a bar in context, not one lone column.
-  const daily = useMemo(() => padDailyPnl(toDailyPnlPoints(equity)), [equity]);
+  // A rolling 30-day window: padded up to 30 days so a single-day HFT run reads as a bar in
+  // context rather than one lone column, and cut to the most recent 30 so a long backtest doesn't
+  // squeeze months of bars into the panel.
+  const daily = useMemo(
+    () => padDailyPnl(toDailyPnlPoints(equity), NET_DAILY_PNL_DAYS).slice(-NET_DAILY_PNL_DAYS),
+    [equity],
+  );
   const monthly = useMemo(() => toMonthlyPnl(equity), [equity]);
   // Weekdays the run never traded are dropped rather than drawn as empty columns: a VN30 run then
   // reads Mon..Fri like the design, while a crypto run keeps all seven.

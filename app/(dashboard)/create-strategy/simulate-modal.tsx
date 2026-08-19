@@ -599,22 +599,6 @@ export function SimulateModal({
             )}
           </div>
 
-          {mode === "live" && (
-            <div className="flex flex-col gap-2 rounded-xl border border-[#f1c617]/40 bg-[#f1c617]/10 p-3 text-xs text-[#f1c617]">
-              <div className="flex items-start gap-2">
-                <DangerTriangle weight="Outline" className="mt-0.5 size-[18px] shrink-0" />
-                <p>
-                  Starting a live run will execute real orders on the market. Make sure the configuration is correct
-                  before proceeding.
-                </p>
-              </div>
-              <label className="flex cursor-pointer items-center gap-2">
-                <Checkbox checked={liveConfirmed} onCheckedChange={(v) => setLiveConfirmed(v === true)} />
-                <span>I understand this places real orders</span>
-              </label>
-            </div>
-          )}
-
           <div className="flex flex-col gap-2.5">
             {isArb ? (
               <>
@@ -841,6 +825,42 @@ export function SimulateModal({
               </div>
             </div>
           </GroupBox>
+
+          {/* Last thing before the footer: this acknowledges the configuration ABOVE it, so it read
+              as premature when it sat at the top of the form, before an account had been picked. */}
+          {mode === "live" && (
+            <div className="flex flex-col gap-3 rounded-xl border border-[#f1c617]/40 bg-[#f1c617]/10 p-3 text-xs text-[#f1c617]">
+              <div className="flex items-start gap-2">
+                <DangerTriangle weight="Outline" className="mt-0.5 size-[18px] shrink-0" />
+                <p>
+                  Starting a live run will execute real orders on the market, with real money, on the account selected
+                  above. Check the configuration before proceeding.
+                </p>
+              </div>
+              {/* The shared checkbox is grey when unchecked and mint when checked — on an amber
+                  panel that reads as decoration, and a green tick inside a warning contradicts it.
+                  Amber-on-amber with a dark tick makes the state unmistakable either way. */}
+              <label className="flex cursor-pointer items-start gap-2.5 font-medium">
+                <Checkbox
+                  checked={liveConfirmed}
+                  onCheckedChange={(v) => setLiveConfirmed(v === true)}
+                  aria-label="I understand this places real orders"
+                  className="mt-px size-[18px] border-[1.5px] border-[#f1c617] data-[state=checked]:border-[#f1c617] data-[state=checked]:bg-[#f1c617] [&_[data-slot=checkbox-indicator]]:text-black"
+                />
+                <span>I understand this places real orders</span>
+              </label>
+              {/* Without this the launch button just greys out and never says which box to tick.
+                  The tick is only the LAST blocker, though — promising it will enable the button
+                  while the account or symbol is still empty would just move the confusion. */}
+              {!liveConfirmed && (
+                <p className="text-[#f1c617]/70">
+                  {accountsOk && symbolsOk
+                    ? "Tick the box above to enable \u201cStart live run\u201d."
+                    : "Required before a live run can start."}
+                </p>
+              )}
+            </div>
+          )}
 
           {launchRun.isError && (
             <p className="text-xs text-destructive">{resourceErrorMessage(launchRun.error, "this run")}</p>

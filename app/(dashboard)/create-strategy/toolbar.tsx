@@ -17,7 +17,9 @@ import { useMarkets } from "@/hooks/api/use-markets";
 import { useUpdateEditor } from "@/hooks/api/use-strategy-builder";
 import { useHftStrategy, useUpdateHftStrategy, type HftStrategyType } from "@/hooks/api/use-hft-strategies";
 import { useConsoleLog } from "@/store/console-log-store";
-import { StrategyStageBadge } from "@/components/strategy-stage";
+import { StrategyStageBadge, strategyStage } from "@/components/strategy-stage";
+import { PromoteStageDialog } from "./promote-stage-dialog";
+import type { PromotionStage } from "@/types/domain";
 import type { Run } from "@/types/domain";
 
 // Toolbar row above the code editor — Figma node 13964:52172 (inside 13964:50200).
@@ -402,8 +404,27 @@ export function Toolbar({
     }
   };
 
+  // The launch button says what it will actually start. Mode isn't a choice any more — it follows
+  // the promotion stage — so "Simulate" was vague about whether this backtests or trades.
+  const stage = hftStrategy ? strategyStage(hftStrategy) : null;
+  const runVerb =
+    stage?.stage === "live" ? "Run live" : stage?.stage === "paper" ? "Run paper" : "Run backtest";
   const simulateLabel =
-    mftSimStatus === "running" ? "Simulating…" : mftSimStatus === "done" ? "Simulated" : mftSimStatus === "error" ? "Failed" : "Simulate";
+    mftSimStatus === "running"
+      ? "Simulating…"
+      : mftSimStatus === "done"
+        ? "Simulated"
+        : mftSimStatus === "error"
+          ? "Failed"
+          : type === "hft"
+            ? runVerb
+            : "Simulate";
+
+  // The rung above the current one. Nothing to offer once a strategy is already live.
+  const nextStage: PromotionStage | null =
+    !stage || stage.stage === "live" ? null : stage.stage === "paper" ? "live" : "paper";
+  const [promoteOpen, setPromoteOpen] = useState(false);
+  const { isAdmin } = useAuth();
 
   // Shown on the Settings trigger: HFT reads market + strategy type, MFT market + universe.
   const pillItems =
@@ -467,14 +488,29 @@ export function Toolbar({
         {/* Save/Simulate both PUT the strategy, which 404s for a lab-mate's share — hide them there. */}
         {canWrite && (
           <>
-            <button
-              type="button"
-              onClick={handleSaveClick}
-              disabled={!isDirty || saving}
-              className="inline-flex h-8 shrink-0 cursor-pointer items-center rounded-[32px] border border-border bg-background px-3 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {saving ? "Saving…" : "Save"}
-            </button>
+            {/* Save appears only when there is something to save — a disabled button that is
+                greyed out for the entire life of a clean editor is just noise. */}
+            {(isDirty || saving) && (
+              <button
+                type="button"
+                onClick={handleSaveClick}
+                disabled={saving}
+                className="inline-flex h-8 shrink-0 cursor-pointer items-center rounded-[32px] border border-border bg-background px-3 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {saving ? "Saving…" : "Save"}
+              </button>
+            )}
+            {/* Promotion is admin-only (POST /api/promotions/{stage}/{strategy_id}) and only
+                meaningful for HFT strategies, which are the ones the ladder governs. */}
+            {isAdmin && type === "hft" && nextStage && (
+              <button
+                type="button"
+                onClick={() => setPromoteOpen(true)}
+                className="inline-flex h-8 shrink-0 cursor-pointer items-center rounded-[32px] border border-[#f1c617]/40 bg-[rgba(241,198,23,0.1)] px-3 text-xs font-medium text-[#f1c617] transition-opacity hover:opacity-90"
+              >
+                Promote to {nextStage}
+              </button>
+            )}
             <button
               type="button"
               onClick={handleSimulateClick}
@@ -500,6 +536,18 @@ export function Toolbar({
         onHftIntervalChange={setHftInterval}
         onLaunched={onLaunched}
       />
+
+      {hftStrategy && nextStage && (
+        <PromoteStageDialog
+          open={promoteOpen}
+          onOpenChange={setPromoteOpen}
+          strategyId={id}
+          strategyName={name}
+          version={hftStrategy.version}
+          stage={nextStage}
+          onPromoted={(promoted) => addLog("success", `Promoted “${name}” to ${promoted}`)}
+        />
+      )}
     </div>
   );
 }

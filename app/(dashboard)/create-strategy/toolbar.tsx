@@ -15,6 +15,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { canMutate } from "@/lib/rbac";
 import { useMarkets } from "@/hooks/api/use-markets";
 import { useUpdateEditor } from "@/hooks/api/use-strategy-builder";
+import { useStrategyRuns } from "@/hooks/api/use-strategy-runs";
 import { useHftStrategy, useUpdateHftStrategy, type HftStrategyType } from "@/hooks/api/use-hft-strategies";
 import { useConsoleLog } from "@/store/console-log-store";
 import { StrategyStageBadge, strategyStage } from "@/components/strategy-stage";
@@ -426,6 +427,26 @@ export function Toolbar({
   const [promoteOpen, setPromoteOpen] = useState(false);
   const { isAdmin } = useAuth();
 
+  // Mirror the server's precondition for the paper rung: a COMPLETED backtest of this exact
+  // version. Without it the POST 422s, so offering an enabled button would just produce an error.
+  // Fetched only when it could matter — an admin looking at an HFT strategy that isn't yet paper.
+  const needsBacktestCheck = isAdmin && type === "hft" && nextStage === "paper";
+  const { data: strategyRuns = [] } = useStrategyRuns(needsBacktestCheck ? id : undefined);
+  const hasQualifyingBacktest =
+    !!hftStrategy &&
+    strategyRuns.some(
+      (r) =>
+        r.mode === "backtest" &&
+        r.status === "completed" &&
+        r.manifest?.strategy?.version === hftStrategy.version,
+    );
+  // The live rung needs a version-matching paper promotion, which is exactly what puts the
+  // strategy on the paper stage — so reaching here already satisfies it.
+  const promoteBlockedReason =
+    nextStage === "paper" && !hasQualifyingBacktest
+      ? `No completed backtest at v${hftStrategy?.version ?? "?"} — run one at this version before promoting.`
+      : undefined;
+
   // Shown on the Settings trigger: HFT reads market + strategy type, MFT market + universe.
   const pillItems =
     type === "hft"
@@ -506,7 +527,9 @@ export function Toolbar({
               <button
                 type="button"
                 onClick={() => setPromoteOpen(true)}
-                className="inline-flex h-8 shrink-0 cursor-pointer items-center rounded-[32px] border border-[#f1c617]/40 bg-[rgba(241,198,23,0.1)] px-3 text-xs font-medium text-[#f1c617] transition-opacity hover:opacity-90"
+                disabled={!!promoteBlockedReason}
+                title={promoteBlockedReason}
+                className="inline-flex h-8 shrink-0 cursor-pointer items-center rounded-[32px] border border-[#f1c617]/40 bg-[rgba(241,198,23,0.1)] px-3 text-xs font-medium text-[#f1c617] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Promote to {nextStage}
               </button>

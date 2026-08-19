@@ -7,28 +7,60 @@ const at = (version: number, paper?: number, live?: number) =>
   ({ version, paper_approved_version: paper, live_approved_version: live }) as Parameters<typeof strategyStage>[0];
 
 describe("strategyStage", () => {
-  it("is backtesting when nothing has been promoted", () => {
-    expect(strategyStage(at(3))).toEqual({ stage: "backtest", label: "Backtesting", stale: false });
+  const s = (version: number, paper: number | null, live: number | null) => ({
+    version,
+    paper_approved_version: paper,
+    live_approved_version: live,
+  });
+  const run = (mode: string, status: string) => ({ mode, status });
+
+  it("distinguishes never-run from backtested", () => {
+    expect(strategyStage(s(1, null, null)).label).toBe("Not simulated");
+    expect(strategyStage(s(1, null, null), []).label).toBe("Not simulated");
+    // A backtest still in flight has produced nothing to judge yet.
+    expect(strategyStage(s(1, null, null), [run("backtest", "running")]).label).toBe("Not simulated");
+    expect(strategyStage(s(1, null, null), [run("backtest", "completed")]).label).toBe("Backtested");
   });
 
-  it("reports paper when the paper approval matches the current version", () => {
-    expect(strategyStage(at(3, 3))).toEqual({ stage: "paper", label: "Paper running", stale: false });
+  it("separates permission to trade a rung from actually trading it", () => {
+    const paper = s(4, 4, null);
+    expect(strategyStage(paper, [run("paper", "stopped")])).toMatchObject({
+      stage: "paper-promoted",
+      label: "Paper trade promoted",
+      active: false,
+    });
+    expect(strategyStage(paper, [run("paper", "running")])).toMatchObject({
+      stage: "paper-trading",
+      label: "Paper trading",
+      active: true,
+    });
+
+    const live = s(2, 2, 2);
+    expect(strategyStage(live, [run("live", "stopped")]).label).toBe("Live trade promoted");
+    expect(strategyStage(live, [run("live", "running")]).label).toBe("Live trading");
   });
 
-  it("prefers live over paper when both match", () => {
-    expect(strategyStage(at(3, 3, 3))).toEqual({ stage: "live", label: "Live trading", stale: false });
+  it("reads a rung's activity from that rung's own mode", () => {
+    // A paper run left running does not make a live-promoted strategy "Live trading".
+    expect(strategyStage(s(2, 2, 2), [run("paper", "running")]).label).toBe("Live trade promoted");
   });
 
-  it("falls back to backtesting when an approval is stranded behind an edit", () => {
-    // v4 with a v3 approval: the API refuses to launch until an admin re-promotes, so calling
-    // this "Paper running" would claim a capability the strategy no longer has.
-    expect(strategyStage(at(4, 3))).toEqual({ stage: "backtest", label: "Backtesting", stale: true });
-    expect(strategyStage(at(4, 3, 3))).toEqual({ stage: "backtest", label: "Backtesting", stale: true });
+  it("falls back to the promoted wording when the caller has no runs", () => {
+    // Never wrong, just less specific — a promotion is permission, so "promoted" always holds.
+    expect(strategyStage(s(2, 2, 2)).label).toBe("Live trade promoted");
+    expect(strategyStage(s(4, 4, null)).active).toBe(false);
   });
 
-  it("treats a stale live approval as stale even while paper is current", () => {
-    // Re-promoted to paper at v4 but live is still pinned to v3 — paper is what it can do.
-    expect(strategyStage(at(4, 4, 3))).toEqual({ stage: "paper", label: "Paper running", stale: false });
+  it("prefers the higher rung when both baskets hold the strategy", () => {
+    expect(strategyStage(s(2, 2, 2)).rung).toBe("live");
+  });
+
+  it("keeps a stranded approval on its rung, but flags it stale", () => {
+    // Basket membership decides the rung, so this stays paper — matching what the promote and run
+    // buttons offer — while `stale` records that the approval no longer authorises a launch.
+    expect(strategyStage(s(34, 33, null))).toMatchObject({ rung: "paper", stale: true });
+    expect(strategyStage(s(2, 2, 1)).stale).toBe(true);
+    expect(strategyStage(s(2, 2, 2)).stale).toBe(false);
   });
 });
 

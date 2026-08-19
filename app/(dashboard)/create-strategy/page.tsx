@@ -147,7 +147,7 @@ function StrategyBuilder({ mode, initialEditors }: { mode: Mode; initialEditors:
   const promotionLocked =
     !!activeStrategy &&
     !!stage &&
-    stage.stage !== "backtest" &&
+    stage.rung !== "backtest" &&
     !stage.stale &&
     !unlockedIds.includes(activeStrategy.id);
   const [lockPromptOpen, setLockPromptOpen] = useState(false);

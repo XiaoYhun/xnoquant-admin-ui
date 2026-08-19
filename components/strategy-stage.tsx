@@ -2,36 +2,101 @@
 import { cn } from "@/lib/utils";
 import type { PromotionStage, Strategy } from "@/types/domain";
 
-// How far a strategy has climbed the promotion ladder — backtest -> paper -> live.
+// How far a strategy has climbed the promotion ladder, in six steps:
 //
-// Read straight off the strategy record: `paper_approved_version` / `live_approved_version` are
-// the versions each basket has pinned, so comparing them to `version` says both which stage the
-// strategy is cleared for AND whether that clearance still applies. Editing the code bumps
-// `version`, which strands the approval behind it; the API then refuses to launch until an admin
-// re-promotes, so a stale approval is reported as such rather than as a live promotion.
-export type StrategyStage = "backtest" | "paper" | "live";
+//   Not simulated -> Backtested -> Paper trade promoted -> Paper trading
+//                                -> Live trade promoted -> Live trading
+//
+// Two different things decide where a strategy sits. Which RUNG it's on comes off the strategy
+// record: `paper_approved_version` / `live_approved_version` are the versions each basket has
+// pinned. Whether it is merely cleared for that rung or actually TRADING on it needs the run list
+// — a promotion is permission, not activity — so callers with runs to hand get the finer reading
+// and callers without one fall back to the "promoted" wording, which is never wrong.
+//
+// Comparing an approval to `version` also says whether the clearance still applies: editing the
+// code bumps `version` and strands the approval behind it, and the API refuses to launch until an
+// admin re-promotes. That's reported as `stale` rather than as a plain promotion.
+export type StrategyStage =
+  | "none"
+  | "backtested"
+  | "paper-promoted"
+  | "paper-trading"
+  | "live-promoted"
+  | "live-trading";
+
+/** The coarse rung, for the things that branch on the ladder rather than on the wording. */
+export type StageRung = "backtest" | "paper" | "live";
+
+const STAGE_LABEL: Record<StrategyStage, string> = {
+  none: "Not simulated",
+  backtested: "Backtested",
+  "paper-promoted": "Paper trade promoted",
+  "paper-trading": "Paper trading",
+  "live-promoted": "Live trade promoted",
+  "live-trading": "Live trading",
+};
 
 export type StageInfo = {
   stage: StrategyStage;
+  rung: StageRung;
   label: string;
   /** True when a promotion exists but is pinned to an older version than the current code. */
   stale: boolean;
+  /** Trading right now — a run of this rung's mode is live. Drives the pulsing dot. */
+  active: boolean;
 };
 
-export function strategyStage(strategy: Pick<Strategy, "version" | "paper_approved_version" | "live_approved_version">): StageInfo {
+/** The run facts the stage reading needs; a subset of `Run` so mock rows satisfy it too. */
+type StageRun = { mode?: string | null; status?: string | null };
+
+export function strategyStage(
+  strategy: Pick<Strategy, "version" | "paper_approved_version" | "live_approved_version">,
+  runs?: StageRun[],
+): StageInfo {
   const { version, paper_approved_version: paper, live_approved_version: live } = strategy;
-  if (live != null && live === version) return { stage: "live", label: "Live trading", stale: false };
-  if (paper != null && paper === version) return { stage: "paper", label: "Paper running", stale: false };
-  // A promotion pinned to an older version no longer authorises anything — the strategy is back
-  // to backtesting until it's re-promoted.
   const stale = (live != null && live !== version) || (paper != null && paper !== version);
-  return { stage: "backtest", label: "Backtesting", stale };
+  const isRunning = (mode: string) => !!runs?.some((r) => r.mode === mode && r.status === "running");
+  const info = (stage: StrategyStage, rung: StageRung, active: boolean): StageInfo => ({
+    stage,
+    rung,
+    label: STAGE_LABEL[stage],
+    stale,
+    active,
+  });
+
+  // Membership, not version equality: a stale approval still puts the strategy in the basket, and
+  // the promote/run controls treat it that way (see nextPromotionStage / launchMode).
+  if (live != null) {
+    const active = isRunning("live");
+    return info(active ? "live-trading" : "live-promoted", "live", active);
+  }
+  if (paper != null) {
+    const active = isRunning("paper");
+    return info(active ? "paper-trading" : "paper-promoted", "paper", active);
+  }
+  // "Backtested" is a claim about a finished simulation, so it wants a completed run — a backtest
+  // still in flight has not produced anything to judge yet.
+  const backtested = !!runs?.some((r) => r.mode === "backtest" && r.status === "completed");
+  return info(backtested ? "backtested" : "none", "backtest", false);
 }
 
-const STAGE_STYLE: Record<StrategyStage, { dot: string; text: string }> = {
-  backtest: { dot: "bg-[#9db2ce]", text: "text-[#9db2ce]" },
-  paper: { dot: "bg-[#2d84ff] shadow-[0_0_6px_1px_rgba(45,132,255,0.5)]", text: "text-[#7fb2ff]" },
-  live: { dot: "bg-[#67e1c1] shadow-[0_0_6px_1px_rgba(103,225,193,0.5)]", text: "text-[#67e1c1]" },
+// `ring` is spelled out rather than derived from `text`: Tailwind only emits classes it can see
+// literally in the source, so a runtime `text-` -> `border-` swap produced a class that never
+// existed and the hollow dot fell back to the default border grey.
+const STAGE_STYLE: Record<StageRung, { dot: string; glow: string; ring: string; text: string }> = {
+  backtest: { dot: "bg-[#9db2ce]", glow: "", ring: "border-[#9db2ce]", text: "text-[#9db2ce]" },
+  paper: {
+    dot: "bg-[#2d84ff]",
+    glow: "shadow-[0_0_6px_1px_rgba(45,132,255,0.5)]",
+    ring: "border-[#7fb2ff]",
+    text: "text-[#7fb2ff]",
+  },
+  live: {
+    dot: "bg-[#67e1c1]",
+    glow: "shadow-[0_0_6px_1px_rgba(103,225,193,0.5)]",
+    ring: "border-[#67e1c1]",
+    text: "text-[#67e1c1]",
+  },
 };
 
 /**
@@ -42,25 +107,40 @@ const STAGE_STYLE: Record<StrategyStage, { dot: string; text: string }> = {
  */
 export function StrategyStageBadge({
   strategy,
+  runs,
   className,
   showVersion = true,
 }: {
   strategy: Pick<Strategy, "version" | "paper_approved_version" | "live_approved_version">;
+  /** The strategy's runs, if the caller has them — without these a rung reads as "promoted". */
+  runs?: StageRun[];
   className?: string;
   showVersion?: boolean;
 }) {
-  const { stage, label, stale } = strategyStage(strategy);
-  const style = STAGE_STYLE[stage];
+  const { rung, label, stale, active } = strategyStage(strategy, runs);
+  const style = STAGE_STYLE[rung];
   return (
     <span
       className={cn("flex shrink-0 items-center gap-1.5 text-xs font-medium", className)}
       title={
         stale
           ? "Promoted at an earlier version — editing the code revoked it. An admin must re-promote before this can run."
-          : undefined
+          : active
+            ? undefined
+            : label === STAGE_LABEL["paper-promoted"] || label === STAGE_LABEL["live-promoted"]
+              ? "Cleared for this stage, but not currently trading."
+              : undefined
       }
     >
-      <span className={cn("size-2 shrink-0 rounded-full", style.dot)} />
+      {/* Filled and pulsing while it trades; a hollow ring once it's only cleared to. */}
+      <span
+        className={cn(
+          "size-2 shrink-0 rounded-full",
+          active
+            ? cn("animate-pulse", style.dot, style.glow)
+            : cn("border-[1.5px] bg-transparent", style.ring),
+        )}
+      />
       <span className={style.text}>{label}</span>
       {stale && <span className="text-[#f1c617]">(stale)</span>}
       {showVersion && (

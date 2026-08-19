@@ -6,7 +6,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { marketOf } from "@/components/market-tabs";
 import { PromoteStageDialog } from "../create-strategy/promote-stage-dialog";
 import { useHftStrategies } from "@/hooks/api/use-hft-strategies";
-import { strategyStage } from "@/components/strategy-stage";
+import { nextPromotionStage } from "@/components/strategy-stage";
 import type { PromotionStage } from "@/types/domain";
 import {
   Table,
@@ -87,13 +87,9 @@ export function PaperRunsTable({
   const { data: strategies = [] } = useHftStrategies();
   const strategyOf = useMemo(() => new Map(strategies.map((s) => [s.id, s])), [strategies]);
   const pendingStrategy = pendingPromote?.strategyId ? strategyOf.get(pendingPromote.strategyId) : undefined;
-  const pendingNextStage: PromotionStage | null = !pendingStrategy
-    ? null
-    : strategyStage(pendingStrategy).stage === "live"
-      ? null
-      : strategyStage(pendingStrategy).stage === "paper"
-        ? "live"
-        : "paper";
+  const pendingNextStage: PromotionStage | null = pendingStrategy
+    ? nextPromotionStage(pendingStrategy)
+    : null;
   return (
     <>
     <Table className="table-fixed min-w-[1600px]">

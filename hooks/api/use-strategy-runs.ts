@@ -23,3 +23,26 @@ export function useStrategyRuns(strategyId: string | undefined) {
         .sort((a, b) => (a.created_at < b.created_at ? 1 : -1)),
   });
 }
+
+/**
+ * Every caller-visible run grouped by strategy — for screens that need runs for a whole list at
+ * once (the Strategy List's stage badges and promotion gates).
+ *
+ * Shares the single cache entry above, so adding this to a page costs no extra request.
+ */
+export function useRunsByStrategy() {
+  return useQuery({
+    queryKey: ["strategy-runs"],
+    queryFn: async (): Promise<Run[]> => (USE_MOCK ? [] : fetchRuns()),
+    select: (runs) => {
+      const byStrategy = new Map<string, Run[]>();
+      for (const r of runs) {
+        if (!r.strategy_id) continue;
+        const list = byStrategy.get(r.strategy_id);
+        if (list) list.push(r);
+        else byStrategy.set(r.strategy_id, [r]);
+      }
+      return byStrategy;
+    },
+  });
+}

@@ -37,7 +37,7 @@ import { downloadTradeHistoryCsv } from "@/lib/trade-history-csv";
 import { TradeHistoryExportButton } from "@/components/trade-history-export-button";
 import { PromoteStageDialog } from "../create-strategy/promote-stage-dialog";
 import { useHftStrategies } from "@/hooks/api/use-hft-strategies";
-import { strategyStage } from "@/components/strategy-stage";
+import { nextPromotionStage } from "@/components/strategy-stage";
 import type { PromotionStage } from "@/types/domain";
 import { useAuth } from "@/hooks/use-auth";
 import { useConsoleLog } from "@/store/console-log-store";
@@ -740,9 +740,9 @@ function RunDetailBody({
   // promotion without a version-matching paper one.
   const { data: allStrategies = [] } = useHftStrategies();
   const panelStrategy = run.strategyId ? allStrategies.find((s) => s.id === run.strategyId) : undefined;
-  const panelStage = panelStrategy ? strategyStage(panelStrategy).stage : null;
-  const panelNextStage: PromotionStage | null =
-    panelStage === "live" ? null : panelStage === "paper" ? "live" : panelStage ? "paper" : null;
+  const panelNextStage: PromotionStage | null = panelStrategy
+    ? nextPromotionStage(panelStrategy)
+    : null;
   const router = useRouter();
   const { isAdmin } = useAuth();
   const visibleTabs = tabsFor(run.mode);

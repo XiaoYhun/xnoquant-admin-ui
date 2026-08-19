@@ -16,7 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useStrategyRuns } from "@/hooks/api/use-strategy-runs";
+import { useRunsByStrategy } from "@/hooks/api/use-strategy-runs";
 import { useUserRoster, userLabelMap } from "@/hooks/api/use-users";
 import { useDebounced } from "@/hooks/use-debounced";
 import { resourceErrorMessage } from "@/lib/api-client";
@@ -25,7 +25,7 @@ import { cn, idQueryNeedle, isIdQuery } from "@/lib/utils";
 import { StrategyStageBadge, strategyStage, nextPromotionStage, launchMode, PROMOTE_PILL, PAPER_RUN_SUCCEEDED } from "@/components/strategy-stage";
 import { PromoteStageDialog } from "../create-strategy/promote-stage-dialog";
 import { SimulateModal, HFT_TYPE_LABEL } from "../create-strategy/simulate-modal";
-import type { PromotionStage, Strategy, StrategyPromotion } from "@/types/domain";
+import type { PromotionStage, Run, Strategy, StrategyPromotion } from "@/types/domain";
 
 // Admin console for the promotion ladder — every strategy in one table with its owner, version and
 // stage, plus the two actions an admin needs: move it up a rung, or launch it at the stage it has
@@ -89,9 +89,16 @@ function demotableStage(s: Strategy): PromotionStage | null {
 // `completed` alone: a paper run tails a live feed and never completes on its own — every paper
 // run on dev is `stopped` or `running` — so demanding `completed` would disable this forever.
 // `running` is excluded on purpose: stop it, review the result, then promote.
-function PromoteCell({ strategy, onPromote }: { strategy: Strategy; onPromote: () => void }) {
+function PromoteCell({
+  strategy,
+  runs,
+  onPromote,
+}: {
+  strategy: Strategy;
+  runs: Run[];
+  onPromote: () => void;
+}) {
   const next = nextPromotionStage(strategy);
-  const { data: runs = [] } = useStrategyRuns(next ? strategy.id : undefined);
   if (!next) return null;
 
   const atThisVersion = (r: (typeof runs)[number]) => r.manifest?.strategy?.version === strategy.version;
@@ -129,6 +136,7 @@ export default function Page() {
   const { isAdmin } = useAuth();
   const { data: strategies = [], isPending, isError, error } = useHftStrategies();
   const { data: roster = [] } = useUserRoster();
+  const { data: runsOf = new Map<string, Run[]>() } = useRunsByStrategy();
   // The note an admin typed when promoting lives on the promotion record, not on Strategy, so
   // both baskets are read and keyed by strategy. This is also the only place the PAPER basket is
   // consumed — Alpha pool only ever shows live.
@@ -161,10 +169,10 @@ export default function Page() {
     return strategies.filter((s) => {
       // An id-looking entry matches the strategy id; anything else is a name search.
       const matchesSearch = !q || (isIdQuery(debouncedSearch) ? s.id.toLowerCase().includes(needle) : s.name.toLowerCase().includes(q));
-      const matchesStage = stageFilter === "all" || strategyStage(s).stage === stageFilter;
+      const matchesStage = stageFilter === "all" || strategyStage(s, runsOf.get(s.id)).rung === stageFilter;
       return matchesSearch && matchesStage;
     });
-  }, [strategies, debouncedSearch, stageFilter]);
+  }, [strategies, debouncedSearch, stageFilter, runsOf]);
 
   // The whole page is admin-only: /api/users 403s for anyone else, and promotion is the point.
   if (!isAdmin) {
@@ -226,9 +234,9 @@ export default function Page() {
               </TableHeader>
               <TableBody>
                 {rows.map((s) => {
-                  const stage = strategyStage(s);
+                  const stage = strategyStage(s, runsOf.get(s.id));
                   // Whichever promotion is current is the one worth dating.
-                  const promotedAt = stage.stage === "live" ? s.live_promoted_at : stage.stage === "paper" ? s.paper_promoted_at : null;
+                  const promotedAt = stage.rung === "live" ? s.live_promoted_at : stage.rung === "paper" ? s.paper_promoted_at : null;
                   const promotion = promotionOf.get(s.id);
                   return (
                     <TableRow key={s.id}>
@@ -241,7 +249,7 @@ export default function Page() {
                       {/* Reuse the same labels the Simulate modal shows, rather than a CSS capitalize. */}
                       <TableCell className="text-xs text-white">{HFT_TYPE_LABEL[s.strategy_type] ?? s.strategy_type}</TableCell>
                       <TableCell>
-                        <StrategyStageBadge strategy={s} showVersion={false} />
+                        <StrategyStageBadge strategy={s} runs={runsOf.get(s.id)} showVersion={false} />
                       </TableCell>
                       <TableCell className="text-xs text-white">v{s.version}</TableCell>
                       <TableCell className={cn("text-xs", promotedAt ? "text-white" : "text-muted-foreground")}>
@@ -277,7 +285,7 @@ export default function Page() {
                               <TooltipContent>Remove the {demotableStage(s)} promotion</TooltipContent>
                             </Tooltip>
                           )}
-                          <PromoteCell strategy={s} onPromote={() => setPromoting(s)} />
+                          <PromoteCell strategy={s} runs={runsOf.get(s.id) ?? []} onPromote={() => setPromoting(s)} />
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <button

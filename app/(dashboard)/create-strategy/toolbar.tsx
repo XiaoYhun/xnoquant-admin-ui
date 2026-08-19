@@ -444,7 +444,10 @@ export function Toolbar({
   //            wants a paper promotion; approval to paper-trade isn't evidence of having done it)
   // Paper runs never reach `completed` — they tail a live feed until stopped — so `stopped`
   // counts. Fetched only when it could matter: an admin on an HFT strategy with a rung left.
-  const { data: strategyRuns = [] } = useStrategyRuns(isAdmin && type === "hft" && nextStage ? id : undefined);
+  // Fetched for every HFT strategy, not just promotable ones an admin is looking at: the stage
+  // badge needs runs to tell "Live trading" from "Live trade promoted", and the promotion gates
+  // below need them too. One shared cache entry, so the two uses cost a single request.
+  const { data: strategyRuns = [] } = useStrategyRuns(type === "hft" ? id : undefined);
   const atThisVersion = (r: (typeof strategyRuns)[number]) =>
     !!hftStrategy && r.manifest?.strategy?.version === hftStrategy.version;
   const promoteBlockedReason = !nextStage
@@ -501,7 +504,7 @@ export function Toolbar({
         {/* The HFT/MFT badge that lived here is gone — the lab is already obvious from the
             sidebar toggle. Its place shows where the strategy sits on the promotion ladder and
             which version that refers to, which is what governs whether it can launch. */}
-        {hftStrategy && <StrategyStageBadge strategy={hftStrategy} />}
+        {hftStrategy && <StrategyStageBadge strategy={hftStrategy} runs={strategyRuns} />}
       </div>
 
       <div className="flex shrink-0 items-center gap-2">

@@ -24,7 +24,7 @@ import { resourceErrorMessage } from "@/lib/api-client";
 import { cn, formatPercent } from "@/lib/utils";
 import { LiveRunsTable } from "./live-runs-table";
 import { OrderbookPanel } from "./orderbook-panel";
-import { MarketTabs, matchesMarket, marketFromParam, type Market } from "@/components/market-tabs";
+import { MarketTabs, marketFromParam, marketOf, matchesMarket, type Market } from "@/components/market-tabs";
 import { useOrderbookSymbols } from "@/hooks/api/use-orderbook-symbols";
 import { RunDetailInline } from "../../paper-trading/run-detail-panel";
 
@@ -131,6 +131,20 @@ function LiveTrade() {
   }, [runs, market]);
 
   const selectedRun = runs.find((r) => r.id === selectedId) ?? null;
+
+  // A deep link should land on its own tab: `?run=` alone would otherwise open the panel over
+  // whichever market happens to be default, with the row invisible in the table behind it.
+  // Compared during render (not synced in an effect, per react-hooks/set-state-in-effect) and
+  // keyed on the run id, so it aligns once — the user can still switch tabs with the panel open.
+  const [alignedRunId, setAlignedRunId] = useState<string | null>(null);
+  if (selectedRun && alignedRunId !== selectedRun.id) {
+    setAlignedRunId(selectedRun.id);
+    const runMarket = marketOf(selectedRun);
+    if (runMarket && runMarket !== market) {
+      setMarket(runMarket);
+      setPage(1);
+    }
+  }
 
   const filtered = useMemo(
     () =>

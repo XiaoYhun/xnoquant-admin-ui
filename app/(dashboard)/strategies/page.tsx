@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useBacktestRuns } from "@/hooks/api/use-backtest-runs";
 import { useDebounced } from "@/hooks/use-debounced";
 import { useUrlParam } from "@/hooks/use-url-param";
-import { MarketTabs, matchesMarket, DEFAULT_MARKET, type Market } from "@/components/market-tabs";
+import { DEFAULT_MARKET, MarketTabs, marketOf, matchesMarket, type Market } from "@/components/market-tabs";
 import { resourceErrorMessage } from "@/lib/api-client";
 import { BacktestRunsTable } from "./backtest-runs-table";
 import { RunDetailPanel } from "../paper-trading/run-detail-panel";
@@ -77,6 +77,20 @@ function Backtesting() {
   const currentPage = Math.min(page, pageCount);
   const pageRows = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
   const selectedRun = runs.find((r) => r.id === selectedId) ?? null;
+
+  // A deep link should land on its own tab: `?run=` alone would otherwise open the panel over
+  // whichever market happens to be default, with the row invisible in the table behind it.
+  // Compared during render (not synced in an effect, per react-hooks/set-state-in-effect) and
+  // keyed on the run id, so it aligns once — the user can still switch tabs with the panel open.
+  const [alignedRunId, setAlignedRunId] = useState<string | null>(null);
+  if (selectedRun && alignedRunId !== selectedRun.id) {
+    setAlignedRunId(selectedRun.id);
+    const runMarket = marketOf(selectedRun);
+    if (runMarket && runMarket !== market) {
+      setMarket(runMarket);
+      setPage(1);
+    }
+  }
 
   return (
     <main className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4 bg-surface">

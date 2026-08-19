@@ -86,6 +86,20 @@ function AlphaPool() {
 
   const selectedRun = rows.find(({ run }) => run?.id === selectedId)?.run ?? null;
 
+  // A deep link should land on its own tab: `?run=` alone would otherwise open the panel over
+  // whichever market happens to be default, with the row invisible in the table behind it.
+  // Compared during render (not synced in an effect, per react-hooks/set-state-in-effect) and
+  // keyed on the run id, so it aligns once — the user can still switch tabs with the panel open.
+  const [alignedRunId, setAlignedRunId] = useState<string | null>(null);
+  if (selectedRun && alignedRunId !== selectedRun.id) {
+    setAlignedRunId(selectedRun.id);
+    const runMarket = marketOf(selectedRun);
+    if (runMarket && runMarket !== market) {
+      setMarket(runMarket);
+      setPage(1);
+    }
+  }
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return rows.filter(({ member, run }) => {

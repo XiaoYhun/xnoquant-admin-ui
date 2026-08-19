@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatCurrency, formatPercent, formatCompact, formatAmount, formatSignedAmount } from "./utils";
+import { formatCurrency, formatPercent, formatCompact, formatAmount, formatSignedAmount, isIdQuery, idQueryNeedle } from "./utils";
 
 describe("formatters", () => {
   it("formats VND currency without decimals", () => {
@@ -35,5 +35,22 @@ describe("formatAmount negative zero", () => {
     expect(formatAmount(-0)).toBe("0.00");
     expect(formatAmount(-0.0001, 1)).toBe("0.0");
     expect(formatSignedAmount(-0)).toBe("0.00");
+  });
+});
+
+describe("isIdQuery", () => {
+  it("recognises a pasted uuid and the table's short form", () => {
+    expect(isIdQuery("019ff517-5293-74b4-a21c-33c4b6be5ef1")).toBe(true);
+    expect(isIdQuery("#019ff517-5293")).toBe(true);
+    expect(isIdQuery("019ff517")).toBe(true);
+  });
+  it("leaves real names to the server's name search", () => {
+    // "dochian-BO" has non-hex letters; "abc" is too short to risk hijacking.
+    expect(isIdQuery("dochian-BO")).toBe(false);
+    expect(isIdQuery("abc")).toBe(false);
+    expect(isIdQuery("")).toBe(false);
+  });
+  it("normalises the needle for comparison", () => {
+    expect(idQueryNeedle("#019FF517-5293")).toBe("019ff517-5293");
   });
 });

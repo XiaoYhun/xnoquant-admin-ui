@@ -22,6 +22,7 @@ import { useRuns } from "@/hooks/api/use-runs";
 import { useUrlParam } from "@/hooks/use-url-param";
 import { toPaperRunRow } from "@/lib/transform/runs";
 import { resourceErrorMessage } from "@/lib/api-client";
+import { idQueryNeedle } from "@/lib/utils";
 import { AlphaPoolTable } from "./alpha-pool-table";
 import { MarketTabs, matchesMarket, marketFromParam, marketOf, type Market } from "@/components/market-tabs";
 import { RunDetailPanel } from "../../paper-trading/run-detail-panel";
@@ -104,7 +105,7 @@ function AlphaPool() {
     const q = search.trim().toLowerCase();
     return rows.filter(({ member, run }) => {
       const matchesSearch =
-        !q || member.strategy_name.toLowerCase().includes(q) || (run?.id.toLowerCase().includes(q) ?? false);
+        !q || member.strategy_name.toLowerCase().includes(q) || (run?.id.toLowerCase().includes(idQueryNeedle(search)) ?? false);
       const matchesStatus = statusFilter === "all" || run?.status === statusFilter;
       const matchesSymbol = symbolFilter === "all" || (run?.symbols.some((s) => s.symbol === symbolFilter) ?? false);
       // A member promoted without a source run has no market to attribute it to — keep it

@@ -12,6 +12,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useBacktestRuns } from "@/hooks/api/use-backtest-runs";
 import { useDebounced } from "@/hooks/use-debounced";
+import { idQueryNeedle, isIdQuery } from "@/lib/utils";
 import { useUrlParam } from "@/hooks/use-url-param";
 import { DEFAULT_MARKET, MarketTabs, marketOf, matchesMarket, type Market } from "@/components/market-tabs";
 import { resourceErrorMessage } from "@/lib/api-client";
@@ -51,8 +52,12 @@ function Backtesting() {
   // Search and status are served by `GET /api/runs` (`q`, `status`); market, symbol and paging
   // stay client-side — the API filters on none of those.
   const debouncedSearch = useDebounced(search.trim());
+  const idSearch = isIdQuery(debouncedSearch);
+  const idNeedle = idQueryNeedle(debouncedSearch);
   const { data: runs = [], isLoading, isError, error } = useBacktestRuns({
-    q: debouncedSearch || undefined,
+    // `q` is a strategy-NAME search server-side, so an id would return nothing — it is
+    // withheld here and matched against run ids client-side below.
+    q: idSearch ? undefined : debouncedSearch || undefined,
     status: status === "all" ? undefined : status,
   });
 
@@ -68,9 +73,11 @@ function Backtesting() {
   const filtered = useMemo(
     () =>
       runs.filter(
-        (r) => (symbol === "all" || r.symbols.some((s) => s.symbol === symbol)) && matchesMarket(r, market),
+        (r) =>
+          (!idSearch || r.id.toLowerCase().includes(idNeedle)) &&
+          (symbol === "all" || r.symbols.some((s) => s.symbol === symbol)) && matchesMarket(r, market),
       ),
-    [runs, symbol, market],
+    [runs, symbol, market, idSearch, idNeedle],
   );
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
@@ -110,7 +117,7 @@ function Backtesting() {
               setSearch(e.target.value);
               setPage(1);
             }}
-            placeholder="Search by strategy name..."
+            placeholder="Search by name or ID..."
             className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
           />
           <MinimalisticMagnifer size={20} weight="Outline" className="shrink-0 text-muted-foreground" />

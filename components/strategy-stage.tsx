@@ -34,13 +34,20 @@ const STAGE_STYLE: Record<StrategyStage, { dot: string; text: string }> = {
   live: { dot: "bg-[#67e1c1] shadow-[0_0_6px_1px_rgba(103,225,193,0.5)]", text: "text-[#67e1c1]" },
 };
 
-/** `● Paper running · v4` — the strategy's ladder position and the version it's on. */
+/**
+ * `● Paper running · v4` — the strategy's ladder position and the version it's on.
+ *
+ * `showVersion` is off wherever the version already has its own column; repeating it inside the
+ * badge just doubles it on the same row.
+ */
 export function StrategyStageBadge({
   strategy,
   className,
+  showVersion = true,
 }: {
   strategy: Pick<Strategy, "version" | "paper_approved_version" | "live_approved_version">;
   className?: string;
+  showVersion?: boolean;
 }) {
   const { stage, label, stale } = strategyStage(strategy);
   const style = STAGE_STYLE[stage];
@@ -56,8 +63,12 @@ export function StrategyStageBadge({
       <span className={cn("size-2 shrink-0 rounded-full", style.dot)} />
       <span className={style.text}>{label}</span>
       {stale && <span className="text-[#f1c617]">(stale)</span>}
-      <span className="text-[#475467]">·</span>
-      <span className="text-[#9db2ce]">v{strategy.version}</span>
+      {showVersion && (
+        <>
+          <span className="text-[#475467]">·</span>
+          <span className="text-[#9db2ce]">v{strategy.version}</span>
+        </>
+      )}
     </span>
   );
 }

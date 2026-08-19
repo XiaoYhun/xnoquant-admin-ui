@@ -1,5 +1,6 @@
 "use client";
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { MinimalisticMagnifer, SkipNext } from "@solar-icons/react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -10,7 +11,7 @@ import { useUserRoster, userLabelMap } from "@/hooks/api/use-users";
 import { useDebounced } from "@/hooks/use-debounced";
 import { resourceErrorMessage } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
-import { cn } from "@/lib/utils";
+import { cn, idQueryNeedle, isIdQuery } from "@/lib/utils";
 import { StrategyStageBadge, strategyStage } from "@/components/strategy-stage";
 import { PromoteStageDialog } from "../create-strategy/promote-stage-dialog";
 import { SimulateModal } from "../create-strategy/simulate-modal";
@@ -31,11 +32,20 @@ const COLS = [
   { key: "name", label: "Strategy", w: "24%", align: "left" },
   { key: "owner", label: "Owner", w: "16%", align: "left" },
   { key: "type", label: "Type", w: "10%", align: "left" },
-  { key: "version", label: "Version", w: "8%", align: "right" },
   { key: "stage", label: "Stage", w: "18%", align: "left" },
+  { key: "version", label: "Version", w: "8%", align: "right" },
   { key: "promoted", label: "Promoted", w: "12%", align: "left" },
   { key: "actions", label: "", w: "12%", align: "right" },
 ] as const;
+
+// Each mode has its own list screen; `?run=` opens that run's side panel on arrival (see
+// hooks/use-url-param.ts). Launching from here would otherwise leave the admin on a table that
+// never shows the run they just started.
+const LIST_PAGE: Record<string, string> = {
+  backtest: "/strategies",
+  paper: "/paper-trading",
+  live: "/live-trading/live-trade",
+};
 
 const pad = (n: number) => String(n).padStart(2, "0");
 function formatWhen(iso: string | null | undefined): string {
@@ -82,6 +92,7 @@ function PromoteCell({ strategy, onPromote }: { strategy: Strategy; onPromote: (
 }
 
 export default function Page() {
+  const router = useRouter();
   const { isAdmin } = useAuth();
   const { data: strategies = [], isPending, isError, error } = useHftStrategies();
   const { data: roster = [] } = useUserRoster();
@@ -99,8 +110,10 @@ export default function Page() {
 
   const rows = useMemo(() => {
     const q = debouncedSearch.toLowerCase();
+    const needle = idQueryNeedle(debouncedSearch);
     return strategies.filter((s) => {
-      const matchesSearch = !q || s.name.toLowerCase().includes(q);
+      // An id-looking entry matches the strategy id; anything else is a name search.
+      const matchesSearch = !q || (isIdQuery(debouncedSearch) ? s.id.toLowerCase().includes(needle) : s.name.toLowerCase().includes(q));
       const matchesStage = stageFilter === "all" || strategyStage(s).stage === stageFilter;
       return matchesSearch && matchesStage;
     });
@@ -122,7 +135,7 @@ export default function Page() {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by strategy name..."
+            placeholder="Search by name or ID..."
             className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
           />
           <MinimalisticMagnifer size={20} weight="Outline" className="shrink-0 text-muted-foreground" />
@@ -142,10 +155,6 @@ export default function Page() {
       </div>
 
       <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-background">
-        <header className="flex shrink-0 items-center gap-2 border-b border-border bg-secondary px-4 py-3">
-          <h2 className="text-sm font-semibold text-foreground">All strategies</h2>
-          <span className="text-sm font-medium text-foreground">&bull; {rows.length}</span>
-        </header>
         <div className="flex min-h-0 flex-1 flex-col overflow-auto">
           {isError ? (
             <p className="p-4 text-sm text-destructive">{resourceErrorMessage(error, "strategies")}</p>
@@ -182,10 +191,10 @@ export default function Page() {
                         {owners.get(s.owner_id) ?? <span className="text-muted-foreground">{s.owner_id.slice(0, 8)}…</span>}
                       </TableCell>
                       <TableCell className="text-xs text-white">{s.strategy_type}</TableCell>
-                      <TableCell className="text-right text-xs text-white">v{s.version}</TableCell>
                       <TableCell>
-                        <StrategyStageBadge strategy={s} />
+                        <StrategyStageBadge strategy={s} showVersion={false} />
                       </TableCell>
+                      <TableCell className="text-right text-xs text-white">v{s.version}</TableCell>
                       <TableCell className={cn("text-xs", promotedAt ? "text-white" : "text-muted-foreground")}>
                         {formatWhen(promotedAt)}
                       </TableCell>
@@ -240,6 +249,11 @@ export default function Page() {
           onHftMarketChange={setHftMarket}
           hftInterval={hftInterval}
           onHftIntervalChange={setHftInterval}
+          onLaunched={(run) => {
+            setRunning(null);
+            const page = LIST_PAGE[run.mode];
+            if (page) router.push(`${page}?run=${run.id}`);
+          }}
         />
       )}
     </main>

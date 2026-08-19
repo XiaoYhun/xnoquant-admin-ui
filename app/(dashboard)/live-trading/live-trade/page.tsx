@@ -21,7 +21,7 @@ import { useLiveRuns } from "@/hooks/api/use-live-runs";
 import { useDebounced } from "@/hooks/use-debounced";
 import { useUrlParam } from "@/hooks/use-url-param";
 import { resourceErrorMessage } from "@/lib/api-client";
-import { cn, formatPercent } from "@/lib/utils";
+import { cn, formatPercent, idQueryNeedle, isIdQuery } from "@/lib/utils";
 import { LiveRunsTable } from "./live-runs-table";
 import { OrderbookPanel } from "./orderbook-panel";
 import { MarketTabs, marketFromParam, marketOf, matchesMarket, type Market } from "@/components/market-tabs";
@@ -107,8 +107,12 @@ function LiveTrade() {
   // Search and "Only Running" are served by `GET /api/runs` (`q`, `status`); market, symbol and
   // paging stay client-side — the API filters on neither market/symbol nor run mode.
   const debouncedSearch = useDebounced(search.trim());
+  const idSearch = isIdQuery(debouncedSearch);
+  const idNeedle = idQueryNeedle(debouncedSearch);
   const { data: runs = [], isLoading, isError, error } = useLiveRuns({
-    q: debouncedSearch || undefined,
+    // `q` is a strategy-NAME search server-side, so an id would return nothing — it is
+    // withheld here and matched against run ids client-side below.
+    q: idSearch ? undefined : debouncedSearch || undefined,
     status: onlyRunning ? "running" : undefined,
   });
   const [page, setPage] = useState(1);
@@ -150,10 +154,11 @@ function LiveTrade() {
     () =>
       runs.filter(
         (r) =>
+          (!idSearch || r.id.toLowerCase().includes(idNeedle)) &&
           (symbolFilter === "all" || r.symbols.some((s) => s.symbol === symbolFilter)) &&
           matchesMarket(r, market),
       ),
-    [runs, symbolFilter, market],
+    [runs, symbolFilter, market, idSearch, idNeedle],
   );
 
   // Headline numbers describe the current market tab, not the search/status narrowing.
@@ -196,7 +201,7 @@ function LiveTrade() {
               setSearch(e.target.value);
               resetPage();
             }}
-            placeholder="Search by strategy name..."
+            placeholder="Search by name or ID..."
             className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
           />
           <MinimalisticMagnifer size={20} weight="Outline" className="shrink-0 text-muted-foreground" />

@@ -55,3 +55,24 @@ export function formatAmount(n: number, digits = 2): string {
 export function formatSignedAmount(n: number, digits = 2): string {
   return `${n > 0 ? "+" : ""}${formatAmount(n, digits)}`;
 }
+
+/**
+ * Does this search entry look like an id rather than a name?
+ *
+ * The run tables show ids as `#019ff517-5293` (the first two uuid groups), and users paste either
+ * that or a full uuid. It matters because `GET /api/runs?q=` searches the strategy NAME only —
+ * sending an id there returns nothing — so callers must keep the term off the server and match it
+ * against ids client-side instead.
+ *
+ * Four hex characters is the shortest fragment worth treating as an id; below that a name like
+ * "abc" would be misread and its server-side search silently skipped.
+ */
+export function isIdQuery(query: string): boolean {
+  const s = query.trim().replace(/^#/, "");
+  return s.length >= 4 && /^[0-9a-f]+(-[0-9a-f]+)*$/i.test(s);
+}
+
+/** The comparable form of an id search — `#019FF517` and `019ff517` are the same needle. */
+export function idQueryNeedle(query: string): string {
+  return query.trim().replace(/^#/, "").toLowerCase();
+}

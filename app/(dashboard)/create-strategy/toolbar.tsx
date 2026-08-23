@@ -1,7 +1,7 @@
 "use client";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Settings, Copy, CheckCircle, SkipNext, AltArrowDown } from "@solar-icons/react";
+import { Settings, Copy, CheckCircle, SkipNext, AltArrowDown, Bolt } from "@solar-icons/react";
 import type { ComponentType } from "react";
 import type { IconProps } from "@solar-icons/react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -18,7 +18,8 @@ import { useUpdateEditor } from "@/hooks/api/use-strategy-builder";
 import { useStrategyRuns } from "@/hooks/api/use-strategy-runs";
 import { useHftStrategy, useUpdateHftStrategy, type HftStrategyType } from "@/hooks/api/use-hft-strategies";
 import { useConsoleLog } from "@/store/console-log-store";
-import { StrategyStageBadge, nextPromotionStage, launchMode, PROMOTE_PILL, PAPER_RUN_SUCCEEDED } from "@/components/strategy-stage";
+import { StrategyStageBadge, nextPromotionStage, launchMode, PAPER_RUN_SUCCEEDED } from "@/components/strategy-stage";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PromoteStageDialog } from "./promote-stage-dialog";
 import type { PromotionStage } from "@/types/domain";
 import type { Run } from "@/types/domain";
@@ -460,6 +461,17 @@ export function Toolbar({
         ? undefined
         : `No finished paper run at v${hftStrategy?.version ?? "?"} — paper-trade this version first.`;
 
+  // An HFT strategy has no symbol field of its own — the symbols are a launch-time choice that
+  // only becomes a fact on a run. So the header names what this strategy actually trades: the
+  // symbols of its most recent run, read off the manifest `strategyRuns` is already fetching.
+  // Nothing to show before the first run, which is honest — there is no symbol yet.
+  const symbolLabel = useMemo(() => {
+    const newest = strategyRuns[0];
+    const names = [...new Set((newest?.manifest?.symbols ?? []).map((s) => s.symbol).filter(Boolean))];
+    if (names.length === 0) return undefined;
+    return names.length === 1 ? names[0] : `${names[0]} +${names.length - 1}`;
+  }, [strategyRuns]);
+
   // Shown on the Settings trigger: HFT reads market + strategy type, MFT market + universe.
   const pillItems =
     type === "hft"
@@ -504,6 +516,11 @@ export function Toolbar({
         {/* The HFT/MFT badge that lived here is gone — the lab is already obvious from the
             sidebar toggle. Its place shows where the strategy sits on the promotion ladder and
             which version that refers to, which is what governs whether it can launch. */}
+        {symbolLabel && (
+          <span className="shrink-0 rounded-md bg-background px-2 py-0.5 text-xs font-semibold text-white" title="Symbols from the most recent run">
+            {symbolLabel}
+          </span>
+        )}
         {hftStrategy && <StrategyStageBadge strategy={hftStrategy} runs={strategyRuns} />}
       </div>
 
@@ -537,18 +554,22 @@ export function Toolbar({
             {/* Promotion is admin-only (POST /api/promotions/{stage}/{strategy_id}) and only
                 meaningful for HFT strategies, which are the ones the ladder governs. */}
             {isAdmin && type === "hft" && nextStage && (
-              <button
-                type="button"
-                onClick={() => setPromoteOpen(true)}
-                disabled={!!promoteBlockedReason}
-                title={promoteBlockedReason}
-                className={cn(
-                  "inline-flex h-8 shrink-0 cursor-pointer items-center rounded-[32px] border px-3 text-xs font-medium transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40",
-                  PROMOTE_PILL[nextStage],
-                )}
-              >
-                Promote to {nextStage}
-              </button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={() => setPromoteOpen(true)}
+                    disabled={!!promoteBlockedReason}
+                    aria-label={`Promote to ${nextStage}`}
+                    className="group inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full border border-border bg-background transition-all hover:bg-[linear-gradient(135deg,#fffbd6_0%,#f1c617_100%)] active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-background"
+                  >
+                    <Bolt weight="Bold" className="size-4 text-[#f1c617] transition-colors group-enabled:group-hover:text-[#151a24]" />
+                  </button>
+                </TooltipTrigger>
+                {/* The blocked reason is the whole point of the tooltip when it is blocked — a
+                    disabled button has no `title`, and this is where the ladder rule gets read. */}
+                <TooltipContent>{promoteBlockedReason ?? `Promote to ${nextStage}`}</TooltipContent>
+              </Tooltip>
             )}
             <button
               type="button"

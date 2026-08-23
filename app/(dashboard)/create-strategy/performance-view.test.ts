@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import type { EChartsOption } from "echarts";
+import { toReturnHistogram } from "@/lib/transform/results";
 import {
   buildDistributionOption,
   buildSignedPnlOption,
@@ -60,10 +62,34 @@ describe("buildSignedPnlOption", () => {
 });
 
 describe("buildDistributionOption", () => {
+  const axis = (o: EChartsOption) => (o.xAxis as { data: string[] }).data.filter(Boolean);
+
+  it("ticks at round percents rather than wherever every third bar lands", () => {
+    // Daily returns spread to ~2.9%. The old extent/binCount split labelled -2.61%, -1.74%, … ;
+    // the design ticks whole percents, which is what a reader can actually place a bar against.
+    const bins = toReturnHistogram([-2.9, -1.1, -0.4, 0.2, 0.9, 2.4], 20);
+    expect(axis(buildDistributionOption(bins, true))).toEqual(["-3%", "-2%", "-1%", "0%", "1%", "2%"]);
+  });
+
+  it("keeps the ticks distinct when the bands are far below a percent", () => {
+    // A run against a large book moves fractions of a basis point a day. Rounding every tick to
+    // the same string is worse than a longer label.
+    const labels = axis(buildDistributionOption(toReturnHistogram([-0.0009, 0.0004], 20), true));
+    expect(new Set(labels).size).toBe(labels.length);
+  });
+
+  it("names the band, not its mid-point, in the tooltip", () => {
+    const bins = toReturnHistogram([-2.9, 0.9], 20);
+    const option = buildDistributionOption(bins, true);
+    const formatter = (option.tooltip as { formatter: (p: unknown) => string }).formatter;
+    expect(formatter([{ dataIndex: 0, value: 1 }])).toBe("-3.0% to -2.5%<br/>1 day");
+    expect(formatter([{ dataIndex: 0, value: 2 }])).toContain("2 days");
+  });
+
   it("uses the up-facing loss order, because a count never hangs below the axis", () => {
     const bins = [
-      { center: -1, count: 4 },
-      { center: 1, count: 9 },
+      { lower: -2, center: -1, count: 4 },
+      { lower: 0, center: 1, count: 9 },
     ];
     const option = buildDistributionOption(bins, true);
     // Reversed against a downward loss bar: pale at the tip, hot where it meets the baseline.

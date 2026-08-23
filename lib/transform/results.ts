@@ -15,7 +15,13 @@ export type DayPoint = { label: string; value: number };
 /** A day's net PnL with its timestamp retained (for month/weekday regrouping). */
 export type DatedPnl = { ts: number; value: number };
 export type MonthPnl = { year: number; /** 0-indexed, Jan = 0 */ month: number; value: number };
-export type HistogramBin = { /** Bin mid-point, in the same unit as the input values. */ center: number; count: number };
+export type HistogramBin = {
+  /** Inclusive lower edge, a round multiple of the bin width — what the axis labels. */
+  lower: number;
+  /** Bin mid-point, in the same unit as the input values. */
+  center: number;
+  count: number;
+};
 export type LinePoint = { ts: number; value: number };
 export type DrawdownPoint = {
   ts: number;
@@ -324,24 +330,53 @@ export function annualizedReturn(returnPct: number | null | undefined, spanMs: n
   return Number.isFinite(cagr) ? cagr : null;
 }
 
+const NICE_STEPS = [1, 2, 2.5, 5, 10];
+
 /**
- * Symmetric histogram of daily returns — Performance's "Daily Return Distribution". Bins span
- * ±max(|value|) so zero always falls on a bin edge and the two signs stay colourable as halves;
- * `binCount` is forced even for the same reason. Empty input yields no bins.
+ * Rounds a raw step up to the next 1 / 2 / 2.5 / 5 x 10^k.
+ *
+ * Exported because the axis has to pick label positions that are multiples of the bin width — the
+ * two have to agree or the labels drift off the bars.
+ */
+export function niceStep(raw: number): number {
+  if (!(raw > 0) || !Number.isFinite(raw)) return 1;
+  const pow = 10 ** Math.floor(Math.log10(raw));
+  const scaled = raw / pow;
+  return (NICE_STEPS.find((n) => scaled <= n + 1e-9) ?? 10) * pow;
+}
+
+/**
+ * Symmetric histogram of daily returns — Performance's "Daily Return Distribution": how many days
+ * landed in each band of return.
+ *
+ * Bands are ROUND: the width is snapped up to the next 1/2/2.5/5 x 10^k and the edges are laid on
+ * multiples of it from zero, so a band reads "-1.00% to -0.75%" and the axis ticks at whole
+ * percents. Dividing the extent by `binCount` instead — what this did before — put the edges
+ * wherever the single best day happened to fall, which is why the axis came out labelled -2.8%,
+ * -1.7%, … and looked nothing like the design.
+ *
+ * `binCount` is a TARGET, not a promise: the real count is whatever covers ±max(|value|) at the
+ * rounded width. Zero always falls on an edge and the count stays even, so the loss half is
+ * exactly the first `bins.length / 2` entries and stays colourable as one block. Bins are
+ * half-open — a flat day counts as non-negative. Empty input yields no bins.
  */
 export function toReturnHistogram(values: number[], binCount = 20): HistogramBin[] {
   const finite = values.filter((v) => Number.isFinite(v));
   if (finite.length === 0) return [];
-  const bins = binCount % 2 === 0 ? binCount : binCount + 1;
-  const extent = Math.max(...finite.map(Math.abs));
-  // A run whose days are all exactly flat has no spread to bin; put everything in the middle.
-  const width = (extent || 1) * 2 / bins;
+  const target = binCount % 2 === 0 ? binCount : binCount + 1;
+  // A run whose days are all exactly flat has no spread to bin; give it a nominal one.
+  const extent = Math.max(...finite.map(Math.abs)) || 1;
+  const width = niceStep((extent * 2) / target);
+  const half = Math.max(1, Math.ceil(extent / width - 1e-9));
+  const bins = half * 2;
+  const lowest = -half * width;
   const out: HistogramBin[] = Array.from({ length: bins }, (_, i) => ({
-    center: -extent + width * (i + 0.5),
+    lower: lowest + width * i,
+    center: lowest + width * (i + 0.5),
     count: 0,
   }));
   for (const v of finite) {
-    const idx = Math.min(bins - 1, Math.max(0, Math.floor((v + extent) / width)));
+    const idx = Math.min(bins - 1, Math.max(0, Math.floor((v - lowest) / width)));
     out[idx].count += 1;
   }
   return out;

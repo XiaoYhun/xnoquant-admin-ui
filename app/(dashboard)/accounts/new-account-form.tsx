@@ -1,5 +1,5 @@
 "use client";
-import { useForm, Controller } from "react-hook-form";
+import { useForm, Controller, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { PlusIcon } from "@/components/icons/plus";
@@ -9,12 +9,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useVenues } from "@/hooks/api/use-venues";
 import { useCreateAccount } from "@/hooks/api/use-accounts";
 import { resourceErrorMessage } from "@/lib/api-client";
+import {
+  RiskFeeFields,
+  riskFeeSchema,
+  RISK_FEE_DEFAULTS,
+  toFeeConfig,
+  toRiskConfig,
+  type RiskFeeValues,
+} from "./risk-fee-fields";
 
 const schema = z.object({
   name: z.string().min(1, "Name is required"),
   venue_id: z.string().min(1, "Select a venue"),
   api_key: z.string(),
   secret_key: z.string(),
+  ...riskFeeSchema,
 });
 type FormValues = z.infer<typeof schema>;
 
@@ -39,13 +48,20 @@ export function NewAccountForm() {
       venue_id: "",
       api_key: "",
       secret_key: "",
+      ...RISK_FEE_DEFAULTS,
     },
   });
+
+  // Which variant is selected decides which number fields exist.
+  const riskType = useWatch({ control, name: "riskType" });
+  const feeType = useWatch({ control, name: "feeType" });
 
   const onSubmit = handleSubmit((values) => {
     if (!values.api_key.trim()) setError("api_key", { message: "API key is required" });
     if (!values.secret_key.trim()) setError("secret_key", { message: "Secret key is required" });
     if (!values.api_key.trim() || !values.secret_key.trim()) return;
+    const riskConfig = toRiskConfig(values as RiskFeeValues);
+    const feeConfig = toFeeConfig(values as RiskFeeValues);
     createAccount.mutate(
       {
         name: values.name,
@@ -54,8 +70,12 @@ export function NewAccountForm() {
         account_type: "spot",
         api_key: values.api_key.trim(),
         secret_key: values.secret_key.trim(),
+        // Both are optional on NewAccount — omitted rather than half-filled, so the server keeps
+        // its own default instead of being handed a partial limit.
+        ...(riskConfig ? { risk: riskConfig } : {}),
+        ...(feeConfig ? { fee: feeConfig } : {}),
       },
-      { onSuccess: () => reset({ name: "", venue_id: "", api_key: "", secret_key: "" }) },
+      { onSuccess: () => reset({ name: "", venue_id: "", api_key: "", secret_key: "", ...RISK_FEE_DEFAULTS }) },
     );
   });
 
@@ -130,6 +150,14 @@ export function NewAccountForm() {
             />
             {errors.secret_key && <p className="text-xs text-destructive">{errors.secret_key.message}</p>}
           </div>
+          <RiskFeeFields
+            idPrefix="account"
+            fieldClass={fieldClass}
+            control={control as never}
+            register={register as never}
+            riskType={riskType}
+            feeType={feeType}
+          />
           {/* Capital: kept for design fidelity — the HFT Account/NewAccount schema has no capital
               field, so this value is never sent to the API (see docs/plans/api-integration.md). */}
           <div className="flex items-center justify-between">

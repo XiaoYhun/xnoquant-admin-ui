@@ -1,6 +1,6 @@
 "use client";
 import { useEffect } from "react";
-import { useForm, Controller } from "react-hook-form";
+import { useForm, Controller, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Label } from "@/components/ui/label";
@@ -19,12 +19,22 @@ import { useVenues } from "@/hooks/api/use-venues";
 import { useUpdateAccount } from "@/hooks/api/use-accounts";
 import { resourceErrorMessage } from "@/lib/api-client";
 import type { Account } from "@/types/domain";
+import {
+  RiskFeeFields,
+  riskFeeSchema,
+  RISK_FEE_DEFAULTS,
+  riskFeeValuesOf,
+  toFeeConfig,
+  toRiskConfig,
+  type RiskFeeValues,
+} from "./risk-fee-fields";
 
 const schema = z.object({
   name: z.string().min(1, "Name is required"),
   venue_id: z.string().min(1, "Select a venue"),
   api_key: z.string(),
   secret_key: z.string(),
+  ...riskFeeSchema,
 });
 type FormValues = z.infer<typeof schema>;
 
@@ -54,17 +64,30 @@ export function EditAccountModal({
       venue_id: account?.venue_id ?? "",
       api_key: "",
       secret_key: "",
+      ...(account ? riskFeeValuesOf(account) : RISK_FEE_DEFAULTS),
     },
   });
 
+  // Which variant is selected decides which number fields exist.
+  const riskType = useWatch({ control, name: "riskType" });
+  const feeType = useWatch({ control, name: "feeType" });
+
   useEffect(() => {
     if (account) {
-      reset({ name: account.name, venue_id: account.venue_id, api_key: "", secret_key: "" });
+      reset({
+        name: account.name,
+        venue_id: account.venue_id,
+        api_key: "",
+        secret_key: "",
+        ...riskFeeValuesOf(account),
+      });
     }
   }, [account, reset]);
 
   const onSubmit = handleSubmit((values) => {
     if (!account) return;
+    const riskConfig = toRiskConfig(values as RiskFeeValues);
+    const feeConfig = toFeeConfig(values as RiskFeeValues);
     updateAccount.mutate(
       {
         id: account.id,
@@ -73,6 +96,10 @@ export function EditAccountModal({
         account_type: account.account_type,
         ...(values.api_key.trim() ? { api_key: values.api_key.trim() } : {}),
         ...(values.secret_key.trim() ? { secret_key: values.secret_key.trim() } : {}),
+        // Both optional on UpdateAccount — a half-filled variant is left off so the account keeps
+        // whatever it already had rather than being overwritten with a partial limit.
+        ...(riskConfig ? { risk: riskConfig } : {}),
+        ...(feeConfig ? { fee: feeConfig } : {}),
       },
       { onSuccess: onClose },
     );
@@ -155,6 +182,14 @@ export function EditAccountModal({
               />
               {errors.secret_key && <p className="text-xs text-destructive">{errors.secret_key.message}</p>}
             </div>
+            <RiskFeeFields
+              idPrefix="edit-account"
+              fieldClass={fieldClass}
+              control={control as never}
+              register={register as never}
+              riskType={riskType}
+              feeType={feeType}
+            />
           </div>
           {updateAccount.isError && (
             <p className="text-xs text-destructive">{resourceErrorMessage(updateAccount.error, "this account")}</p>

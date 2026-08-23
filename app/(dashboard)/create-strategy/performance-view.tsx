@@ -25,6 +25,8 @@ import {
   toDailyPnlPoints,
   toMonthlyPnl,
   toReturnHistogram,
+  niceStep,
+  type HistogramBin,
   toWeekdayPnl,
   type DayPoint,
   type MonthPnl,
@@ -398,30 +400,46 @@ function WeeklyPerformancePanel({
 // Daily Return Distribution histogram
 // ---------------------------------------------------------------------------
 
-export function buildDistributionOption(
-  bins: { center: number; count: number }[],
-  isPct: boolean,
-): EChartsOption {
+export function buildDistributionOption(bins: HistogramBin[], isPct: boolean): EChartsOption {
   // Bins are symmetric around 0, so the first half is exactly the loss side.
   const negative = bins.length / 2;
-  // Bar labels stay integral — a "1,000,000.00" caption over a narrow bar is unreadable.
-  const label = (v: number) => (isPct ? `${formatAmount(v, 1)}%` : fmtSigned(v, 0));
+  const width = bins.length > 1 ? bins[1].lower - bins[0].lower : 0;
+  // Tick only at ROUND multiples of the band width — the design labels whole percents, not
+  // wherever every third bar happens to land. ~7 ticks reads well at this card size.
+  const major = niceStep(width * Math.max(1, Math.round(bins.length / 7)));
+  // Decimals are whatever it takes to tell ADJACENT values apart, and the axis only ever prints
+  // multiples of `major` — so it needs far fewer than a band does. Deriving both from the band
+  // width instead made axis labels long enough that ECharts dropped every one as overlapping,
+  // leaving the chart with no scale at all.
+  const dpFor = (step: number) => (step > 0 ? Math.min(6, Math.max(0, Math.ceil(-Math.log10(step)))) : 1);
+  const axisDp = dpFor(major);
+  const bandDp = dpFor(width);
+  const label = (v: number, dp: number) => (isPct ? `${formatAmount(v, dp)}%` : fmtSigned(v, 0));
+  const isTick = (b: HistogramBin) => Math.abs(b.lower / major - Math.round(b.lower / major)) < 1e-6;
   return {
     tooltip: {
       trigger: "axis",
-      // The category axis only labels every 3rd bin; the tooltip should still name the bin.
+      // Name the BAND, not its mid-point: a bar means "days that returned between these two",
+      // which is the whole idea of the chart.
       formatter: (params: unknown) => {
         const arr = params as { dataIndex: number; value: number }[];
         const p = arr[0];
         if (!p) return "";
-        return `${label(bins[p.dataIndex].center)}<br/>${p.value} day${p.value === 1 ? "" : "s"}`;
+        const b = bins[p.dataIndex];
+        const band =
+          width > 0 ? `${label(b.lower, bandDp)} to ${label(b.lower + width, bandDp)}` : label(b.center, bandDp);
+        return `${band}<br/>${p.value} day${p.value === 1 ? "" : "s"}`;
       },
     },
     grid: { left: 8, right: 8, top: 16, bottom: 8, containLabel: true },
     xAxis: {
       ...CATEGORY_AXIS,
-      // Label every 3rd bin so a 20-bin axis stays readable (matches the Figma cadence).
-      data: bins.map((b, i) => (i % 3 === 0 ? label(b.center) : "")),
+      data: bins.map((b) => (isTick(b) ? label(b.lower, axisDp) : "")),
+      // `interval: 0` because the tick positions are OURS: every other category is deliberately
+      // blank, and ECharts' auto-stride counts blanks as labels — it would pick a stride, land it
+      // on empty strings, and draw an axis with no scale at all. Blank entries cost no width, so
+      // forcing every category through leaves exactly the ticks chosen above.
+      axisLabel: { interval: 0 },
     },
     yAxis: { type: "value", minInterval: 1, axisLine: { show: false } },
     series: [
@@ -443,7 +461,7 @@ function DistributionPanel({
   isPct,
   note,
 }: {
-  bins: { center: number; count: number }[];
+  bins: HistogramBin[];
   isPct: boolean;
   note?: string;
 }) {

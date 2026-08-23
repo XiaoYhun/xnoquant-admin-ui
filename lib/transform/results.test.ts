@@ -7,6 +7,7 @@ import {
   toDrawdown,
   toMonthlyPnl,
   toReturnHistogram,
+  niceStep,
   toRollingSharpe,
 } from "./results";
 
@@ -160,6 +161,16 @@ describe("startingCapital", () => {
   });
 });
 
+describe("niceStep", () => {
+  it("rounds up to the next 1/2/2.5/5 x 10^k", () => {
+    expect([0.11, 0.3, 0.6, 1, 1.4, 2.2, 4, 7, 12].map(niceStep)).toEqual([0.2, 0.5, 1, 1, 2, 2.5, 5, 10, 20]);
+  });
+
+  it("falls back to 1 for a degenerate step", () => {
+    expect([0, -1, NaN, Infinity].map(niceStep)).toEqual([1, 1, 1, 1]);
+  });
+});
+
 describe("toReturnHistogram", () => {
   it("bins symmetrically around zero so the sign split lands on a bin edge", () => {
     const bins = toReturnHistogram([-2, -0.5, 0.5, 2], 4);
@@ -179,6 +190,31 @@ describe("toReturnHistogram", () => {
     const bins = toReturnHistogram([-1, 1], 3);
     expect(bins).toHaveLength(4);
     expect(bins[bins.length - 1].count).toBe(1); // +1 clamps into the last bin, not out of it
+  });
+
+  it("lays band edges on round multiples of a rounded width", () => {
+    // Daily returns in %, spread to ~2.9% — the extent/binCount split used to put edges at
+    // 2.9/10 = 0.29% and label the axis -2.61%, -1.74%, … Bands must read in round steps.
+    const bins = toReturnHistogram([-2.9, -1.1, -0.4, 0.2, 0.9, 2.4], 20);
+    const width = bins[1].lower - bins[0].lower;
+    expect(width).toBe(0.5);
+    // Every edge is a whole multiple of the width, and zero is one of them.
+    for (const b of bins) expect(Math.abs(b.lower / width - Math.round(b.lower / width))).toBeLessThan(1e-9);
+    expect(bins.map((b) => b.lower)).toContain(0);
+    // Still covers the extremes, still even, still split down the middle at zero.
+    expect(bins.length % 2).toBe(0);
+    expect(bins[0].lower).toBeLessThanOrEqual(-2.9);
+    expect(bins[bins.length - 1].lower + width).toBeGreaterThanOrEqual(2.4);
+    expect(bins.reduce((n, b) => n + b.count, 0)).toBe(6);
+  });
+
+  it("keeps the loss half exactly the first half of the bands", () => {
+    const bins = toReturnHistogram([-3, -0.1, 0, 0.1, 3], 20);
+    const half = bins.length / 2;
+    expect(bins[half].lower).toBe(0);
+    // Two losses below zero, three at-or-above it.
+    expect(bins.slice(0, half).reduce((n, b) => n + b.count, 0)).toBe(2);
+    expect(bins.slice(half).reduce((n, b) => n + b.count, 0)).toBe(3);
   });
 
   it("handles an all-flat series and empty input", () => {

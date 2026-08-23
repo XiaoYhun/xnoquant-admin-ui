@@ -2,156 +2,53 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuthStore } from "@/store/auth-store";
 import { USE_MOCK, HFT_API_URL } from "@/lib/constant";
+import { readTraceJournal, toTraceEvent, TraceHttpError, type TraceEvent } from "@/lib/trace-journal";
 
-// Trade-cycle console log for a run: `GET /api/runs/{id}/trace/history` (replay) and
-// `/trace/stream` (SSE, running paper/live runs only). BOTH responses are UNTYPED in the OpenAPI
-// spec (`content?: never`), so events are normalized defensively from whatever field names the
-// server uses. Backtests never journal a trace — the history is simply empty for them.
-
-export type TraceEvent = {
-  /** Epoch millis. The API sends `ts_ms` as a NUMBER — formatting is the view's job. */
-  at?: number;
-  /** Raw lifecycle stage as sent, e.g. "cycle_opened" / "order_submitted" / "order_filled". */
-  stage: string;
-  /** Server's own message, used as a fallback when a line can't be composed from the fields. */
-  detail?: string;
-  symbol?: string;
-  /** Index into the run manifest's ordered symbol list; the name is resolved by the view. */
-  symbolId?: number;
-  side?: string;
-  qty?: number;
-  price?: number;
-  /** Why the cycle opened, e.g. "signal" — rendered as the "(Signal)" suffix. */
-  reason?: string;
-  /** Groups events into one trade cycle. Sent as a NUMBER (`cycle_id`). */
-  cycleId?: string;
-  /** Correlates submit ↔ fill(s) for qty-weighted fill rate (`client_order_id`). */
-  clientOrderId?: string;
-};
-
-const str = (v: unknown): string | undefined => (typeof v === "string" && v.trim() ? v : undefined);
-const num = (v: unknown): number | undefined => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
-
-/** Timestamps arrive as epoch millis (`ts_ms`); tolerate an ISO string too. */
-function toEpochMs(r: Record<string, unknown>): number | undefined {
-  const n = num(r.ts_ms) ?? num(r.ts) ?? num(r.at) ?? num(r.timestamp);
-  if (n !== undefined) return n;
-  const iso = str(r.at) ?? str(r.ts) ?? str(r.time) ?? str(r.timestamp) ?? str(r.created_at);
-  if (!iso) return undefined;
-  const parsed = Date.parse(iso);
-  return Number.isNaN(parsed) ? undefined : parsed;
-}
-
-/** `cycle_id` is a number (often 0), so it can't go through the string helper. */
-function toIdString(v: unknown): string | undefined {
-  if (typeof v === "number" && Number.isFinite(v)) return String(v);
-  return str(v);
-}
-
-export function toTraceEvent(raw: unknown): TraceEvent | null {
-  if (!raw || typeof raw !== "object") return null;
-  const r = raw as Record<string, unknown>;
-  const stage = str(r.kind) ?? str(r.stage) ?? str(r.event) ?? str(r.status) ?? str(r.type) ?? str(r.message);
-  if (!stage) return null;
-  return {
-    at: toEpochMs(r),
-    stage,
-    detail: str(r.message) ?? str(r.detail) ?? str(r.description) ?? str(r.text),
-    symbol: str(r.symbol) ?? str(r.symbol_name) ?? str(r.instrument),
-    symbolId: num(r.symbol_id) ?? num(r.symbolId),
-    side: str(r.side) ?? str(r.direction),
-    qty: num(r.qty) ?? num(r.quantity) ?? num(r.size),
-    price: num(r.price) ?? num(r.fill_price) ?? num(r.avg_price),
-    reason: str(r.reason),
-    cycleId: toIdString(r.cycle_id) ?? toIdString(r.cycleId) ?? toIdString(r.trade_id) ?? toIdString(r.cycle),
-    clientOrderId:
-      str(r.client_order_id) ?? str(r.clientOrderId) ?? toIdString(r.client_order_id) ?? toIdString(r.clientOrderId),
-  };
-}
-
-export function normalizeTrace(raw: unknown): TraceEvent[] {
-  const list = Array.isArray(raw)
-    ? raw
-    : raw && typeof raw === "object" && Array.isArray((raw as { events?: unknown[] }).events)
-      ? (raw as { events: unknown[] }).events
-      : [];
-  return list.map(toTraceEvent).filter((e): e is TraceEvent => e !== null);
-}
-
-/**
- * Largest `trace/history` body worth downloading, in bytes.
- *
- * The endpoint takes no `page`/`limit` and always returns the run's ENTIRE journal as one JSON
- * array. A busy HFT run makes that enormous — a 12-minute dev run measured 201 MB / 696,078
- * events, and a 2-minute one 27 MB / 97,255. `res.json()` on that blocks the main thread for long
- * enough that the whole tab stops responding: the Results tab appears to hang the moment the
- * Execution view is opened, and any later click (switching back to Cost & Capacity, say) does
- * nothing because the thread is still parsing.
- *
- * 8 MB is roughly 25k events — far more than the console renders — and parses in well under a
- * frame budget's worth of jank. Anything larger is refused and reported, rather than silently
- * freezing the page. Remove this once the endpoint learns to paginate.
- *
- * Measured against the decompressed body, which is what `JSON.parse` has to chew through; the
- * wire is gzipped and roughly 20× smaller.
- */
-export const TRACE_HISTORY_MAX_BYTES = 8 * 1024 * 1024;
-
-/** Thrown when the journal is too large to load; the view renders this message verbatim. */
-export class TraceTooLargeError extends Error {
-  constructor(public bytes: number) {
-    const mb = (bytes / (1024 * 1024)).toFixed(0);
-    super(
-      `Trade-cycle log is too large to display (${mb} MB). The API returns the whole journal in ` +
-        `one response with no paging, so loading it would freeze the page.`,
-    );
-    this.name = "TraceTooLargeError";
-  }
-}
+// Trade-cycle console log for a run: `/api/runs/{id}/trace/history` (replay) and `/trace/stream`
+// (SSE, running paper/live runs only). Parsing lives in lib/trace-journal.ts because the route
+// handler shares it — see there for why the journal is streamed rather than JSON.parse'd.
+export {
+  toTraceEvent,
+  normalizeTrace,
+  JsonArrayScanner,
+  readTraceJournal,
+  TraceHttpError,
+  TRACE_HISTORY_MAX_BYTES,
+} from "@/lib/trace-journal";
+export type { TraceEvent, TraceHistory } from "@/lib/trace-journal";
 
 export function useRunTraceHistory(runId: string | undefined) {
   return useQuery({
     queryKey: ["run-trace", runId],
-    queryFn: async (): Promise<TraceEvent[]> => {
-      if (USE_MOCK) return [];
+    queryFn: async () => {
+      if (USE_MOCK) return { events: [], truncated: false };
       const token = useAuthStore.getState().accessToken;
+      // The route handler (not the blanket `/hft/:path*` rewrite) answers this path: it holds the
+      // parsed journal in the Next server's memory, so a repeat load skips both the multi-megabyte
+      // upstream transfer and the parse. Default `cache` — NOT "no-store" — so the browser keeps
+      // its copy and revalidates with `If-None-Match`, which is what makes a reload cheap.
       const res = await fetch(`${HFT_API_URL}/api/runs/${runId}/trace/history`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
-      if (!res.ok) throw new Error(`Trade-cycle log unavailable (${res.status})`);
-      // Read incrementally and abort the moment the cap is passed. `content-length` is NOT usable
-      // here — the API answers `transfer-encoding: chunked` with `content-encoding: gzip`, so no
-      // length is advertised and `res.text()` would happily buffer the whole 192 MB before any
-      // size check could run. `res.body` yields already-decompressed bytes, which is exactly the
-      // cost that matters, and cancelling the reader stops the transfer.
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error("Trade-cycle log unavailable (no response body)");
-      const chunks: Uint8Array[] = [];
-      let received = 0;
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        received += value.byteLength;
-        if (received > TRACE_HISTORY_MAX_BYTES) {
-          await reader.cancel();
-          throw new TraceTooLargeError(received);
-        }
-        chunks.push(value);
-      }
-      const buf = new Uint8Array(received);
-      let offset = 0;
-      for (const c of chunks) {
-        buf.set(c, offset);
-        offset += c.byteLength;
-      }
-      return normalizeTrace(JSON.parse(new TextDecoder().decode(buf)));
+      if (!res.ok) throw new TraceHttpError(res.status);
+      if (!res.body) throw new Error("Trade-cycle log unavailable (no response body)");
+      const history = await readTraceJournal(res.body);
+      // The handler already applied the size ceiling; its verdict wins over this hop's, which
+      // only ever sees the compact reply.
+      return { ...history, truncated: history.truncated || res.headers.get("X-Trace-Truncated") === "1" };
     },
     enabled: !!runId,
-    // Re-downloading a multi-megabyte journal on every remount is what made cycling the Results
-    // views so slow; it never changes for a terminal run, so cache it for the session.
-    staleTime: Infinity,
+    // Long enough that flipping between the panel's tabs is instant, short enough that opening the
+    // panel afresh re-checks. The refetch is cheap: the handler serves from its cache, and an
+    // unchanged journal comes back as a 304 the browser fills from its own.
+    staleTime: 5 * 60_000,
     gcTime: 10 * 60_000,
-    retry: false,
+    // `/trace/history` intermittently 503s on big journals (observed twice in a row on run
+    // 01a00f11 before the identical request succeeded). One blip used to leave the panel reading
+    // "unavailable" for the rest of the session, so retry the transient class — and only that:
+    // a 404 (a backtest, which never journals) is a real answer, not a blip.
+    retry: (count, err) => err instanceof TraceHttpError && err.status >= 500 && count < 2,
+    retryDelay: (count) => 500 * 2 ** count,
   });
 }
 

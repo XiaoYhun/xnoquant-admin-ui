@@ -1,6 +1,7 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AltArrowDown, Record } from "@solar-icons/react";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { cn } from "@/lib/utils";
 import { useRunTraceHistory, useRunTraceStream, type TraceEvent } from "@/hooks/api/use-run-trace";
 
@@ -73,8 +74,12 @@ type Cycle = { key: string; symbol?: string; symbolId?: number; side?: string; q
 // timeline still reads as discrete trades rather than one flat stream.
 function groupCycles(events: TraceEvent[]): Cycle[] {
   const cycles: Cycle[] = [];
+  // Keyed lookup rather than a linear `cycles.find` per event: a full journal groups into tens of
+  // thousands of cycles, and scanning them all for every one of ~100k events is quadratic — it
+  // froze the tab outright on run 01a00f11. Same grouping, just not O(events x cycles).
+  const byKey = new Map<string, Cycle>();
   for (const e of events) {
-    const existing = e.cycleId !== undefined ? cycles.find((c) => c.key === e.cycleId) : undefined;
+    const existing = e.cycleId !== undefined ? byKey.get(e.cycleId) : undefined;
     let target = existing;
     if (!target) {
       const last = cycles[cycles.length - 1];
@@ -83,6 +88,7 @@ function groupCycles(events: TraceEvent[]): Cycle[] {
       if (startsNew) {
         target = { key: e.cycleId ?? String(cycles.length), events: [] };
         cycles.push(target);
+        byKey.set(target.key, target);
       } else {
         target = last;
       }
@@ -109,8 +115,7 @@ function formatAt(ms?: number): { date?: string; time?: string } {
   };
 }
 
-function CycleRow({ cycle, symbols, defaultOpen }: { cycle: Cycle; symbols?: { symbol: string }[]; defaultOpen: boolean }) {
-  const [open, setOpen] = useState(defaultOpen);
+function CycleRow({ cycle, symbols }: { cycle: Cycle; symbols?: { symbol: string }[] }) {
   const { date, time } = formatAt(cycle.at);
   const closed = cycle.events.some((e) => isClosingStage(e.stage));
   const sell = isSell(cycle.side);
@@ -119,15 +124,13 @@ function CycleRow({ cycle, symbols, defaultOpen }: { cycle: Cycle; symbols?: { s
   const symbol = cycle.symbol ?? (cycle.symbolId !== undefined ? symbols?.[cycle.symbolId]?.symbol : undefined);
 
   return (
-    <div className="flex w-full flex-col items-start justify-center border-b border-[#1d2939]">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        className="flex h-[52px] w-full cursor-pointer items-center border-b border-[#1d2939] bg-[#151a24] text-left"
-      >
+    <AccordionItem value={cycle.key} className="flex flex-col items-start justify-center border-b border-[#1d2939]">
+      <AccordionTrigger className="group/cycle h-[52px] w-full border-b border-[#1d2939] bg-[#151a24]">
         <div className="flex min-w-0 flex-1 items-center gap-3 px-4 py-2.5">
-          <AltArrowDown weight="Outline" className={cn("size-6 shrink-0 text-white transition-transform", !open && "-rotate-90")} />
+          <AltArrowDown
+            weight="Outline"
+            className="size-6 shrink-0 text-white transition-transform group-data-[state=closed]/cycle:-rotate-90"
+          />
           {symbol && <span className="shrink-0 text-sm leading-5 font-semibold text-white">{symbol}</span>}
           {cycle.side && (
             <span className="flex shrink-0 items-center gap-2 text-sm leading-5 font-semibold">
@@ -155,41 +158,43 @@ function CycleRow({ cycle, symbols, defaultOpen }: { cycle: Cycle; symbols?: { s
             <span className={closed ? GRAD_GREEN : GRAD_BLUE}>{closed ? "Closed" : "Open"}</span>
           </span>
         </div>
-      </button>
+      </AccordionTrigger>
 
-      {open && (
-        <div className="relative flex w-full flex-col gap-2 p-4">
-          {/* One continuous rail behind the dots, drawn once so it doesn't break at the row gaps. */}
-          <span aria-hidden className="absolute top-4 bottom-4 left-7 w-px -translate-x-1/2 bg-[#1d2939]" />
-          {cycle.events.map((e, i) => {
-            const detail = detailLine(e);
-            return (
-              <div key={i} className="flex items-start">
-                {/* The dot lives inside its own row rather than at a fixed offset, so it stays
-                    pinned to its timestamp even when a detail line wraps. */}
-                <span className="relative w-6 shrink-0 self-stretch">
-                  <span className="absolute top-1.5 left-1/2 size-1.5 -translate-x-1/2 rounded-full" style={{ background: dotColor(e.stage) }} />
+      <AccordionContent className="relative flex w-full flex-col gap-2 p-4">
+        {/* One continuous rail behind the dots, drawn once so it doesn't break at the row gaps. */}
+        <span aria-hidden className="absolute top-4 bottom-4 left-7 w-px -translate-x-1/2 bg-[#1d2939]" />
+        {cycle.events.map((e, i) => {
+          const detail = detailLine(e);
+          return (
+            <div key={i} className="flex items-start">
+              {/* The dot lives inside its own row rather than at a fixed offset, so it stays
+                  pinned to its timestamp even when a detail line wraps. */}
+              <span className="relative w-6 shrink-0 self-stretch">
+                <span className="absolute top-1.5 left-1/2 size-1.5 -translate-x-1/2 rounded-full" style={{ background: dotColor(e.stage) }} />
+              </span>
+              <div className="flex min-w-0 flex-1 flex-col items-start justify-center">
+                <span className="text-xs leading-[18px] text-[#9db2ce]">{formatAt(e.at).time ?? ""}</span>
+                <span className="flex items-start gap-2">
+                  <span className="text-xs leading-[18px] font-medium whitespace-nowrap text-white">{stageLabel(e.stage)}</span>
+                  {detail && (
+                    <>
+                      <span className="mt-[9px] h-px w-2 shrink-0 bg-[#9db2ce]" />
+                      <span className="text-xs leading-[18px] text-[#9db2ce]">{detail}</span>
+                    </>
+                  )}
                 </span>
-                <div className="flex min-w-0 flex-1 flex-col items-start justify-center">
-                  <span className="text-xs leading-[18px] text-[#9db2ce]">{formatAt(e.at).time ?? ""}</span>
-                  <span className="flex items-start gap-2">
-                    <span className="text-xs leading-[18px] font-medium whitespace-nowrap text-white">{stageLabel(e.stage)}</span>
-                    {detail && (
-                      <>
-                        <span className="mt-[9px] h-px w-2 shrink-0 bg-[#9db2ce]" />
-                        <span className="text-xs leading-[18px] text-[#9db2ce]">{detail}</span>
-                      </>
-                    )}
-                  </span>
-                </div>
               </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
+            </div>
+          );
+        })}
+      </AccordionContent>
+    </AccordionItem>
   );
 }
+
+// A 27 MB journal groups into tens of thousands of cycles; mounting them all locks the tab for
+// seconds. Reveal a page at a time as the sentinel below the list scrolls into view.
+const CYCLE_PAGE = 40;
 
 export function TradeCycles({
   runId,
@@ -201,14 +206,47 @@ export function TradeCycles({
   /** The run's ordered symbols, so an event's `symbol_id` can be resolved to a name. */
   symbols?: { symbol: string }[];
 }) {
-  const { data: history = [], isLoading, isError } = useRunTraceHistory(runId);
+  const { data, isLoading, isError, error } = useRunTraceHistory(runId);
   const { events: streamed, state: streamState } = useRunTraceStream(runId, !!isLive);
-  const cycles = useMemo(() => groupCycles([...history, ...streamed]), [history, streamed]);
+  const history = data?.events;
+  const cycles = useMemo(() => groupCycles([...(history ?? []), ...streamed]), [history, streamed]);
+
+  const [visible, setVisible] = useState(CYCLE_PAGE);
+  // Start over whenever the panel is pointed at another run, so a short journal isn't scrolled
+  // straight past the end of a previous long one.
+  const [prevRun, setPrevRun] = useState(runId);
+  if (prevRun !== runId) {
+    setPrevRun(runId);
+    setVisible(CYCLE_PAGE);
+  }
+
+  const sentinel = useRef<HTMLDivElement | null>(null);
+  const hasMore = visible < cycles.length;
+  useEffect(() => {
+    const node = sentinel.current;
+    if (!node || !hasMore) return;
+    // Re-observed on every `visible` change, deliberately. IntersectionObserver only reports
+    // TRANSITIONS, so if a freshly-loaded page leaves the sentinel still on screen — a short page,
+    // a tall window — it would never fire again and the list would stall one page in. A new
+    // observer always delivers the current state, so the next page loads until the sentinel is
+    // genuinely pushed out of view.
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) setVisible((n) => n + CYCLE_PAGE);
+      },
+      { rootMargin: "200px" },
+    );
+    io.observe(node);
+    return () => io.disconnect();
+  }, [hasMore, visible]);
 
   return (
     <div className="flex w-full flex-col overflow-hidden rounded-lg border border-[#1d2939]">
       <div className="flex w-full shrink-0 items-center justify-between border-b border-[#1d2939] bg-[#151a24] px-4 py-3">
-        <span className="text-sm leading-5 font-medium text-white">Trade cycles ({cycles.length})</span>
+        <span className="text-sm leading-5 font-medium text-white">
+          Trade cycles ({cycles.length.toLocaleString()}
+          {data?.truncated && "+"})
+        </span>
         {/* Reflect the ACTUAL socket state — a run can be "running" while the tail is still
             connecting or has dropped, and a permanently-green pill made that indistinguishable. */}
         {streamState !== "off" && (
@@ -226,7 +264,11 @@ export function TradeCycles({
         )}
       </div>
       {isError ? (
-        <p className="p-4 text-xs text-[#9db2ce]">Trade log unavailable for this run.</p>
+        // Say WHY. A blanket "unavailable" made a transient 503 look identical to a run that
+        // simply never journaled, which is what sent run 01a00f11 to a dead end.
+        <p className="p-4 text-xs text-[#9db2ce]">
+          {error instanceof Error && error.message ? error.message : "Trade log unavailable for this run."}
+        </p>
       ) : isLoading ? (
         <p className="p-4 text-xs text-[#9db2ce]">Loading trade cycles&hellip;</p>
       ) : cycles.length === 0 ? (
@@ -236,7 +278,24 @@ export function TradeCycles({
             : "No trade cycles — this run never journaled one."}
         </p>
       ) : (
-        cycles.map((c, i) => <CycleRow key={c.key} cycle={c} symbols={symbols} defaultOpen={i === 0} />)
+        <>
+          {/* `multiple`, so opening one cycle never collapses another the user left open. */}
+          <Accordion type="multiple" defaultValue={[cycles[0].key]} className="w-full">
+            {cycles.slice(0, visible).map((c) => (
+              <CycleRow key={c.key} cycle={c} symbols={symbols} />
+            ))}
+          </Accordion>
+          {hasMore && (
+            <div ref={sentinel} className="p-4 text-xs text-[#9db2ce]">
+              Loading more cycles&hellip; ({visible.toLocaleString()} of {cycles.length.toLocaleString()})
+            </div>
+          )}
+          {data?.truncated && !hasMore && (
+            <p className="p-4 text-xs text-[#9db2ce]">
+              Journal cut short — this run&apos;s log is larger than the console can hold.
+            </p>
+          )}
+        </>
       )}
     </div>
   );

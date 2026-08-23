@@ -18,7 +18,7 @@ import type { EChartsOption } from "echarts";
 
 import { BaseChart } from "@/components/charts/base-chart";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useRunTraceHistory, useRunTraceStream, TraceTooLargeError } from "@/hooks/api/use-run-trace";
+import { useRunTraceHistory, useRunTraceStream } from "@/hooks/api/use-run-trace";
 import {
   deriveFillRateSeries,
   deriveTraceExecutionMetrics,
@@ -196,9 +196,10 @@ export function ExecutionView({ runId, isLive }: { runId?: string; isLive?: bool
   const [slippageScope, setSlippageScope] = useState<string>("All");
   const [latencyScope, setLatencyScope] = useState<string>("All");
 
-  const { data: history = [], isLoading, isError, error } = useRunTraceHistory(runId);
+  const { data, isLoading, isError, error } = useRunTraceHistory(runId);
   const { events: streamed, state: streamState } = useRunTraceStream(runId, !!isLive);
-  const events = useMemo(() => [...history, ...streamed], [history, streamed]);
+  const history = data?.events;
+  const events = useMemo(() => [...(history ?? []), ...streamed], [history, streamed]);
 
   const metrics = useMemo(() => deriveTraceExecutionMetrics(events), [events]);
   const fillSeries = useMemo(
@@ -232,10 +233,10 @@ export function ExecutionView({ runId, isLive }: { runId?: string; isLive?: bool
   const fillNote = !runId
     ? "Pick a run"
     : isError
-      // A journal too big to parse is a specific, actionable state — say so rather than the
-      // generic "unavailable", which reads like the endpoint is down.
-      ? error instanceof TraceTooLargeError
-        ? `Log too large (${(error.bytes / (1024 * 1024)).toFixed(0)} MB)`
+      // Say WHY — a bare "unavailable" reads like the endpoint is down even when the real answer
+      // is a transient 503 or a run that never journaled.
+      ? error instanceof Error && error.message
+        ? error.message
         : "Trace unavailable"
       : isLoading
         ? "Loading…"
@@ -243,9 +244,11 @@ export function ExecutionView({ runId, isLive }: { runId?: string; isLive?: bool
           ? streamState === "open"
             ? "Waiting for orders…"
             : "No order events in trace"
-          : streamState === "open"
-            ? "Live"
-            : undefined;
+          : data?.truncated
+            ? "Partial — journal cut short"
+            : streamState === "open"
+              ? "Live"
+              : undefined;
 
   return (
     <div className="flex min-w-0 flex-col gap-4">

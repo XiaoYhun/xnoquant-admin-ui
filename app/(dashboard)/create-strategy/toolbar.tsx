@@ -561,7 +561,7 @@ export function Toolbar({
                     onClick={() => setPromoteOpen(true)}
                     disabled={!!promoteBlockedReason}
                     aria-label={`Promote to ${nextStage}`}
-                    className="group inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full border border-border bg-background transition-all hover:bg-[linear-gradient(135deg,#fffbd6_0%,#f1c617_100%)] active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-background"
+                    className="group inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-border bg-background transition-all hover:bg-[linear-gradient(135deg,#fffbd6_0%,#f1c617_100%)] active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-background"
                   >
                     <Bolt weight="Bold" className="size-4 text-[#f1c617] transition-colors group-enabled:group-hover:text-[#151a24]" />
                   </button>

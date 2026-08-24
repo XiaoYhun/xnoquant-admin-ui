@@ -305,8 +305,10 @@ function buildRollingSharpeOption(
         type: "line",
         data,
         smooth: false,
-        showSymbol: false,
-        symbol: "none",
+        // A one-point series (a short run's only rolling window) draws no segment — show its
+        // marker so the chart isn't blank when there genuinely is a value.
+        showSymbol: data.length === 1,
+        symbol: data.length === 1 ? "circle" : "none",
         lineStyle: { width: 1.5, color: ROLLING_SHARPE_COLOR },
         itemStyle: { color: ROLLING_SHARPE_COLOR },
         areaStyle: {
@@ -390,12 +392,13 @@ export function RiskView({ runId, isLive }: { runId?: string; isLive?: boolean }
   // fall back to equity-curve rolling Sharpe (backend-aligned, not annualized).
   const equitySharpe = useMemo(() => {
     if (isLive) return [];
-    return toRollingSharpe(equity)
-      .filter((p) => {
-        const cutoff = Date.now() - WINDOW_MS[rollingWindow as RollingWindow];
-        return p.ts >= cutoff;
-      })
-      .map((p) => ({ ts: p.ts, sharpe: p.value }));
+    const series = toRollingSharpe(equity);
+    if (series.length === 0) return [];
+    // Anchor the window to the series' own last point, not wall-clock now: a backtest over
+    // historical data — or any run that finished longer ago than the window — would otherwise
+    // filter to nothing and draw an empty chart.
+    const cutoff = series[series.length - 1].ts - WINDOW_MS[rollingWindow as RollingWindow];
+    return series.filter((p) => p.ts >= cutoff).map((p) => ({ ts: p.ts, sharpe: p.value }));
   }, [equity, isLive, rollingWindow]);
   const rollingSamples = useMemo(
     () =>

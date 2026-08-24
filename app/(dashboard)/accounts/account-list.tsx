@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { Key, Pen2, TrashBinTrash } from "@solar-icons/react";
+import { Key, Pen2, TrashBinTrash, UsersGroupRounded } from "@solar-icons/react";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
@@ -15,6 +15,7 @@ import {
 import { useVenues } from "@/hooks/api/use-venues";
 import { useDeleteAccount } from "@/hooks/api/use-accounts";
 import { RefreshDnseTokenDialog } from "./refresh-dnse-token-dialog";
+import { AssignUsersModal } from "./assign-users-modal";
 import { resourceErrorMessage } from "@/lib/api-client";
 import type { Account } from "@/types/domain";
 
@@ -46,6 +47,7 @@ export function AccountList({
   const deleteAccount = useDeleteAccount();
   const [pendingDelete, setPendingDelete] = useState<Account | null>(null);
   const [pendingRefresh, setPendingRefresh] = useState<Account | null>(null);
+  const [pendingAssign, setPendingAssign] = useState<Account | null>(null);
   const venueName = (venueId: string) => venues.find((v) => v.id === venueId)?.name ?? venueId;
   const isDnseAccount = (venueId: string) => venues.find((v) => v.id === venueId)?.venue_type === "dnse";
 
@@ -115,6 +117,17 @@ export function AccountList({
                         type="button"
                         variant="ghost"
                         size="icon-sm"
+                        aria-label={`Assign users to ${a.name}`}
+                        title="Assign users"
+                        className="text-muted-foreground hover:text-foreground"
+                        onClick={() => setPendingAssign(a)}
+                      >
+                        <UsersGroupRounded weight="Outline" className="size-5" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
                         aria-label={`Edit ${a.name}`}
                         className="text-muted-foreground hover:text-foreground"
                         onClick={() => onEdit(a)}
@@ -178,6 +191,10 @@ export function AccountList({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {pendingAssign && (
+        <AssignUsersModal account={pendingAssign} onClose={() => setPendingAssign(null)} />
+      )}
 
       <RefreshDnseTokenDialog
         account={pendingRefresh}

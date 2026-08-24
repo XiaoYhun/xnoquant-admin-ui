@@ -55,7 +55,7 @@ function maxDrawdownPctFrom(summary: RunSummary | null, startEquity: number): nu
 
 // `MarketDataKind.interval` is an exchange label ("1m", "5m", "15m", "1h", ...) — map to the
 // UI's "5min"/"15min"/"1h" style; tick data has no interval and reads as "tick".
-function timeframeLabel(dataKind: RunManifest["data_kind"]): string {
+export function timeframeLabel(dataKind: RunManifest["data_kind"]): string {
   if (!dataKind) return "—";
   if (dataKind.kind === "tick") return "tick";
   const m = dataKind.interval.match(/^(\d+)(ms|s|m|h|d)$/);
@@ -65,7 +65,7 @@ function timeframeLabel(dataKind: RunManifest["data_kind"]): string {
 }
 
 // Manifest doc: Tick data → the HFT (L2) engine, Bar data → the MFT (OHLC) engine.
-function strategyGroup(dataKind: RunManifest["data_kind"]): "MFT" | "HFT" {
+export function strategyGroup(dataKind: RunManifest["data_kind"]): "MFT" | "HFT" {
   return dataKind?.kind === "tick" ? "HFT" : "MFT";
 }
 

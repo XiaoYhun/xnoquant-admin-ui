@@ -13,6 +13,7 @@ import { CostCapacityView } from "./cost-capacity-view";
 import { LatencyView } from "./latency-view";
 import { MftResultsView } from "./mft-results-view";
 import { RunHistoryPicker } from "./run-history-picker";
+import { RunMetaStrip } from "./run-meta-strip";
 import { LiveSnapshotProvider } from "@/hooks/api/use-run-live-snapshot";
 import { symbolNamesOf, useRun } from "@/hooks/api/use-runs";
 import type { Run } from "@/types/domain";
@@ -78,6 +79,10 @@ export function ResultsTab({
         </Tabs>
         <RunHistoryPicker strategyId={strategyId} selectedRunId={selectedRun?.id} onSelect={setSelectedRun} />
       </div>
+
+      {/* What the views below are describing: symbols, engine, account, period. Reads the
+          selected run's manifest, so it costs nothing beyond what the picker already fetched. */}
+      <RunMetaStrip run={selectedRun} />
 
       {/*
         One `/live/stream` subscription for the whole tab. It lives above the view switch so

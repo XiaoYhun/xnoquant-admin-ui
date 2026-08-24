@@ -13,14 +13,16 @@ export type Symbol = components["schemas"]["Symbol"];
 // transient session states ("break" alone covers roughly half the catalog).
 const isDelisted = (s: Symbol) => s.status?.toLowerCase() === "delisted";
 
+/** `GET /api/symbols[?venue_id=]` — the whole catalog when no venue is given. */
+export async function fetchSymbols(venueId?: string): Promise<Symbol[]> {
+  const all = await apiGet<Symbol[]>(`${HFT_API_URL}/api/symbols${venueId ? `?venue_id=${venueId}` : ""}`);
+  return (all ?? []).filter((s) => !isDelisted(s));
+}
+
 export function useSymbols(venueId?: string) {
   return useQuery({
     queryKey: ["symbols", venueId],
-    queryFn: async (): Promise<Symbol[]> => {
-      if (USE_MOCK) return [];
-      const all = await apiGet<Symbol[]>(`${HFT_API_URL}/api/symbols${venueId ? `?venue_id=${venueId}` : ""}`);
-      return (all ?? []).filter((s) => !isDelisted(s));
-    },
+    queryFn: async (): Promise<Symbol[]> => (USE_MOCK ? [] : fetchSymbols(venueId)),
     enabled: !!venueId,
   });
 }

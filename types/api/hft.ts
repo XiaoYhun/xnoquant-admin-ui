@@ -724,6 +724,81 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/market-data/orderbook/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * GET /api/market-data/orderbook/stream — SSE stream of a live orderbook for any symbol on
+         * @description any configured venue, independent of a running paper/live run.
+         */
+        get: {
+            parameters: {
+                query: {
+                    /** @description Venue ID */
+                    venue_id: string;
+                    /** @description Symbol, venue-native format (e.g. BTCUSDT, VN30F1M, ACB) */
+                    symbol: string;
+                    /** @description Required for venues needing credentials to read market data (SSI) */
+                    account_id?: string | null;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description SSE stream of orderbook updates (text/event-stream) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        /** @example data: {"symbol":"BTCUSDT","bids":[{"price":100.1,"qty":2.5}],"asks":[{"price":100.2,"qty":1.8}],"updated_at_ms":1753600000000} */
+                        "text/event-stream": string;
+                    };
+                };
+                /** @description Unsupported venue, or missing account_id for a venue that needs one */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Caller's role has no access to this resource family */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Venue or account not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/promotions/{stage}": {
         parameters: {
             query?: never;
@@ -1324,7 +1399,8 @@ export interface paths {
         };
         /**
          * GET /api/runs — page through the caller's runs, newest first, optionally filtered by exact
-         * @description `status` and/or a case-insensitive strategy-name substring search.
+         * @description `status`, a case-insensitive substring search over strategy name or run ID, an `asset_kind`
+         *     (`stock`/`futures`/`crypto`), and/or a `symbol` substring match.
          */
         get: {
             parameters: {
@@ -1335,8 +1411,12 @@ export interface paths {
                     size?: number | null;
                     /** @description Exact run status filter */
                     status?: string | null;
-                    /** @description Case-insensitive strategy name search */
+                    /** @description Case-insensitive substring search over strategy name or run ID */
                     q?: string | null;
+                    /** @description Exact asset-kind filter: `stock`, `futures` (VN30F1M), or `crypto` */
+                    asset_kind?: string | null;
+                    /** @description Case-insensitive substring match against one of the run's traded symbols */
+                    symbol?: string | null;
                 };
                 header?: never;
                 path?: never;
@@ -4239,7 +4319,7 @@ export interface components {
          *     and the Postgres `venues.venue_type` text column.
          * @enum {string}
          */
-        VenueType: "binance_spot" | "binance_futures" | "tcbs" | "dnse";
+        VenueType: "binance_spot" | "binance_futures" | "tcbs" | "dnse" | "ssi";
         DnseBalanceResponse: Record<string, never>;
         DnseOtpRequest: Record<string, never>;
     };

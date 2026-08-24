@@ -5,6 +5,7 @@ export const VENUE_TYPES: { value: Venue["venue_type"]; label: string }[] = [
   { value: "binance_futures", label: "Binance Futures" },
   { value: "tcbs", label: "TCBS" },
   { value: "dnse", label: "DNSE" },
+  { value: "ssi", label: "SSI" },
 ];
 
 export function venueTypeLabel(type: Venue["venue_type"]): string {

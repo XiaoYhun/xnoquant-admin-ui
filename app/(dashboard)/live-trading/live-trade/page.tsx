@@ -122,10 +122,16 @@ function LiveTrade() {
   const [selectedId, setSelectedId] = useUrlParam("run");
   // The orderbook rail's symbol. Separate from `symbolFilter` above: that one narrows the table
   // and carries an "all" option, whereas the rail always shows exactly one book. `null` until the
-  // user picks — the panel defaults to the first active symbol. Not tied to the market tab: the
-  // options are whatever is actually running, which the tab filter would often reduce to nothing.
+  // user picks — the panel defaults to the first symbol of the market tab.
   const [bookSymbol, setBookSymbol] = useState<string | null>(null);
-  const { data: orderbookSymbols = [] } = useOrderbookSymbols();
+  const allOrderbookSymbols = useOrderbookSymbols();
+  // The rail follows the Stocks/Future/Crypto tab: the catalog spans every venue, so without this
+  // the picker opens on an unrelated market's instrument. A symbol picked under one tab simply
+  // isn't in the next tab's options, and the panel falls back to that market's first symbol.
+  const orderbookSymbols = useMemo(
+    () => allOrderbookSymbols.filter((o) => o.market === market),
+    [allOrderbookSymbols, market],
+  );
 
   // Symbol options come from the live runs in the selected market.
   const symbolOptions = useMemo(() => {

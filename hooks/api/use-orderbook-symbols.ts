@@ -1,36 +1,61 @@
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { USE_MOCK } from "@/lib/constant";
-import { fetchRuns } from "./use-runs";
-import type { Run } from "@/types/domain";
+import { fetchSymbols } from "./use-symbols";
+import { useVenues } from "./use-venues";
+import { useAccounts } from "./use-accounts";
+import { marketForVenue } from "@/lib/transform/runs";
+import type { Account, Instrument, Venue } from "@/types/domain";
 
-/** One selectable order book: the symbol, the run whose stream carries it, and its engine id. */
-export type OrderbookSymbol = { symbol: string; runId: string; symbolId: number };
+/** One selectable order book: the symbol and what `/api/market-data/orderbook/stream` needs to open it. */
+export type OrderbookSymbol = {
+  symbol: string;
+  venueId: string;
+  /** "Crypto" / "VNFuture" / "Vietnam" — the market tab this symbol belongs under. */
+  market: string;
+  /** Only set for venues that need credentials to read market data (SSI). */
+  accountId?: string;
+};
 
-// Mirrors how the HFT control plane's own Runs screen fills its order-book picker: there is no
-// symbols endpoint behind it — the list is derived from the runs themselves. Every run that is
-// `running` and not a backtest (a backtest replays history and publishes no book) contributes
-// each symbol in its manifest; duplicates keep the first run seen, and the list is sorted by name.
+// The picker lists the whole instrument catalog — VN30F1M and the crypto pairs alike — because
+// `/api/market-data/orderbook/stream` serves any symbol on any configured venue independent of a
+// running paper/live run. (It used to be derived from the running runs, which was the only source
+// before that endpoint existed: with nothing running there was nothing to look at.)
 //
-// `symbol_id` is the engine's dense SymbolId and is what `orderbooks[].symbol_id` refers to. The
-// manifest happens to be ordered so that a symbol's array position equals it, but the field is
-// authoritative — match on it rather than on the index.
-export function toOrderbookSymbols(runs: Run[]): OrderbookSymbol[] {
+// The stream keys on the venue-native symbol name, so duplicates across venues (BTCUSDT on both
+// binance_spot and binance_futures) collapse to one entry — first venue in catalog order wins.
+// Each entry carries its market so the panel can follow the page's Stocks/Future/Crypto tab.
+export function toOrderbookSymbols(
+  symbols: Instrument[],
+  venues: Venue[],
+  accounts: Account[],
+): OrderbookSymbol[] {
+  // SSI reads market data over a credentialed session, so its books need an `account_id` or the
+  // stream answers 400. Every other venue type reads anonymously.
+  const needsAccount = new Set(venues.filter((v) => v.venue_type === "ssi").map((v) => v.id));
+  const venueTypes = new Map(venues.map((v) => [v.id, v.venue_type]));
   const bySymbol = new Map<string, OrderbookSymbol>();
-  for (const run of runs) {
-    if (run.status !== "running" || run.mode === "backtest") continue;
-    for (const s of run.manifest.symbols) {
-      if (!bySymbol.has(s.symbol)) {
-        bySymbol.set(s.symbol, { symbol: s.symbol, runId: run.id, symbolId: s.symbol_id });
-      }
-    }
+  for (const s of symbols) {
+    if (bySymbol.has(s.symbol)) continue;
+    bySymbol.set(s.symbol, {
+      symbol: s.symbol,
+      venueId: s.venue_id,
+      // Same rule the run rows use, so a symbol lands under the same tab in both places.
+      market: marketForVenue(venueTypes.get(s.venue_id), s.instrument_class),
+      accountId: needsAccount.has(s.venue_id)
+        ? accounts.find((a) => a.venue_id === s.venue_id)?.id
+        : undefined,
+    });
   }
   return [...bySymbol.values()].sort((a, b) => a.symbol.localeCompare(b.symbol));
 }
 
-/** `GET /api/runs?size=200&status=running` — the same call the control plane makes. */
-export function useOrderbookSymbols() {
-  return useQuery({
-    queryKey: ["orderbook-symbols"],
-    queryFn: async () => (USE_MOCK ? [] : toOrderbookSymbols(await fetchRuns({ status: "running" }))),
+export function useOrderbookSymbols(): OrderbookSymbol[] {
+  const { data: symbols = [] } = useQuery({
+    queryKey: ["symbols", "all"],
+    queryFn: async (): Promise<Instrument[]> => (USE_MOCK ? [] : fetchSymbols()),
   });
+  const { data: venues = [] } = useVenues();
+  const { data: accounts = [] } = useAccounts();
+  return useMemo(() => toOrderbookSymbols(symbols, venues, accounts), [symbols, venues, accounts]);
 }

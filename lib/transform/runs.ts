@@ -70,19 +70,26 @@ export function strategyGroup(dataKind: RunManifest["data_kind"]): "MFT" | "HFT"
 }
 
 // GAP-4: HFT symbols carry `instrument_class`/`venue_id`, not a "VNFuture"/"NASDAQ"/"Crypto"
-// market label. Approximate from the venue backing the symbol's account leg (matched by
-// venue_id): binance_* → Crypto; dnse/tcbs futures → VNFuture, else Vietnam. Lossy — unmapped
-// combinations fall back to "—".
-function marketForSymbol(sym: ManifestSymbol, manifest: RunManifest): string {
-  const accounts: ManifestAccount[] = [manifest.account, ...(manifest.extra_accounts ?? [])];
-  const venueType = accounts.find((a) => a.venue_id === sym.venue_id)?.venue_type;
+// market label. Approximate from the venue: binance_* → Crypto; VN brokers' futures → VNFuture,
+// else Vietnam. Lossy — unmapped combinations fall back to "—". Shared with the order-book symbol
+// picker (`hooks/api/use-orderbook-symbols.ts`), which classifies catalog symbols the same way.
+export function marketForVenue(
+  venueType: string | undefined,
+  instrumentClass: string | undefined,
+): string {
   if (venueType === "binance_spot" || venueType === "binance_futures") return "Crypto";
-  if (venueType === "dnse" || venueType === "tcbs") {
-    return sym.instrument_class === "linear_future" || sym.instrument_class === "coin_margined_future"
+  if (venueType === "dnse" || venueType === "tcbs" || venueType === "ssi") {
+    return instrumentClass === "linear_future" || instrumentClass === "coin_margined_future"
       ? "VNFuture"
       : "Vietnam";
   }
   return "—";
+}
+
+function marketForSymbol(sym: ManifestSymbol, manifest: RunManifest): string {
+  const accounts: ManifestAccount[] = [manifest.account, ...(manifest.extra_accounts ?? [])];
+  const venueType = accounts.find((a) => a.venue_id === sym.venue_id)?.venue_type;
+  return marketForVenue(venueType, sym.instrument_class);
 }
 
 function accountNames(manifest: RunManifest): string[] {

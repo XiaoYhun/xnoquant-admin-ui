@@ -1,21 +1,19 @@
 "use client";
-import { useMemo } from "react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { LiveSnapshotProvider, useLiveSnapshot } from "@/hooks/api/use-run-live-snapshot";
+import { useMemo, useState } from "react";
+import { AltArrowDown } from "@solar-icons/react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useMarketOrderbook } from "@/hooks/api/use-market-orderbook";
 import type { OrderbookSymbol } from "@/hooks/api/use-orderbook-symbols";
 
-// Right rail of the Live trade screen (Figma 14779:27408). Opens on the market tab's default
-// symbol — nothing to search or select first — and follows the tab when it changes. Symbol
-// selection and the running-run binding live in the page (live-trade/page.tsx), which is the one
-// that knows the loaded runs and can resolve which run to tail for the chosen symbol.
+// Right rail of the Live trade screen (Figma 14779:27408). Opens on the first symbol — nothing to
+// search or select first. Symbol selection lives in the page (live-trade/page.tsx).
 //
-// Depth comes from the selected symbol's run `/live/stream` `orderbooks` frames — the only
-// order-book source that exists (HFT has no order-book endpoint; `DataSourceType: "orderbook"`
-// in types/api/hft.ts is the only trace of a planned one), so with nothing running there is
-// nothing to show and the panel says so rather than inventing a ladder.
+// Depth comes from `/api/market-data/orderbook/stream`, which serves any symbol on any configured
+// venue whether or not a run is using it — so the picker offers the whole catalog (VN30F1M and the
+// crypto pairs alike), not just what happens to be running.
 //
 // The quote strip's last/change and the board's ceiling/reference/floor plus matched volume
-// ("KL") and turnover ("GT") have no field in the live frame at all, so they read "—" until an
+// ("KL") and turnover ("GT") have no field in the book frame at all, so they read "—" until an
 // endpoint supplies them.
 const DASH = <span className="text-[#9db2ce]">—</span>;
 
@@ -27,34 +25,28 @@ const ladderNum = new Intl.NumberFormat("en", {
 });
 
 type OrderbookProps = {
-  /** Every symbol on a currently-running, non-backtest run. Empty when nothing is running. */
+  /** The instrument catalog — every symbol whose book the market-data stream can serve. */
   options: OrderbookSymbol[];
   /** Selected symbol name; falls back to the first option until the user picks one. */
   symbol: string | null;
   onSymbolChange: (symbol: string) => void;
 };
 
-// Scoped subscription: only the selected symbol's run streams, and it re-binds on change.
+// The whole catalog is several thousand instruments, so the picker is a typeahead over a capped
+// slice, not a plain <Select>: rendering every symbol as an item froze the page on open.
+const MAX_SHOWN = 100;
+
+// Scoped subscription: only the selected symbol streams, and it re-binds on change.
 export function OrderbookPanel({ options, symbol, onSymbolChange }: OrderbookProps) {
   const selected = options.find((o) => o.symbol === symbol) ?? options[0];
-  return (
-    <LiveSnapshotProvider runId={selected?.runId} isLive={!!selected}>
-      <OrderbookBody options={options} selected={selected} onSymbolChange={onSymbolChange} />
-    </LiveSnapshotProvider>
-  );
-}
+  const { book: live, error } = useMarketOrderbook(selected);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [query, setQuery] = useState("");
 
-function OrderbookBody({
-  options,
-  selected,
-  onSymbolChange,
-}: {
-  options: OrderbookSymbol[];
-  selected: OrderbookSymbol | undefined;
-  onSymbolChange: (symbol: string) => void;
-}) {
-  const { snapshot } = useLiveSnapshot();
-  const live = selected ? snapshot?.orderbooks.find((o) => o.symbolId === selected.symbolId) : undefined;
+  const matches = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return q ? options.filter((o) => o.symbol.toLowerCase().includes(q)) : options;
+  }, [options, query]);
 
   // Bids and asks arrive as separate ladders; the table renders them as paired rows, so zip them
   // and let the shorter side leave blanks rather than pretending a level exists on both.
@@ -72,9 +64,9 @@ function OrderbookBody({
     [levels],
   );
 
-  const emptyMessage = selected
-    ? "Waiting for the first book update…"
-    : "No active symbols — start a paper or live run to see its order book here.";
+  // Not every venue publishes a book — DNSE answers "live orderbook viewing is not supported for
+  // venue Dnse" — so show the venue's own reason rather than waiting on a stream that won't come.
+  const emptyMessage = error ?? (selected ? "Waiting for the first book update…" : "No symbols available.");
 
   return (
         <aside className="flex w-[340px] shrink-0 flex-col overflow-hidden rounded-lg border border-border bg-background">
@@ -86,18 +78,53 @@ function OrderbookBody({
       <div className="flex min-h-0 flex-1 flex-col gap-4 py-3">
         <div className="flex shrink-0 flex-col gap-1 px-4">
           <div className="flex items-center justify-between gap-2">
-            <Select value={selected?.symbol ?? ""} onValueChange={(v) => v && onSymbolChange(v)} disabled={!selected}>
-              <SelectTrigger className="h-auto w-auto gap-1 border-0 bg-transparent p-0 text-base font-medium leading-6 text-white shadow-none dark:bg-transparent dark:hover:bg-transparent [&_svg]:size-4 [&_svg]:text-white [&_svg]:opacity-100">
-                <SelectValue placeholder="—" />
-              </SelectTrigger>
-              <SelectContent>
-                {options.map((o) => (
-                  <SelectItem key={o.symbol} value={o.symbol}>
-                    {o.symbol}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Popover
+              open={pickerOpen}
+              onOpenChange={(next) => {
+                setPickerOpen(next);
+                setQuery("");
+              }}
+            >
+              <PopoverTrigger
+                disabled={!selected}
+                className="flex cursor-pointer items-center gap-1 text-base font-medium leading-6 text-white outline-none disabled:cursor-not-allowed"
+              >
+                {selected?.symbol ?? "—"}
+                <AltArrowDown weight="Outline" className="size-4" />
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-56 p-1.5">
+                <input
+                  autoFocus
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search symbol..."
+                  className="mb-1 h-8 w-full rounded-md bg-secondary px-2 text-xs text-white outline-none placeholder:text-muted-foreground"
+                />
+                <div className="max-h-56 overflow-y-auto">
+                  {matches.length === 0 ? (
+                    <p className="px-2 py-2 text-xs text-muted-foreground">No matches.</p>
+                  ) : (
+                    matches.slice(0, MAX_SHOWN).map((o) => (
+                      <div
+                        key={o.symbol}
+                        onClick={() => {
+                          onSymbolChange(o.symbol);
+                          setPickerOpen(false);
+                        }}
+                        className="cursor-pointer rounded-[6px] px-2 py-2 text-xs text-white hover:bg-secondary/60"
+                      >
+                        {o.symbol}
+                      </div>
+                    ))
+                  )}
+                  {matches.length > MAX_SHOWN && (
+                    <p className="px-2 py-2 text-xs text-muted-foreground">
+                      {matches.length - MAX_SHOWN} more — keep typing to narrow.
+                    </p>
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
             {/* Last traded price and its change have no field in the live frame. */}
             <div className="flex items-center gap-1.5 text-sm font-medium leading-5">{DASH}</div>
           </div>

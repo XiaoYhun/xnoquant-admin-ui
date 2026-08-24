@@ -11,7 +11,7 @@ import { VENUE_TYPES } from "./venue-types";
 
 const schema = z.object({
   name: z.string().min(1, "Name is required"),
-  venue_type: z.enum(["binance_spot", "binance_futures", "tcbs", "dnse"]),
+  venue_type: z.enum(["binance_spot", "binance_futures", "tcbs", "dnse", "ssi"]),
 });
 type FormValues = z.infer<typeof schema>;
 

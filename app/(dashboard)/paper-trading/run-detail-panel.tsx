@@ -69,23 +69,48 @@ const tabsFor = (mode?: string): readonly Tab[] => (mode === "backtest" ? TABS.f
 const TRADES_PAGE_SIZE = 100;
 
 // ── Charts tab ──────────────────────────────────────────────────────────────
+
+// A failed run's /summary 404s because the engine died, not because the strategy sat on its
+// hands — so the generic "it never traded" line reads as a shrug and buries the failure. Say what
+// happened and why, the same `Run.error` the list's status pill carries.
+function RunFailedNotice({ reason }: { reason?: string | null }) {
+  return (
+    <div className="flex flex-col gap-1 rounded-xl border border-[rgba(255,19,91,0.4)] bg-[rgba(255,19,91,0.08)] p-3">
+      <p className={cn("text-sm font-medium", GRAD_RED)}>This run failed</p>
+      <p className="text-xs break-words whitespace-pre-wrap text-[#9db2ce]">
+        {reason?.trim() || "The API recorded no reason."}
+      </p>
+    </div>
+  );
+}
+
 function ChartsTab({
   runId,
   isLive,
   error,
   summaryLoading,
+  failed,
+  failureReason,
 }: {
   runId: string | undefined;
   isLive: boolean;
   error: unknown;
   summaryLoading: boolean;
+  failed: boolean;
+  failureReason?: string | null;
 }) {
   if (error) {
     return (
-      <div className="p-4 text-sm text-[#9db2ce]">
-        {error instanceof ApiError && error.status === 404
-          ? "No results — this run produced no artifacts (it never traded)."
-          : `Failed to load results: ${error instanceof Error ? error.message : ""}`}
+      <div className="p-4">
+        {failed ? (
+          <RunFailedNotice reason={failureReason} />
+        ) : (
+          <p className="text-sm text-[#9db2ce]">
+            {error instanceof ApiError && error.status === 404
+              ? "No results — this run produced no artifacts (it never traded)."
+              : `Failed to load results: ${error instanceof Error ? error.message : ""}`}
+          </p>
+        )}
       </div>
     );
   }
@@ -94,6 +119,9 @@ function ChartsTab({
   }
   return (
     <div className="flex flex-col gap-3 p-4">
+      {/* A failed run can still have written partial artifacts, so the views stay — but they
+          describe a run that died, and that has to be said before they are read. */}
+      {failed && <RunFailedNotice reason={failureReason} />}
       <ResultsViews runId={runId} isLive={isLive} />
     </div>
   );
@@ -147,6 +175,8 @@ function LiveChartsTab({
   summary,
   summaryLoading,
   error,
+  failed,
+  failureReason,
 }: {
   runId: string | undefined;
   /** Whether the run is RUNNING — not whether its mode is live. See the call site. */
@@ -154,6 +184,8 @@ function LiveChartsTab({
   summary: RunSummary | undefined;
   summaryLoading: boolean;
   error: unknown;
+  failed: boolean;
+  failureReason?: string | null;
 }) {
   // The REST /summary 500s for the whole life of a running run (parquet sidecar still being
   // written) — the live/stream frame is the only source until it stops, so the KPIs read the
@@ -163,10 +195,16 @@ function LiveChartsTab({
 
   if (error && !liveSummary) {
     return (
-      <div className="p-4 text-sm text-[#9db2ce]">
-        {error instanceof ApiError && error.status === 404
-          ? "No results — this run produced no artifacts (it never traded)."
-          : `Failed to load results: ${error instanceof Error ? error.message : ""}`}
+      <div className="p-4">
+        {failed ? (
+          <RunFailedNotice reason={failureReason} />
+        ) : (
+          <p className="text-sm text-[#9db2ce]">
+            {error instanceof ApiError && error.status === 404
+              ? "No results — this run produced no artifacts (it never traded)."
+              : `Failed to load results: ${error instanceof Error ? error.message : ""}`}
+          </p>
+        )}
       </div>
     );
   }
@@ -176,6 +214,7 @@ function LiveChartsTab({
 
   return (
     <div className="flex flex-col gap-3 p-4">
+      {failed && <RunFailedNotice reason={failureReason} />}
       <ResultsViews runId={runId} isLive={isLive} />
     </div>
   );
@@ -818,6 +857,8 @@ function RunDetailBody({
                 summary={summaryQ.data}
                 summaryLoading={summaryLoading}
                 error={summaryError}
+                failed={run.status === "failed"}
+                failureReason={run.error}
               />
             ) : (
               <ChartsTab
@@ -825,6 +866,8 @@ function RunDetailBody({
                 isLive={isLive}
                 error={summaryError}
                 summaryLoading={summaryLoading}
+                failed={run.status === "failed"}
+                failureReason={run.error}
               />
             ))}
           {activeTab === "Trades" && <TradesTab run={run} />}

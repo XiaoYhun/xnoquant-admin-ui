@@ -110,10 +110,15 @@ export function useUpdateHftStrategy() {
         features: features ?? current.features,
       });
     },
-    onSuccess: (_data, { id }) => {
-      qc.invalidateQueries({ queryKey: ["hft-strategies"] });
-      qc.invalidateQueries({ queryKey: ["hft-strategy", id] });
-    },
+    // Returned (so `mutateAsync` awaits the refetch, not just the PUT): a save bumps `version`
+    // and can strand a promotion approval behind it, and whatever runs straight after the save —
+    // the Run button opening the launch dialog — has to see the new version and stage rather than
+    // the one it just replaced.
+    onSuccess: (_data, { id }) =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: ["hft-strategies"] }),
+        qc.invalidateQueries({ queryKey: ["hft-strategy", id] }),
+      ]),
   });
 }
 

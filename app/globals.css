@@ -69,7 +69,10 @@ body {
   color: var(--foreground);
 }
 
-button {
+/* `:not(:disabled)` matters: this rule is UNLAYERED, and unlayered styles beat everything in
+   `@layer utilities`, so a bare `button { cursor: pointer }` silently overrode every
+   `disabled:cursor-not-allowed` in the app no matter how specific. */
+button:not(:disabled) {
   cursor: pointer;
 }
 

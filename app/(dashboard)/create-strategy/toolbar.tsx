@@ -386,6 +386,20 @@ export function Toolbar({
   };
 
   const handleSimulateClick = async () => {
+    // A run launches from the SERVER copy of the strategy, so unsaved editor edits would be
+    // silently left out of it. Commit them first, and abort the launch if that write fails —
+    // starting a run against code the user can no longer see is worse than not starting one.
+    if (isDirty) {
+      setSaving(true);
+      try {
+        await onSave?.();
+      } catch (err) {
+        addLog("error", `Save failed — run not started: ${resourceErrorMessage(err, "this strategy")}`);
+        return;
+      } finally {
+        setSaving(false);
+      }
+    }
     if (type === "hft") {
       setSimulateOpen(true);
       return;
@@ -423,8 +437,9 @@ export function Toolbar({
     }
   };
 
-  const simulateLabel =
-    mftSimStatus === "running"
+  const simulateLabel = saving
+    ? "Saving…"
+    : mftSimStatus === "running"
       ? "Simulating…"
       : mftSimStatus === "done"
         ? "Simulated"
@@ -556,12 +571,15 @@ export function Toolbar({
             {isAdmin && type === "hft" && nextStage && (
               <Tooltip>
                 <TooltipTrigger asChild>
+                  {/* The hover fill is `enabled:hover:`, not `hover:` with a `disabled:hover:`
+                      override: it's a gradient (background-IMAGE), so no background-COLOR utility
+                      can cancel it. Blocked, the button only answers with its tooltip. */}
                   <button
                     type="button"
                     onClick={() => setPromoteOpen(true)}
                     disabled={!!promoteBlockedReason}
                     aria-label={`Promote to ${nextStage}`}
-                    className="group inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-border bg-background transition-all hover:bg-[linear-gradient(135deg,#fffbd6_0%,#f1c617_100%)] active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-background"
+                    className="group inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-border bg-background transition-all enabled:hover:bg-[linear-gradient(135deg,#fffbd6_0%,#f1c617_100%)] active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     <Bolt weight="Bold" className="size-4 text-[#f1c617] transition-colors group-enabled:group-hover:text-[#151a24]" />
                   </button>
@@ -574,7 +592,7 @@ export function Toolbar({
             <button
               type="button"
               onClick={handleSimulateClick}
-              disabled={mftSimStatus === "running"}
+              disabled={saving || mftSimStatus === "running"}
               className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-1 rounded-[32px] bg-[linear-gradient(161deg,#cff8ea_0%,#67e1c1_100%)] px-3 text-xs font-medium text-black transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <SkipNext weight="Outline" className="size-3.5" />

@@ -3,6 +3,7 @@ import { signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { revokeToken } from "@/lib/auth-api";
 import { useAuthStore } from "@/store/auth-store";
+import { useMe } from "@/hooks/api/use-me";
 import { resourceScope } from "@/lib/rbac";
 
 function loginErrorMessage(err: unknown): string {
@@ -37,7 +38,14 @@ export function useAuth() {
     useAuthStore.getState().clear();
   }, []);
 
-  const roles = user?.roles ?? [];
+  // GET /me is the authoritative source for roles + user_id, NOT the session user: the
+  // token-exchange payload may omit them, and it is re-issued on every Firebase token refresh
+  // (~hourly, plus cross-tab syncs). Reading them off the session copy meant a refresh replaced
+  // the user wholesale and silently dropped them — admin-only surfaces (Strategy List, Risk
+  // management) disappeared mid-session for a real admin. The query is the one place they live.
+  // The session copy is still the fallback for the window before /me resolves.
+  const { data: me } = useMe();
+  const roles = me?.roles ?? user?.roles ?? [];
   const scope = resourceScope(roles);
 
   return {
@@ -46,7 +54,7 @@ export function useAuth() {
     error,
     isAuthenticated: status === "authenticated" && !!user?.email_verified,
     // RBAC identity — see lib/rbac.ts. `userId` is compared against a resource's owner_id.
-    userId: user?.user_id,
+    userId: me?.user_id ?? user?.user_id,
     roles,
     scope,
     isAdmin: scope === "all",

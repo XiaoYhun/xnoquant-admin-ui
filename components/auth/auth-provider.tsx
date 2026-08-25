@@ -34,13 +34,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => unsubscribe();
   }, []);
 
-  // GET /me carries the authoritative roles + user_id (the token-exchange user may omit them).
-  // Merge them into the session user so role-aware UI can reduce scope via lib/rbac.ts.
-  const { data: me } = useMe();
-  useEffect(() => {
-    if (!me) return;
-    useAuthStore.getState().patchUser({ roles: me.roles, user_id: me.user_id });
-  }, [me]);
+  // Prime GET /me at the root as soon as there is a token: it carries the authoritative roles +
+  // user_id (the token-exchange user may omit them) and `useAuth` reads them straight off this
+  // query. Deliberately NOT merged into the session user — `setSession` re-runs on every Firebase
+  // token refresh and would replace whatever was merged in.
+  useMe();
 
   return <>{children}</>;
 }

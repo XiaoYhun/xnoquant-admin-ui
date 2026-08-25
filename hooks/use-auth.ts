@@ -38,7 +38,7 @@ export function useAuth() {
     useAuthStore.getState().clear();
   }, []);
 
-  // GET /me is the authoritative source for roles + user_id, NOT the session user: the
+  // GET /api/auth/me is the authoritative source for roles + user_id, NOT the session user: the
   // token-exchange payload may omit them, and it is re-issued on every Firebase token refresh
   // (~hourly, plus cross-tab syncs). Reading them off the session copy meant a refresh replaced
   // the user wholesale and silently dropped them — admin-only surfaces (Strategy List, Risk

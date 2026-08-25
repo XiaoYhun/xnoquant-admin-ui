@@ -57,6 +57,10 @@ const SELECT_TRIGGER = `h-auto justify-between ${FIELD_INPUT} bg-background!`;
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
+// Floor for the calendar's year dropdown. Backtests only ever reach back over recorded history, and
+// an unbounded list makes the year menu useless to scroll.
+const CALENDAR_FLOOR = () => new Date(new Date().getFullYear() - 10, 0, 1);
+
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex flex-1 flex-col gap-1">
@@ -105,7 +109,8 @@ function MarketSwitch({ value, onChange }: { value: string; onChange: (value: st
 }
 
 // shadcn date picker: a pill trigger opening a Calendar popover. Value is an ISO `yyyy-MM-dd`
-// string (the backend `NaiveDate` wire form); `min`/`max` disable out-of-range days.
+// string (the backend `NaiveDate` wire form); `min`/`max` disable out-of-range days and bound the
+// caption's month/year dropdowns, so jumping years back doesn't mean clicking the arrow 24 times.
 function DatePickerField({
   value,
   onChange,
@@ -131,6 +136,9 @@ function DatePickerField({
       <PopoverContent align="end" className="w-auto p-0">
         <Calendar
           mode="single"
+          captionLayout="dropdown"
+          startMonth={min ? parseISO(min) : CALENDAR_FLOOR()}
+          endMonth={max ? parseISO(max) : new Date()}
           selected={selected}
           defaultMonth={selected}
           disabled={disabled}

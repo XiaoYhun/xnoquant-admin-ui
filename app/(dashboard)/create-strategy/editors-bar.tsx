@@ -60,13 +60,15 @@ function Tab({
       role="tab"
       aria-selected={active}
       onClick={onSelect}
+      // Tabs shrink rather than run past the strip: the cut is measured, and a measurement that
+      // comes out one tab too generous would otherwise paint over the + button.
       className={cn(
-        "group relative flex h-[56px] shrink-0 cursor-pointer items-center gap-2 border-r border-border px-5 text-xs whitespace-nowrap",
+        "group relative flex h-[56px] min-w-0 cursor-pointer items-center gap-2 border-r border-border px-5 text-xs whitespace-nowrap",
         grow && "grow justify-center",
         active ? "text-primary bg-surface" : "text-muted-foreground hover:text-white bg-background border-b",
       )}
     >
-      <span>{editor.name}</span>
+      <span className="truncate">{editor.name}</span>
       {/* RBAC plan: a lab-mate's HFT strategy is a read-only share. */}
       {shared && <SharedBadge />}
       {/* Closing an HFT tab DELETEs the strategy server-side, which 404s for a strategy the
@@ -79,7 +81,7 @@ function Tab({
             ev.stopPropagation();
             onRequestClose?.();
           }}
-          className="flex size-4 items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-white cursor-pointer -mr-2"
+          className="flex size-4 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-white cursor-pointer -mr-2"
         >
           <CloseIcon className="size-3.5" />
         </button>
@@ -111,8 +113,8 @@ export function EditorsBar({
   const plusRef = useRef<HTMLButtonElement>(null);
   const [visibleCount, setVisibleCount] = useState(editors.length);
 
-  // Decide how many tabs fit. An off-screen copy of the full strip gives each tab's true width,
-  // so this still works for tabs that aren't currently rendered.
+  // Decide how many leading tabs fit. An off-screen copy of the full strip gives each tab's true
+  // width, so this still works for tabs that aren't currently rendered.
   useEffect(() => {
     const bar = barRef.current;
     const measure = measureRef.current;
@@ -121,6 +123,7 @@ export function EditorsBar({
     const recompute = () => {
       const widths = Array.from(measure.children).map((c) => (c as HTMLElement).offsetWidth);
       const plusWidth = plusRef.current?.offsetWidth ?? 0;
+      const activeIndex = editors.findIndex((e) => e.id === activeId);
 
       const fit = (reserved: number) => {
         let used = 0;
@@ -133,26 +136,33 @@ export function EditorsBar({
         return count;
       };
 
-      // Two passes: the "+N" chip only takes space when something actually overflows.
+      // The "+N" chip only takes space when something actually overflows. An active tab past the
+      // cut is pinned after the leading run, so reserve its width as well — tabs can't shrink, so
+      // an unreserved pinned tab runs over the + button. Reserving only ever shortens the run, so
+      // the active tab stays past the cut and the second guess holds.
       let count = fit(plusWidth);
-      if (count < widths.length) count = fit(plusWidth + OVERFLOW_CHIP_WIDTH);
-      setVisibleCount(Math.max(1, Math.min(count, widths.length)));
+      if (count < widths.length) {
+        count = fit(plusWidth + OVERFLOW_CHIP_WIDTH);
+        if (activeIndex >= count) count = fit(plusWidth + OVERFLOW_CHIP_WIDTH + widths[activeIndex]);
+      }
+      setVisibleCount(count);
     };
 
     recompute();
     const observer = new ResizeObserver(recompute);
     observer.observe(bar);
     return () => observer.disconnect();
-  }, [editors]);
+  }, [editors, activeId]);
 
   const canClose = (e: EditorTab) => !(e.type === "hft" && e.owner_id && !canMutate(e, { userId, isAdmin }));
   const sharedFor = (e: EditorTab) => e.type === "hft" && isShared(e, userId);
 
-  // Keep the active tab on the strip: if it falls past the cut, it takes the last visible slot.
+  // Keep the active tab on the strip: if it falls past the cut, it is pinned after the leading
+  // run — the fit above has already reserved room for it.
   const visible = editors.slice(0, visibleCount);
   const activeIndex = editors.findIndex((e) => e.id === activeId);
-  if (activeIndex >= visibleCount && visibleCount > 0) {
-    visible[visibleCount - 1] = editors[activeIndex];
+  if (activeIndex >= visibleCount) {
+    visible.push(editors[activeIndex]);
   }
   const visibleIds = new Set(visible.map((e) => e.id));
   const hidden = editors.filter((e) => !visibleIds.has(e.id));

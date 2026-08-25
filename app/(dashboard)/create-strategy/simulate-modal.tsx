@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import { useAccounts } from "@/hooks/api/use-accounts";
 import { useVenues } from "@/hooks/api/use-venues";
 import { useSymbols } from "@/hooks/api/use-symbols";
-import { useLaunchRun, type LaunchRequest } from "@/hooks/api/use-runs";
+import { useLastRunConfig, useLaunchRun, type LaunchRequest } from "@/hooks/api/use-runs";
 import { resourceErrorMessage } from "@/lib/api-client";
 import { launchMode } from "@/components/strategy-stage";
 import { useHftStrategy, type HftStrategyType } from "@/hooks/api/use-hft-strategies";
@@ -454,6 +454,68 @@ export function SimulateModal({
     setLeg2AccountId(value);
     setLeg2SymbolIds([]);
   };
+
+  // Prefill from the caller's own most recent run of this strategy (`null` if they've never run
+  // it), so relaunching a familiar strategy doesn't start from blank defaults. Fetched only once
+  // the dialog is open, and applied once per strategy — reopening the dialog must not overwrite
+  // edits the user made and didn't launch. Market/interval are deliberately left alone: the
+  // toolbar owns them (and its Settings popover may have just set them), and the MarketSwitch
+  // above shows the current choice anyway.
+  const { data: lastRun } = useLastRunConfig(strategyId, open);
+  // Compared during render (not synced in an effect, per react-hooks/set-state-in-effect).
+  // `accounts` decides whether the run's account still exists, and `strategy` settles `isArb`
+  // (which decides how the run's symbols split across legs) — both must be loaded before applying.
+  const [prefilledFor, setPrefilledFor] = useState<string>();
+  if (open && lastRun && accounts && strategy && prefilledFor !== strategyId) {
+    setPrefilledFor(strategyId);
+
+    if (accounts.some((a) => a.id === lastRun.account.id)) {
+      // Set directly rather than through handleAccountChange: that clears the symbols and reseeds
+      // the balances by venue, which would undo the rest of this prefill.
+      setAccountId(lastRun.account.id);
+      // A symbol only belongs in a leg's picker if it's on that leg's venue. The strategy's type
+      // can have changed since the run, so an arbitrage run's leg-2 symbol (on the other venue)
+      // must not land in a now-single-account form's picker, where it would be invisible.
+      const onVenue = (venueId: string) => lastRun.symbols.filter((s) => s.venue_id === venueId).map((s) => s.id);
+      const leg1 = onVenue(lastRun.account.venue_id);
+      setSymbolIds(isArb ? leg1.slice(0, 1) : leg1);
+      const leg2 = lastRun.extra_accounts?.[0];
+      if (isArb && leg2 && accounts.some((a) => a.id === leg2.id)) {
+        setLeg2AccountId(leg2.id);
+        setLeg2SymbolIds(onVenue(leg2.venue_id).slice(0, 1));
+      }
+    }
+
+    if (lastRun.account.settlement_currency) setSettlementCurrency(lastRun.account.settlement_currency);
+    const rows = Object.entries(lastRun.account.balances ?? {}).map(([currency, amount]) => ({ currency, amount }));
+    if (rows.length) setBalances(rows);
+
+    const exec = lastRun.execution;
+    if (exec?.max_slice_size != null) setMaxSliceSize(exec.max_slice_size);
+    if (exec?.twap_interval_ms != null) setTwapIntervalMs(exec.twap_interval_ms);
+    if (exec?.chase_threshold_ticks != null) setChaseThresholdTicks(exec.chase_threshold_ticks);
+    if (exec?.entry_order_ttl_ms != null) setEntryOrderTtlMs(exec.entry_order_ttl_ms);
+    if (exec?.cancel_ratio != null) setCancelRatio(exec.cancel_ratio);
+    // The form offers Zero and Fixed only; a `log_normal` manifest has no field to land in, so it
+    // keeps the Zero default rather than showing a latency the form can't reproduce.
+    if (exec?.latency?.name === "fixed") {
+      setLatencyName("fixed");
+      setFeedMs(exec.latency.feed_ms);
+      setOrderMs(exec.latency.order_ms);
+    }
+
+    const cond = lastRun.live_condition;
+    if (cond?.cost_process_l2_ns != null) setCostProcessL2Ns(cond.cost_process_l2_ns);
+    if (cond?.cost_process_trade_ns != null) setCostProcessTradeNs(cond.cost_process_trade_ns);
+    if (cond?.l2_queue_capacity != null) setL2QueueCapacity(cond.l2_queue_capacity);
+    if (cond?.trade_queue_capacity != null) setTradeQueueCapacity(cond.trade_queue_capacity);
+
+    if (lastRun.imbalance_depth != null) setImbalanceDepth(lastRun.imbalance_depth);
+    if (lastRun.backtest_range) {
+      setStartDate(lastRun.backtest_range.start_date);
+      setEndDate(lastRun.backtest_range.end_date);
+    }
+  }
 
 
   // Mirrors the server's own checks so a bad range is caught before the POST rather than as a 422.

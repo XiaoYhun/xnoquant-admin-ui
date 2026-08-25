@@ -172,6 +172,22 @@ export function useStopRun() {
   });
 }
 
+// `GET /api/strategies/{id}/last-run-config` — the manifest of the caller's OWN most recent run of
+// this strategy, or `null` if they have never run it. It exists so the simulate dialog can reopen
+// on the configuration the user last launched instead of blank defaults. The server scopes it to
+// [caller, strategy] regardless of RBAC scope: this is a personal convenience, so a lab-mate's run
+// of the same strategy never leaks through it even under Lab/All scope.
+export type RunManifest = components["schemas"]["RunManifest"];
+
+export function useLastRunConfig(strategyId: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: ["last-run-config", strategyId],
+    queryFn: () => apiGet<RunManifest | null>(`${HFT_API_URL}/api/strategies/${strategyId}/last-run-config`),
+    enabled: enabled && !!strategyId && !USE_MOCK,
+    retry: retryUnlessForbidden,
+  });
+}
+
 // simulate-modal's launch form — binds a strategy to an account + symbols and starts a
 // paper/live run. No mock run store exists yet, so the mock branch resolves a minimally-shaped
 // stub `Run` (mirrors useCreateHftStrategy's mock stub) instead of persisting anything.
@@ -231,6 +247,9 @@ export function useLaunchRun() {
       qc.invalidateQueries({ queryKey: ["live-runs"] });
       qc.invalidateQueries({ queryKey: ["paper-runs"] });
       qc.invalidateQueries({ queryKey: ["strategy-runs"] });
+      // This run is now the strategy's "last run", so the next mount of the simulate dialog
+      // prefills from it rather than from the run it replaced.
+      qc.invalidateQueries({ queryKey: ["last-run-config", run.strategy_id] });
     },
   });
 }

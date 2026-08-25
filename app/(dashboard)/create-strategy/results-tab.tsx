@@ -4,6 +4,7 @@
 // gone from the design. Each view lives in its own file. Everything here stays width-responsive:
 // min-w-0 so the panel never forces horizontal overflow.
 import { useMemo, useState } from "react";
+import { Danger } from "@solar-icons/react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { OverviewView } from "./overview-view";
 import { PerformanceView } from "./performance-view";
@@ -27,6 +28,29 @@ const VIEWS = ["Overview", "Performance", "Risk", "Execution", "Cost & Capacity"
 const TAB_LIST = "gap-2 rounded-none bg-transparent p-0";
 const TAB_TRIGGER =
   "rounded-[40px] px-3 py-2 text-sm text-[#9db2ce] data-[state=active]:bg-[#1d2939] data-[state=active]:text-white data-[state=active]:shadow-none";
+
+// A failed run wrote no artifacts worth charting — the engine died before or during it — so the
+// six views below would render an all-"—" shell that never says why. Replace them with the reason
+// the API recorded (`Run.error`), the same failure the run-history picker badges "Failed".
+function RunFailedScreen({ reason }: { reason?: string | null }) {
+  return (
+    <div className="flex flex-col items-center gap-6 px-4 py-20 text-center">
+      <div
+        className="flex size-[104px] items-center justify-center rounded-[28px] bg-[#0a0d12]"
+        style={{ boxShadow: "0 0 60px 8px rgba(255,19,91,0.45)" }}
+      >
+        <Danger weight="Outline" className="size-12 text-[#ff135b]" />
+      </div>
+      <h3 className="text-3xl font-bold text-white">Simulation Failed</h3>
+      {/* The gradient is clipped to the glyphs, so it can't share an element with the tint. */}
+      <p className="max-w-2xl rounded-xl bg-[rgba(255,19,91,0.08)] px-6 py-4 text-base font-medium break-words whitespace-pre-wrap">
+        <span className="bg-[linear-gradient(160deg,#ffcce2_0%,#ff135b_100%)] bg-clip-text text-transparent">
+          {reason?.trim() || "The API recorded no reason."}
+        </span>
+      </p>
+    </div>
+  );
+}
 
 export function ResultsTab({
   variant = "hft",
@@ -59,6 +83,7 @@ export function ResultsTab({
   }
   // Only a running run publishes live snapshots; anything else reads the persisted artifacts.
   const isLive = selectedRun?.status === "running";
+  const failed = selectedRun?.status === "failed";
   // Frames name symbols by dense index only, so the manifest supplies the tickers.
   const { data: run } = useRun(isLive ? selectedRun?.id : undefined);
   const symbolNames = useMemo(() => symbolNamesOf(run), [run]);
@@ -84,26 +109,30 @@ export function ResultsTab({
           selected run's manifest, so it costs nothing beyond what the picker already fetched. */}
       <RunMetaStrip run={selectedRun} />
 
-      {/*
-        One `/live/stream` subscription for the whole tab. It lives above the view switch so
-        switching views doesn't tear the connection down and lose the accumulated Sharpe series,
-        and so six views share one connection instead of opening six.
-      */}
-      <LiveSnapshotProvider runId={selectedRun?.id} isLive={isLive} symbolNames={symbolNames}>
-        {/* Remount every view when the run changes. ECharts merges options by default, so a
-            series that is conditional — Overview's Gross PnL line only exists when the run has a
-            cost curve — survives into the next run's chart and draws data that isn't its own.
-            Keying here also resets each view's local toggles (range, period) for the new run.
-            Kept off the provider so the live subscription isn't torn down on a view switch. */}
-        <div key={selectedRun?.id ?? strategyId ?? "no-run"} className="min-w-0">
-          {view === "Overview" && <OverviewView runId={selectedRun?.id} />}
-          {view === "Performance" && <PerformanceView runId={selectedRun?.id} />}
-          {view === "Risk" && <RiskView runId={selectedRun?.id} isLive={isLive} />}
-          {view === "Execution" && <ExecutionView runId={selectedRun?.id} isLive={isLive} />}
-          {view === "Cost & Capacity" && <CostCapacityView runId={selectedRun?.id} />}
-          {view === "Latency" && <LatencyView isLive={isLive} />}
-        </div>
-      </LiveSnapshotProvider>
+      {failed ? (
+        <RunFailedScreen reason={selectedRun?.error} />
+      ) : (
+        /*
+          One `/live/stream` subscription for the whole tab. It lives above the view switch so
+          switching views doesn't tear the connection down and lose the accumulated Sharpe series,
+          and so six views share one connection instead of opening six.
+        */
+        <LiveSnapshotProvider runId={selectedRun?.id} isLive={isLive} symbolNames={symbolNames}>
+          {/* Remount every view when the run changes. ECharts merges options by default, so a
+              series that is conditional — Overview's Gross PnL line only exists when the run has a
+              cost curve — survives into the next run's chart and draws data that isn't its own.
+              Keying here also resets each view's local toggles (range, period) for the new run.
+              Kept off the provider so the live subscription isn't torn down on a view switch. */}
+          <div key={selectedRun?.id ?? strategyId ?? "no-run"} className="min-w-0">
+            {view === "Overview" && <OverviewView runId={selectedRun?.id} />}
+            {view === "Performance" && <PerformanceView runId={selectedRun?.id} />}
+            {view === "Risk" && <RiskView runId={selectedRun?.id} isLive={isLive} />}
+            {view === "Execution" && <ExecutionView runId={selectedRun?.id} isLive={isLive} />}
+            {view === "Cost & Capacity" && <CostCapacityView runId={selectedRun?.id} />}
+            {view === "Latency" && <LatencyView isLive={isLive} />}
+          </div>
+        </LiveSnapshotProvider>
+      )}
     </div>
   );
 }

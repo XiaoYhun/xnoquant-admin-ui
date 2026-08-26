@@ -83,6 +83,12 @@ export function ResultsTab({
   }
   // Only a running run publishes live snapshots; anything else reads the persisted artifacts.
   const isLive = selectedRun?.status === "running";
+  // `/summary` is asked for backtest runs only. It is the one result endpoint a paper/live run
+  // never answers usefully here: it 500s for the whole life of a running run (the pnl parquet is
+  // mid-write), and the live frame already carries those same headline fields. Paper Trading's
+  // run-detail panel renders these same views without the gate — a finished paper run's summary
+  // does resolve there, and those numbers have no other source once the stream is gone.
+  const isBacktest = selectedRun?.mode === "backtest";
   const failed = selectedRun?.status === "failed";
   // Frames name symbols by dense index only, so the manifest supplies the tickers.
   const { data: run } = useRun(isLive ? selectedRun?.id : undefined);
@@ -124,11 +130,11 @@ export function ResultsTab({
               Keying here also resets each view's local toggles (range, period) for the new run.
               Kept off the provider so the live subscription isn't torn down on a view switch. */}
           <div key={selectedRun?.id ?? strategyId ?? "no-run"} className="min-w-0">
-            {view === "Overview" && <OverviewView runId={selectedRun?.id} />}
-            {view === "Performance" && <PerformanceView runId={selectedRun?.id} />}
+            {view === "Overview" && <OverviewView runId={selectedRun?.id} summaryEnabled={isBacktest} />}
+            {view === "Performance" && <PerformanceView runId={selectedRun?.id} summaryEnabled={isBacktest} />}
             {view === "Risk" && <RiskView runId={selectedRun?.id} isLive={isLive} />}
             {view === "Execution" && <ExecutionView runId={selectedRun?.id} isLive={isLive} />}
-            {view === "Cost & Capacity" && <CostCapacityView runId={selectedRun?.id} />}
+            {view === "Cost & Capacity" && <CostCapacityView runId={selectedRun?.id} summaryEnabled={isBacktest} />}
             {view === "Latency" && <LatencyView isLive={isLive} />}
           </div>
         </LiveSnapshotProvider>

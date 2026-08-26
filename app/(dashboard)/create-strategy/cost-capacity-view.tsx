@@ -109,11 +109,11 @@ function PillSelect({
   );
 }
 
-export function CostCapacityView({ runId }: { runId?: string }) {
+export function CostCapacityView({ runId, summaryEnabled = true }: { runId?: string; summaryEnabled?: boolean }) {
   const currency = useRunCurrency(runId);
   const money = useMemo(() => moneyIn(currency), [currency]);
   const axisMoney = useMemo(() => axisMoneyIn(currency), [currency]);
-  const { data: restSummary } = useRunSummary(runId);
+  const { data: restSummary } = useRunSummary(summaryEnabled ? runId : undefined);
   // While the run is streaming, the live frame wins over the persisted `/summary` snapshot.
   const { snapshot } = useLiveSnapshot();
   const summary = useMemo(() => mergeLiveSummary(restSummary, snapshot), [restSummary, snapshot]);

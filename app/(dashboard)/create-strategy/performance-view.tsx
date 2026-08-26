@@ -498,12 +498,12 @@ function DistributionPanel({
 
 // ---------------------------------------------------------------------------
 
-export function PerformanceView({ runId }: { runId?: string }) {
+export function PerformanceView({ runId, summaryEnabled = true }: { runId?: string; summaryEnabled?: boolean }) {
   const {
     data: restSummary,
     isLoading: summaryLoading,
     isError: summaryError,
-  } = useRunSummary(runId);
+  } = useRunSummary(summaryEnabled ? runId : undefined);
   const {
     data: restEquity = [],
     isLoading: equityLoading,

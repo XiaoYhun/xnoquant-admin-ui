@@ -307,11 +307,11 @@ function equityChartOption(points: EquityPoint[], gross: number[] | null, digits
   };
 }
 
-export function OverviewView({ runId }: { runId?: string }) {
+export function OverviewView({ runId, summaryEnabled = true }: { runId?: string; summaryEnabled?: boolean }) {
   const [range, setRange] = useState<Range>("All");
   const { data: restTrades = [], isLoading, isError, error } = useTradeHistory(runId);
 
-  const { data: restSummary, isLoading: summaryLoading, isError: summaryError } = useRunSummary(runId);
+  const { data: restSummary, isLoading: summaryLoading, isError: summaryError } = useRunSummary(summaryEnabled ? runId : undefined);
   const { data: restEquity = [], isLoading: equityLoading, isError: equityError } = useRunEquity(runId);
   // Fees are optional: the spec notes many runs answer `[]` here even when equity has points.
   const { data: cost = [] } = useRunCostCurve(runId);

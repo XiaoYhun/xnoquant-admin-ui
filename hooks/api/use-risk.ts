@@ -32,7 +32,7 @@ export function useRiskStatus() {
     enabled: !USE_MOCK,
     retry: retryUnlessForbidden,
     // Drawdown moves with the running strategies; the monitor recomputes continuously.
-    refetchInterval: 15_000,
+    refetchInterval: 5_000,
     placeholderData: EMPTY_STATUS,
   });
 }

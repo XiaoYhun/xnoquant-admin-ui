@@ -9,7 +9,7 @@
 // Profit Factor and the win-rate wins|losses breakdown have no source in RunSummary (no
 // profit-factor field; total_trades counts fills, not closing trades), so those render "—" with
 // an explanatory title.
-import { cn, formatAmount } from "@/lib/utils";
+import { cn, currencyDigits, formatAmount } from "@/lib/utils";
 import { currencySymbol } from "@/lib/transform/runs";
 import type { RunSummary } from "@/types/domain";
 
@@ -63,6 +63,7 @@ function KpiCell({
 // API source (no profit-factor field; total_trades counts fills, not closing trades) — those two
 // render "—" with an explanatory title, same convention as the live-trade page's KpiCard.
 export function ResultsKpiGrid({ summary, currency }: { summary: RunSummary | undefined; currency: string }) {
+  const digits = currencyDigits(currency);
   const netPnl = summary?.net_pnl;
   const netPnlTone = netPnl != null && netPnl < 0 ? GRAD_RED : GRAD_GREEN;
   const returnPct = summary?.return_pct;
@@ -80,7 +81,11 @@ export function ResultsKpiGrid({ summary, currency }: { summary: RunSummary | un
         <KpiCell
           label="Net PnL"
           size="sm"
-          value={netPnl == null ? "—" : `${netPnl >= 0 ? "+" : "-"}${formatAmount(Math.abs(netPnl))} ${currencySymbol(currency)}`}
+          value={
+            netPnl == null
+              ? "—"
+              : `${netPnl >= 0 ? "+" : "-"}${formatAmount(Math.abs(netPnl), digits)} ${currencySymbol(currency)}`
+          }
           valueClassName={netPnl == null ? "text-muted-foreground" : netPnlTone}
           extra={returnPct == null ? undefined : `(${returnPct >= 0 ? "+" : ""}${formatAmount(returnPct * 100, 1)}%)`}
           extraClassName={cn("text-xs font-medium", netPnlTone)}
@@ -113,7 +118,7 @@ export function ResultsKpiGrid({ summary, currency }: { summary: RunSummary | un
         <KpiCell
           label="Max Drawdown"
           size="sm"
-          value={mdd == null ? "—" : `-${formatAmount(Math.abs(mdd))} ${currencySymbol(currency)}`}
+          value={mdd == null ? "—" : `-${formatAmount(Math.abs(mdd), digits)} ${currencySymbol(currency)}`}
           valueClassName={mdd == null ? "text-muted-foreground" : GRAD_RED}
           extra={mddPct == null ? undefined : `(-${formatAmount(Math.abs(mddPct * 100), 1)}%)`}
           extraClassName={cn("text-xs font-medium", GRAD_RED)}

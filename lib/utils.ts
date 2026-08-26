@@ -51,6 +51,15 @@ export function formatAmount(n: number, digits = 2): string {
   return safe.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
 
+/**
+ * Decimal places for a money figure in `currency`. The dong is the smallest denomination in
+ * circulation, so decimals on a VND amount are always noise — "3,000,000,000.00 ₫" is a number
+ * nobody writes. Everything else keeps the usual two.
+ */
+export function currencyDigits(currency: string | undefined): number {
+  return currency === "VND" ? 0 : 2;
+}
+
 /** `formatAmount` with an explicit leading `+` on gains — `+1,000.00` / `-1,000.00`. */
 export function formatSignedAmount(n: number, digits = 2): string {
   return `${n > 0 ? "+" : ""}${formatAmount(n, digits)}`;

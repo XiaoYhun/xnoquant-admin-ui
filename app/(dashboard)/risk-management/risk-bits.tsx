@@ -1,5 +1,5 @@
 "use client";
-import { cn, formatAmount } from "@/lib/utils";
+import { cn, currencyDigits, formatAmount } from "@/lib/utils";
 import type { RiskLevel } from "@/types/domain";
 
 // Shared presentation for both Risk Management tabs (Figma 14975:41599 / 14975:44103).
@@ -60,7 +60,8 @@ export function pctLabel(fraction: number | null | undefined, digits = 1): strin
 /** Capital, in the settlement currency the rest of the app prints for run figures. */
 export function moneyLabel(amount: number | null | undefined): string | null {
   if (amount == null || !Number.isFinite(amount)) return null;
-  return `${formatAmount(amount)} ₫`;
+  // Always dong here, so always whole — see currencyDigits.
+  return `${formatAmount(amount, currencyDigits("VND"))} ₫`;
 }
 
 /** `2026-06-11` over `09:20:47.123` — two lines, same split the Trades tab uses. */

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatCurrency, formatPercent, formatCompact, formatAmount, formatSignedAmount, isIdQuery, idQueryNeedle } from "./utils";
+import { formatCurrency, formatPercent, formatCompact, formatAmount, formatSignedAmount, currencyDigits, isIdQuery, idQueryNeedle } from "./utils";
 
 describe("formatters", () => {
   it("formats VND currency without decimals", () => {
@@ -11,6 +11,18 @@ describe("formatters", () => {
   });
   it("formats compact numbers", () => {
     expect(formatCompact(1_200_000)).toBe("1.2M");
+  });
+
+  describe("currencyDigits", () => {
+    it("drops decimals for VND and keeps them everywhere else", () => {
+      expect(currencyDigits("VND")).toBe(0);
+      expect(currencyDigits("USDT")).toBe(2);
+      expect(currencyDigits(undefined)).toBe(2);
+    });
+    it("is what money formatting reads, so a dong amount prints whole", () => {
+      expect(formatAmount(3_000_000_000, currencyDigits("VND"))).toBe("3,000,000,000");
+      expect(formatAmount(1_234.5, currencyDigits("USDT"))).toBe("1,234.50");
+    });
   });
 
   describe("formatAmount", () => {

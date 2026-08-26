@@ -1,11 +1,11 @@
 "use client";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { MinimalisticMagnifer, SkipNext } from "@solar-icons/react";
+import { AltArrowDown, AltArrowUp, CloseCircle, MinimalisticMagnifer, SkipNext } from "@solar-icons/react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useHftStrategies } from "@/hooks/api/use-hft-strategies";
+import { useHftStrategies, type HftStrategyType } from "@/hooks/api/use-hft-strategies";
 import { useDemoteStrategy, usePromotions } from "@/hooks/api/use-promotions";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,7 +22,7 @@ import { useDebounced } from "@/hooks/use-debounced";
 import { resourceErrorMessage } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
 import { cn, idQueryNeedle, isIdQuery } from "@/lib/utils";
-import { StrategyStageBadge, strategyStage, nextPromotionStage, launchMode, PROMOTE_PILL, PAPER_RUN_SUCCEEDED } from "@/components/strategy-stage";
+import { StrategyStageBadge, strategyStage, nextPromotionStage, launchMode, STAGE_ORDER, PROMOTE_PILL, PAPER_RUN_SUCCEEDED } from "@/components/strategy-stage";
 import { PromoteStageDialog } from "../create-strategy/promote-stage-dialog";
 import { SimulateModal, HFT_TYPE_LABEL } from "../create-strategy/simulate-modal";
 import type { PromotionStage, Run, Strategy, StrategyPromotion } from "@/types/domain";
@@ -38,17 +38,19 @@ const STAGE_FILTERS = [
   { value: "live", label: "Live trading" },
 ];
 
+// `sortable` marks the columns whose ordering says something an admin reviews by. Promote note is
+// free text and the action column has no value at all, so both stay inert.
 const COLS = [
-  { key: "name", label: "Strategy", w: "17%", align: "left" },
-  { key: "owner", label: "Owner", w: "11%", align: "left" },
-  { key: "type", label: "Type", w: "7%", align: "left" },
+  { key: "name", label: "Strategy", w: "17%", align: "left", sortable: true },
+  { key: "owner", label: "Owner", w: "11%", align: "left", sortable: true },
+  { key: "type", label: "Type", w: "7%", align: "left", sortable: true },
   // Stage and Version read as one fact, so Stage is only as wide as "Backtesting (stale)" needs
   // and Version is left-aligned against it rather than pushed to the far edge of its own column.
-  { key: "stage", label: "Stage", w: "13%", align: "left" },
-  { key: "version", label: "Version", w: "6%", align: "left" },
-  { key: "promoted", label: "Promoted", w: "11%", align: "left" },
-  { key: "note", label: "Promote note", w: "14%", align: "left" },
-  { key: "actions", label: "", w: "27%", align: "right" },
+  { key: "stage", label: "Stage", w: "13%", align: "left", sortable: true },
+  { key: "version", label: "Version", w: "6%", align: "left", sortable: true },
+  { key: "promoted", label: "Promoted", w: "11%", align: "left", sortable: true },
+  { key: "note", label: "Promote note", w: "14%", align: "left", sortable: false },
+  { key: "actions", label: "", w: "27%", align: "right", sortable: false },
 ] as const;
 
 // Each mode has its own list screen; `?run=` opens that run's side panel on arrival (see
@@ -59,6 +61,16 @@ const LIST_PAGE: Record<string, string> = {
   paper: "/paper-trading",
   live: "/live-trading/live-trade",
 };
+
+type SortKey = (typeof COLS)[number]["key"];
+type Sort = { key: SortKey; dir: "asc" | "desc" };
+
+/** ISO timestamp to a comparable number; anything unparseable sorts as absent. */
+function timeValue(iso: string | null | undefined): number | null {
+  if (!iso) return null;
+  const t = Date.parse(iso);
+  return Number.isNaN(t) ? null : t;
+}
 
 const pad = (n: number) => String(n).padStart(2, "0");
 function formatWhen(iso: string | null | undefined): string {
@@ -153,6 +165,11 @@ export default function Page() {
 
   const [search, setSearch] = useState("");
   const [stageFilter, setStageFilter] = useState("all");
+  const [ownerFilter, setOwnerFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
+  // No default sort: the list arrives in the API order, and clicking a header is what departs
+  // from it. Sorting by nothing is a state you can be in, not one you have to sort your way out of.
+  const [sort, setSort] = useState<Sort | null>(null);
   const debouncedSearch = useDebounced(search.trim());
 
   const [promoting, setPromoting] = useState<Strategy | null>(null);
@@ -163,16 +180,85 @@ export default function Page() {
   const [hftMarket, setHftMarket] = useState("tick-l2");
   const [hftInterval, setHftInterval] = useState("1m");
 
+  // Both dropdowns offer only what the table actually holds — a roster of every user who ever
+  // signed in would be mostly owners with no strategies.
+  const ownerOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const s of strategies) {
+      if (!seen.has(s.owner_id)) seen.set(s.owner_id, owners.get(s.owner_id) ?? `${s.owner_id.slice(0, 8)}…`);
+    }
+    return [...seen].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
+  }, [strategies, owners]);
+
+  const typeOptions = useMemo(() => {
+    const seen = new Set<HftStrategyType>();
+    for (const s of strategies) seen.add(s.strategy_type);
+    return [...seen]
+      .map((value) => ({ value, label: HFT_TYPE_LABEL[value] ?? value }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [strategies]);
+
+  // Search counts as a filter here — it sits in the same row and narrows the same table, and the
+  // empty state blames "these filters" for it either way. Sort is deliberately left alone: it is
+  // an ordering, not a narrowing, and clearing it would hide nothing the admin is looking for.
+  const filtersActive = !!search || stageFilter !== "all" || ownerFilter !== "all" || typeFilter !== "all";
+  const resetFilters = () => {
+    setSearch("");
+    setStageFilter("all");
+    setOwnerFilter("all");
+    setTypeFilter("all");
+  };
+
+  // First click on a column sorts it ascending; clicking the one already sorted flips it.
+  const toggleSort = (key: SortKey) =>
+    setSort((prev) => (prev?.key === key ? { key, dir: prev.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" }));
+
   const rows = useMemo(() => {
     const q = debouncedSearch.toLowerCase();
     const needle = idQueryNeedle(debouncedSearch);
-    return strategies.filter((s) => {
+    const filtered = strategies.filter((s) => {
       // An id-looking entry matches the strategy id; anything else is a name search.
       const matchesSearch = !q || (isIdQuery(debouncedSearch) ? s.id.toLowerCase().includes(needle) : s.name.toLowerCase().includes(q));
       const matchesStage = stageFilter === "all" || strategyStage(s, runsOf.get(s.id)).rung === stageFilter;
-      return matchesSearch && matchesStage;
+      const matchesOwner = ownerFilter === "all" || s.owner_id === ownerFilter;
+      const matchesType = typeFilter === "all" || s.strategy_type === typeFilter;
+      return matchesSearch && matchesStage && matchesOwner && matchesType;
     });
-  }, [strategies, debouncedSearch, stageFilter, runsOf]);
+    if (!sort) return filtered;
+
+    // The label is what the column shows, so the label is what it sorts by — sorting Owner by raw
+    // uuid would order a column of names by something invisible.
+    const ownerLabel = (s: Strategy) => owners.get(s.owner_id) ?? s.owner_id;
+    const stageRank = (s: Strategy) => STAGE_ORDER.indexOf(strategyStage(s, runsOf.get(s.id)).stage);
+    const promotedValue = (s: Strategy) => {
+      const rung = strategyStage(s, runsOf.get(s.id)).rung;
+      return timeValue(rung === "live" ? s.live_promoted_at : rung === "paper" ? s.paper_promoted_at : null);
+    };
+
+    const dir = sort.dir === "asc" ? 1 : -1;
+    return [...filtered].sort((a, b) => {
+      // Never-promoted rows hold no date to order, so they sink to the bottom in BOTH directions
+      // rather than flooding the top of a descending sort with dashes.
+      if (sort.key === "promoted") {
+        const ta = promotedValue(a);
+        const tb = promotedValue(b);
+        if (ta == null || tb == null) return ta == null ? (tb == null ? 0 : 1) : -1;
+        return dir * (ta - tb);
+      }
+      switch (sort.key) {
+        case "owner":
+          return dir * ownerLabel(a).localeCompare(ownerLabel(b));
+        case "type":
+          return dir * (HFT_TYPE_LABEL[a.strategy_type] ?? a.strategy_type).localeCompare(HFT_TYPE_LABEL[b.strategy_type] ?? b.strategy_type);
+        case "stage":
+          return dir * (stageRank(a) - stageRank(b));
+        case "version":
+          return dir * (a.version - b.version);
+        default:
+          return dir * a.name.localeCompare(b.name);
+      }
+    });
+  }, [strategies, debouncedSearch, stageFilter, ownerFilter, typeFilter, sort, owners, runsOf]);
 
   // The whole page is admin-only: /api/users 403s for anyone else, and promotion is the point.
   if (!isAdmin) {
@@ -207,6 +293,44 @@ export default function Page() {
             ))}
           </SelectContent>
         </Select>
+        <Select value={ownerFilter} onValueChange={(v) => setOwnerFilter(v ?? "all")}>
+          <SelectTrigger className="h-8 w-auto gap-2 rounded-full border-border bg-background px-3 text-xs text-foreground">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All owners</SelectItem>
+            {ownerOptions.map((o) => (
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v ?? "all")}>
+          <SelectTrigger className="h-8 w-auto gap-2 rounded-full border-border bg-background px-3 text-xs text-foreground">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All types</SelectItem>
+            {typeOptions.map((o) => (
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {/* Only once there is something to clear: a permanently visible Reset on an unfiltered
+            table is a control that does nothing, and it reads as one more filter to understand. */}
+        {filtersActive && (
+          <button
+            type="button"
+            onClick={resetFilters}
+            className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-2 text-xs text-muted-foreground transition-colors hover:text-white"
+          >
+            <CloseCircle weight="Outline" className="size-3.5" />
+            Reset filters
+          </button>
+        )}
       </div>
 
       <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-background">
@@ -221,15 +345,39 @@ export default function Page() {
             <Table className="table-fixed min-w-[1200px]">
               <TableHeader>
                 <TableRow>
-                  {COLS.map((c) => (
-                    <TableHead
-                      key={c.key}
-                      style={{ width: c.w }}
-                      className={c.align === "right" ? "text-right" : undefined}
-                    >
-                      {c.label}
-                    </TableHead>
-                  ))}
+                  {COLS.map((c) => {
+                    const active = sort?.key === c.key;
+                    return (
+                      <TableHead
+                        key={c.key}
+                        style={{ width: c.w }}
+                        className={c.align === "right" ? "text-right" : undefined}
+                        aria-sort={active ? (sort.dir === "asc" ? "ascending" : "descending") : undefined}
+                      >
+                        {c.sortable ? (
+                          <button
+                            type="button"
+                            onClick={() => toggleSort(c.key)}
+                            className={cn(
+                              "inline-flex cursor-pointer items-center gap-1 transition-colors hover:text-white",
+                              active && "text-white",
+                            )}
+                          >
+                            {c.label}
+                            {/* The dimmed arrow on an unsorted column is what advertises that the
+                                header is clickable at all — without it nothing on the row looks live. */}
+                            {active && sort.dir === "desc" ? (
+                              <AltArrowDown weight="Outline" className="size-3.5" />
+                            ) : (
+                              <AltArrowUp weight="Outline" className={cn("size-3.5", !active && "opacity-30")} />
+                            )}
+                          </button>
+                        ) : (
+                          c.label
+                        )}
+                      </TableHead>
+                    );
+                  })}
                 </TableRow>
               </TableHeader>
               <TableBody>

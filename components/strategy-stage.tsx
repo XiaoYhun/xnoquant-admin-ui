@@ -27,6 +27,19 @@ export type StrategyStage =
 /** The coarse rung, for the things that branch on the ladder rather than on the wording. */
 export type StageRung = "backtest" | "paper" | "live";
 
+/**
+ * The ladder in climbing order — what "sort by stage" has to mean. Alphabetical would put
+ * Backtested above Live trading, which is backwards for a promotion review.
+ */
+export const STAGE_ORDER: StrategyStage[] = [
+  "none",
+  "backtested",
+  "paper-promoted",
+  "paper-trading",
+  "live-promoted",
+  "live-trading",
+];
+
 const STAGE_LABEL: Record<StrategyStage, string> = {
   none: "Not simulated",
   backtested: "Backtested",

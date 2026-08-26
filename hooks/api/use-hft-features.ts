@@ -7,8 +7,21 @@ import type { FeatureDef } from "@/hooks/api/use-hft-strategies";
 // validation (`POST /api/strategies/validate-features`) for the HFT "Features" tab
 // (hft-features-tab.tsx). Both responses are UNTYPED in the OpenAPI spec (`content?: never`), so
 // we fetch as `unknown` and defensively normalize.
+//
+// Observed live shape of the catalog (hft-dev, 2026-08-26):
+//   { fields:    [{ name, description }]                            — 59 entries
+//     functions: [{ name, min_args, max_args, description, usage }] — 22 entries }
+// Every entry carries a description. `min_args`/`max_args`/`usage` (e.g. "ema(field, window)")
+// are NOT parsed yet — they are what the Figma arity suffix (`abs (1)`) would need. Nothing here
+// may ASSUME those keys: the spec promises no schema, so the normalizer stays tolerant of the
+// older name-only shape.
 
-export type FeatureCatalogItem = { name: string; returns: string };
+export type FeatureCatalogItem = {
+  name: string;
+  returns: string;
+  /** One-line explanation from the engine registry; absent on older payloads. */
+  description?: string;
+};
 export type FeatureValidationError = { index?: number; name?: string; error: string };
 
 function toCatalogItem(entry: unknown, fallbackReturns: "FN" | "FIELD"): FeatureCatalogItem | null {
@@ -19,13 +32,13 @@ function toCatalogItem(entry: unknown, fallbackReturns: "FN" | "FIELD"): Feature
   if (!name) return null;
   const kind = rec.kind ?? rec.returns ?? rec.type;
   const returns = typeof kind === "string" && kind.length > 0 ? kind : fallbackReturns;
-  return { name, returns };
+  const description = typeof rec.description === "string" && rec.description.length > 0 ? rec.description : undefined;
+  return { name, returns, description };
 }
 
 // Tolerates: (a) a bare array of `{name, ...}` entries, (b) an object with `fields`/`functions`
 // arrays. Falls back to `[]` if neither shape is recognized.
 function normalizeCatalog(raw: unknown): FeatureCatalogItem[] {
-  console.debug("[feature-catalog] raw", raw);
   if (Array.isArray(raw)) {
     return raw.map((e) => toCatalogItem(e, "FN")).filter((x): x is FeatureCatalogItem => x !== null);
   }
@@ -40,9 +53,9 @@ function normalizeCatalog(raw: unknown): FeatureCatalogItem[] {
 }
 
 const MOCK_CATALOG: FeatureCatalogItem[] = [
-  { name: "sma", returns: "FN" },
-  { name: "vwap", returns: "FN" },
-  { name: "close", returns: "FIELD" },
+  { name: "sma", returns: "FN", description: "Simple moving average over the last `window` samples." },
+  { name: "vwap", returns: "FN", description: "Volume-weighted average price over the last `window` samples." },
+  { name: "close", returns: "FIELD", description: "Close price of the current bar." },
 ];
 
 export function useFeatureCatalog() {

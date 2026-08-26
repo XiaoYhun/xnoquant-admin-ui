@@ -266,29 +266,45 @@ export function HftFeaturesTab({ strategyId }: { strategyId?: string }) {
             <div className="grid grid-cols-2 gap-2">
               {filteredCatalog.map((c, idx) => (
                 // Item_feature — Figma 14567:26952
-                <div key={`${c.name}-${idx}`} className="flex items-center gap-3 rounded-xl border border-border px-3 py-2">
-                  <span className="flex shrink-0 items-center justify-center rounded-lg bg-secondary px-1.5 py-1">
+                // Top-aligned, not centred: the description makes the card height vary, and a
+                // centred icon/Add drifts away from the name it belongs to.
+                <div key={`${c.name}-${idx}`} className="flex items-start gap-3 rounded-xl border border-border px-3 py-2">
+                  <span className="mt-0.5 flex shrink-0 items-center justify-center rounded-lg bg-secondary px-1.5 py-1">
                     <Code2 weight="Bold" className="size-4 text-[#9db2ce]" />
                   </span>
-                  <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <div className="flex min-w-0 flex-1 flex-col gap-1">
                     <div className="flex items-center gap-3">
                       <p className="min-w-0 flex-1 truncate text-sm font-medium text-white">{c.name}</p>
                     </div>
-                    <span className="inline-flex w-fit items-center gap-1 rounded-lg border border-border bg-[#0d0d0d] px-2 py-0.5 text-[11px]">
+                    {/* Clamped to two lines — some registry descriptions run to a paragraph, and the
+                        grid is two narrow columns. `title` keeps the full text reachable. */}
+                    {c.description && (
+                      <p
+                        title={c.description}
+                        className="line-clamp-2 text-[11px] leading-[15px] text-muted-foreground"
+                      >
+                        {c.description}
+                      </p>
+                    )}
+                  </div>
+                  {/* Add on top, kind badge directly beneath it — the right column reads as one
+                      unit, and the badge no longer pushes the description around. */}
+                  <div className="mt-0.5 flex shrink-0 flex-col items-end gap-1">
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => addPrimitive(c)}
+                      className="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-[#344054] bg-secondary py-0.5 pr-2 pl-1.5 text-xs text-[#d0d5dd] transition-colors hover:brightness-125"
+                    >
+                      <PlusIcon className="size-[18px]" />
+                      Add
+                    </button>
+                    <span className="inline-flex items-center gap-1 rounded-lg border border-border bg-[#0d0d0d] px-2 py-0.5 text-[11px]">
                       <span className="bg-[linear-gradient(133deg,#cff8ea_0%,#67e1c1_100%)] bg-clip-text font-semibold text-transparent">
                         {c.returns}
                       </span>
                     </span>
                   </div>
-                  <button
-                    type="button"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => addPrimitive(c)}
-                    className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-lg border border-[#344054] bg-secondary py-0.5 pr-2 pl-1.5 text-xs text-[#d0d5dd] transition-colors hover:brightness-125"
-                  >
-                    <PlusIcon className="size-[18px]" />
-                    Add
-                  </button>
                 </div>
               ))}
               {filteredCatalog.length === 0 && (

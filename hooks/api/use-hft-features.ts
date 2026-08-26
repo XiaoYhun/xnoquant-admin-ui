@@ -71,10 +71,18 @@ export function useFeatureCatalog() {
   });
 }
 
-// Tolerates an array of `{index?, name?, error?|message?}` entries; anything else yields no errors.
+// Tolerates a bare array of `{index?, name?, error?|message?}` entries AND the envelope
+// `{ok, errors: [...]}` that `/validate` actually answers with (observed on hft-dev, 2026-08-26:
+// `{"ok":false,"errors":[{"message":"Unexpected ';' (line 29, position 14)","line":29,"column":14}]}`).
+// Reading only the bare array made every compile failure look like a pass, since an unrecognized
+// payload yields no errors — the shape is unpromised by the spec, so both are accepted.
 function normalizeValidationErrors(raw: unknown): FeatureValidationError[] {
-  if (!Array.isArray(raw)) return [];
-  return raw
+  const list = Array.isArray(raw)
+    ? raw
+    : raw && typeof raw === "object" && Array.isArray((raw as Record<string, unknown>).errors)
+      ? ((raw as Record<string, unknown>).errors as unknown[])
+      : [];
+  return list
     .map((entry): FeatureValidationError | null => {
       if (!entry || typeof entry !== "object") return null;
       const rec = entry as Record<string, unknown>;

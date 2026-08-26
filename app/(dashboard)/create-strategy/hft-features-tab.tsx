@@ -10,6 +10,7 @@ import { CloseIcon } from "@/components/icons/close";
 import { useHftStrategy, useUpdateHftStrategy, type FeatureDef } from "@/hooks/api/use-hft-strategies";
 import { useFeatureCatalog, useValidateFeatures, type FeatureCatalogItem } from "@/hooks/api/use-hft-features";
 import { resourceErrorMessage } from "@/lib/api-client";
+import { useConsoleLog } from "@/store/console-log-store";
 
 type DraftRow = { name: string; expression: string };
 type RowField = "name" | "expression";
@@ -36,6 +37,7 @@ export function HftFeaturesTab({ strategyId }: { strategyId?: string }) {
   const updateStrategy = useUpdateHftStrategy();
   const { data: catalog = [], isPending: catalogPending } = useFeatureCatalog();
   const validateFeatures = useValidateFeatures();
+  const addLog = useConsoleLog((s) => s.addLog);
 
   const [rows, setRows] = useState<DraftRow[]>([emptyRow()]);
   const [seededFor, setSeededFor] = useState<string | undefined>(undefined);
@@ -69,11 +71,13 @@ export function HftFeaturesTab({ strategyId }: { strategyId?: string }) {
 
   function updateRow(index: number, patch: Partial<DraftRow>) {
     setRowErrors({});
+    validateFeatures.reset(); // the last verdict described code that no longer exists
     setRows((prev) => withTrailingEmptyRow(prev.map((r, i) => (i === index ? { ...r, ...patch } : r))));
   }
 
   function removeRow(index: number) {
     setRowErrors({});
+    validateFeatures.reset(); // the last verdict described code that no longer exists
     setRows((prev) => {
       const next = prev.filter((_, i) => i !== index);
       return withTrailingEmptyRow(next.length > 0 ? next : []);
@@ -86,6 +90,7 @@ export function HftFeaturesTab({ strategyId }: { strategyId?: string }) {
 
   function addPrimitive(item: FeatureCatalogItem) {
     setRowErrors({});
+    validateFeatures.reset(); // the last verdict described code that no longer exists
     const token = primitiveToken(item);
     const focus = focusedRef.current;
 
@@ -136,6 +141,10 @@ export function HftFeaturesTab({ strategyId }: { strategyId?: string }) {
     updateStrategy.mutate({ id: strategyId, features: toFeatureDefs() });
   }
 
+  // Validate has to answer out loud. Marking the bad rows says nothing when every row is fine, so
+  // a passing check used to read exactly like a click that did nothing — and an error the server
+  // reports against no row we can match (or a request that never lands) vanished entirely. The
+  // verdict goes to the footer, the per-error detail to the console.
   function handleValidate() {
     validateFeatures.mutate(toFeatureDefs(), {
       onSuccess: (errors) => {
@@ -147,11 +156,31 @@ export function HftFeaturesTab({ strategyId }: { strategyId?: string }) {
           if (match) map[match.rowIndex] = e.error;
         });
         setRowErrors(map);
+        if (errors.length === 0) {
+          addLog("success", `All ${nonEmptyRows.length} features compiled — no errors`);
+          return;
+        }
+        errors.forEach((e) => addLog("error", `Feature error${e.name ? ` (${e.name})` : ""}: ${e.error}`));
       },
+      onError: (err) => addLog("error", `Validate failed: ${resourceErrorMessage(err, "these features")}`),
     });
   }
 
   const variableCount = nonEmptyRows.length;
+  const failedCount = validateFeatures.data?.length ?? 0;
+  // One status slot for the footer, so Validate and Save can't both claim the same space. Validate
+  // wins while its result stands — it is the one the user is waiting on.
+  const status: { tone: "ok" | "error"; text: string } | null = validateFeatures.isError
+    ? { tone: "error", text: `Validate failed: ${resourceErrorMessage(validateFeatures.error, "these features")}` }
+    : validateFeatures.isSuccess
+      ? failedCount === 0
+        ? { tone: "ok", text: `All ${variableCount} features valid.` }
+        : { tone: "error", text: `${failedCount} of ${variableCount} features failed to compile.` }
+      : updateStrategy.isError
+        ? { tone: "error", text: resourceErrorMessage(updateStrategy.error, "this strategy") }
+        : updateStrategy.isSuccess && !updateStrategy.isPending
+          ? { tone: "ok", text: "Saved." }
+          : null;
 
   return (
     <div className="flex flex-col gap-4 p-4">
@@ -220,11 +249,10 @@ export function HftFeaturesTab({ strategyId }: { strategyId?: string }) {
 
         {/* Validate/Save kept for functionality (per request; not in the design node) */}
         <div className="flex items-center justify-end gap-2 border-t border-border p-2">
-          {updateStrategy.isError && (
-            <p className="mr-auto text-xs text-destructive">{resourceErrorMessage(updateStrategy.error, "this strategy")}</p>
-          )}
-          {updateStrategy.isSuccess && !updateStrategy.isPending && (
-            <p className="mr-auto text-xs text-primary">Saved.</p>
+          {status && (
+            <p className={`mr-auto text-xs ${status.tone === "ok" ? "text-primary" : "text-destructive"}`}>
+              {status.text}
+            </p>
           )}
           <button
             type="button"

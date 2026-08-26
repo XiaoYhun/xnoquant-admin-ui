@@ -17,6 +17,7 @@ import { useMarkets } from "@/hooks/api/use-markets";
 import { useUpdateEditor } from "@/hooks/api/use-strategy-builder";
 import { useStrategyRuns } from "@/hooks/api/use-strategy-runs";
 import { useHftStrategy, useUpdateHftStrategy, type HftStrategyType } from "@/hooks/api/use-hft-strategies";
+import { useValidateScript } from "@/hooks/api/use-hft-features";
 import { useConsoleLog } from "@/store/console-log-store";
 import { StrategyStageBadge, nextPromotionStage, launchMode, PAPER_RUN_SUCCEEDED } from "@/components/strategy-stage";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -351,8 +352,13 @@ export function Toolbar({
   const [hftInterval, setHftInterval] = useState("5m");
   const { data: hftStrategy } = useHftStrategy(type === "hft" ? id : undefined);
   const hftType = hftStrategy?.strategy_type;
+  const validateScript = useValidateScript();
 
-  // Inline rename, like the MFT platform's title field: click the name, edit, Enter/blur commits.
+  // Inline rename: click the name, edit, Enter/blur commits. HFT only — `PUT /v2/editors/{id}/update`
+  // takes code/market/universe/train_ratio and no `name` (a name-only body is rejected with "no
+  // fields provided for edit"), so an MFT editor has no server-side rename to call. Offering the
+  // affordance there would only ever produce a local label that vanishes on the next reload.
+  const canRename = canWrite && type === "hft";
   const [renaming, setRenaming] = useState(false);
   const [draftName, setDraftName] = useState(name);
 
@@ -360,10 +366,6 @@ export function Toolbar({
     const next = draftName.trim();
     setRenaming(false);
     if (!next || next === name) return;
-    if (type !== "hft") {
-      onRenamed?.(next);
-      return;
-    }
     try {
       await updateStrategy.mutateAsync({ id, name: next });
       onRenamed?.(next);
@@ -371,6 +373,29 @@ export function Toolbar({
     } catch (err) {
       setDraftName(name);
       addLog("error", `Rename failed: ${resourceErrorMessage(err, "this strategy")}`);
+    }
+  };
+
+  // Compile the editor's CURRENT code without saving or launching (POST /api/strategies/validate),
+  // so a syntax error is caught here rather than by a run that fails minutes later. The features
+  // go with it: the server sizes its `features` array from that list, so valid `features[i]`
+  // accesses don't halt the test-eval early and report as errors.
+  const handleCheckClick = async () => {
+    if (!hftStrategy) return;
+    try {
+      const errors = await validateScript.mutateAsync({
+        code,
+        features: hftStrategy.features ?? [],
+        strategyType: hftStrategy.strategy_type,
+      });
+      if (errors.length === 0) {
+        addLog("success", "Script compiled — no errors");
+        return;
+      }
+      // Every error is logged, not just the first: the compiler reports them all in one pass.
+      errors.forEach((e) => addLog("error", `Script error${e.name ? ` (${e.name})` : ""}: ${e.error}`));
+    } catch (err) {
+      addLog("error", `Check failed: ${resourceErrorMessage(err, "this strategy")}`);
     }
   };
 
@@ -498,7 +523,7 @@ export function Toolbar({
   return (
     <div className="flex h-12 shrink-0 items-center justify-between gap-4 border-b border-border px-4 bg-surface">
       <div className="flex min-w-0 flex-1 items-center gap-3">
-        {renaming && canWrite ? (
+        {renaming && canRename ? (
           <input
             autoFocus
             value={draftName}
@@ -518,11 +543,17 @@ export function Toolbar({
           <span
             className={cn(
               "min-w-0 shrink truncate text-xl font-semibold text-white",
-              canWrite && "cursor-text hover:opacity-80",
+              canRename && "cursor-text hover:opacity-80",
             )}
-            title={canWrite ? `${name} — click to rename` : name}
+            title={
+              canRename
+                ? `${name} — click to rename`
+                : type === "mft"
+                  ? `${name} — MFT editors can't be renamed: the editor API has no name field`
+                  : name
+            }
             onClick={() => {
-              if (!canWrite) return;
+              if (!canRename) return;
               setDraftName(name);
               setRenaming(true);
             }}
@@ -548,6 +579,18 @@ export function Toolbar({
           onSettingsSaved={onSettingsSaved}
         />
         <IconButton icon={copied ? CheckCircle : Copy} label={copied ? "Copied" : "Copy code"} onClick={handleCopyCode} />
+        {/* Outside the `canWrite` gate: validating writes nothing, so it works on a read-only
+            share too — checking whether a lab-mate's script still compiles is a fair question. */}
+        {type === "hft" && (
+          <button
+            type="button"
+            onClick={handleCheckClick}
+            disabled={validateScript.isPending || !hftStrategy}
+            className="inline-flex h-8 shrink-0 cursor-pointer items-center rounded-[32px] border border-border bg-background px-3 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {validateScript.isPending ? "Checking…" : "Check"}
+          </button>
+        )}
         {/* Save/Simulate both PUT the strategy, which 404s for a lab-mate's share — hide them there. */}
         {canWrite && (
           <>

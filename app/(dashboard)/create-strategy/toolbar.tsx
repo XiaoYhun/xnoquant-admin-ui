@@ -7,7 +7,7 @@ import type { IconProps } from "@solar-icons/react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { SimulateModal, HFT_MARKET_LABEL, HFT_TYPE_LABEL } from "./simulate-modal";
+import { SimulateModal, HFT_TYPE_LABEL } from "./simulate-modal";
 import { USE_MOCK } from "@/lib/constant";
 import { cn } from "@/lib/utils";
 import { resourceErrorMessage } from "@/lib/api-client";
@@ -29,9 +29,9 @@ import type { Run } from "@/types/domain";
 // wiring lands with the shell owner).
 
 // HFT market — no strategy field maps to it; it's a launch-time choice passed to SimulateModal,
-// which turns it into the run's `data_kind` (tick-l2 -> tick, bar-ohlc -> bar + interval).
-// `HFT_MARKET_LABEL`/`HFT_TYPE_LABEL` are defined in ./simulate-modal so both sides share one
-// definition.
+// which turns it into the run's `data_kind` (tick-l2 -> tick, bar-ohlc -> bar + interval). It is
+// not shown on the pill; the Simulate modal is where it is both chosen and displayed.
+// `HFT_TYPE_LABEL` is defined in ./simulate-modal so both sides share one definition.
 
 function IconButton({
   icon: Icon,
@@ -477,8 +477,8 @@ export function Toolbar({
         : `No finished paper run at v${hftStrategy?.version ?? "?"} — paper-trade this version first.`;
 
   // An HFT strategy has no symbol field of its own — the symbols are a launch-time choice that
-  // only becomes a fact on a run. So the header names what this strategy actually trades: the
-  // symbols of its most recent run, read off the manifest `strategyRuns` is already fetching.
+  // only becomes a fact on a run. So the Settings pill names what this strategy actually trades:
+  // the symbols of its most recent run, read off the manifest `strategyRuns` already fetches.
   // Nothing to show before the first run, which is honest — there is no symbol yet.
   const symbolLabel = useMemo(() => {
     const newest = strategyRuns[0];
@@ -487,11 +487,13 @@ export function Toolbar({
     return names.length === 1 ? names[0] : `${names[0]} +${names.length - 1}`;
   }, [strategyRuns]);
 
-  // Shown on the Settings trigger: HFT reads market + strategy type, MFT market + universe.
+  // Shown on the Settings trigger: the symbols, then the strategy type (MFT: market + universe).
+  // The symbol leads because it is the one that says WHAT is being traded. Market is deliberately
+  // absent — it is a per-run choice that the Simulate modal already shows.
   const pillItems =
     type === "hft"
-      ? [HFT_MARKET_LABEL[hftMarket] ?? hftMarket, ...(hftType ? [HFT_TYPE_LABEL[hftType]] : [])]
-      : [market, universe].filter((v): v is string => !!v);
+      ? [...(symbolLabel ? [symbolLabel] : []), ...(hftType ? [HFT_TYPE_LABEL[hftType]] : [])]
+      : [...(symbolLabel ? [symbolLabel] : []), market, universe].filter((v): v is string => !!v);
 
   return (
     <div className="flex h-12 shrink-0 items-center justify-between gap-4 border-b border-border px-4 bg-surface">
@@ -531,11 +533,6 @@ export function Toolbar({
         {/* The HFT/MFT badge that lived here is gone — the lab is already obvious from the
             sidebar toggle. Its place shows where the strategy sits on the promotion ladder and
             which version that refers to, which is what governs whether it can launch. */}
-        {symbolLabel && (
-          <span className="shrink-0 rounded-md bg-background px-2 py-0.5 text-xs font-semibold text-white" title="Symbols from the most recent run">
-            {symbolLabel}
-          </span>
-        )}
         {hftStrategy && <StrategyStageBadge strategy={hftStrategy} runs={strategyRuns} />}
       </div>
 

@@ -29,13 +29,9 @@ const DEFAULT_BALANCES: BalanceRow[] = [{ currency: "USDT", amount: 100000 }];
 // kline (its set jumps 5m → 15m); the backend aggregates it, so it's offered for every venue.
 export const INTERVALS = ["1m", "5m", "10m", "15m", "1h", "1d"];
 
-// Launch-time market, chosen in the toolbar's Settings popover. Lives here (not in toolbar.tsx) so
-// both the toolbar pill and this modal read one definition — toolbar already imports from here, so
-// the other direction would be an import cycle.
-export const HFT_MARKET_LABEL: Record<string, string> = { "tick-l2": "Tick / L2 (HFT)", "bar-ohlc": "Bar / OHLC (MFT)" };
-
 // `strategy_type` — the API-backed field, edited in the toolbar's Settings popover and shown
-// read-only here. Lives alongside HFT_MARKET_LABEL for the same import-direction reason.
+// read-only here. Lives here (not in toolbar.tsx) so both sides read one definition — toolbar
+// already imports from here, so the other direction would be an import cycle.
 export const HFT_TYPE_LABEL: Record<HftStrategyType, string> = { taker: "Taker", maker: "Maker", arbitrage: "Arbitrage" };
 
 // The summary block is one pattern per row: `text-xs` muted label left, `text-xs` control/value

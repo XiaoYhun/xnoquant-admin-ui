@@ -18,8 +18,9 @@ import { useMemo, useState } from "react";
 import type { EChartsOption } from "echarts";
 import { MaximizeSquareMinimalistic } from "@solar-icons/react";
 
-import { cn, formatAmount } from "@/lib/utils";
+import { cn, currencyDigits, formatAmount } from "@/lib/utils";
 import { BaseChart } from "@/components/charts/base-chart";
+import { ChartState, chartStatus } from "@/components/charts/chart-state";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -215,7 +216,7 @@ function grossSeries(equity: EquityPoint[], cost: CostPoint[]): number[] | null 
   });
 }
 
-function equityChartOption(points: EquityPoint[], gross: number[] | null): EChartsOption {
+function equityChartOption(points: EquityPoint[], gross: number[] | null, digits: number): EChartsOption {
   const labels = points.map((p) => equityDayLabel(Number(p.ts)));
   const net = points.map((p) => Number(p.equity));
   const drawdown = toDrawdown(points).map((p) => p.pct);
@@ -284,6 +285,7 @@ function equityChartOption(points: EquityPoint[], gross: number[] | null): EChar
               data: gross,
               smooth: true,
               showSymbol: false,
+              tooltip: { valueFormatter: (v: unknown) => formatAmount(Number(v), digits) },
               lineStyle: { width: 1.5, color: GRAY, type: "dashed" as const },
               itemStyle: { color: GRAY },
               z: 2,
@@ -296,6 +298,7 @@ function equityChartOption(points: EquityPoint[], gross: number[] | null): EChar
         data: net,
         smooth: true,
         showSymbol: false,
+        tooltip: { valueFormatter: (v: unknown) => formatAmount(Number(v), digits) },
         lineStyle: { width: 2.5, color: GREEN },
         itemStyle: { color: GREEN },
         z: 3,
@@ -325,23 +328,24 @@ export function OverviewView({ runId }: { runId?: string }) {
 
   const windowed = useMemo(() => inRange(equity, range), [equity, range]);
   const gross = useMemo(() => grossSeries(windowed, cost), [windowed, cost]);
-  const chartOption = useMemo(() => equityChartOption(windowed, gross), [windowed, gross]);
+  const digits = currencyDigits(currency);
+  const chartOption = useMemo(() => equityChartOption(windowed, gross, digits), [windowed, gross, digits]);
 
   // Order matters: a running run's REST curve/summary error out by design, so a live series or a
   // live summary has to win over the REST error rather than be labelled "unavailable" beneath it.
-  const curveNote = !runId
-    ? "Pick a run"
+  const curveStatus = chartStatus({
+    idle: !runId,
+    loading: equity.length === 0 && (summaryLoading || equityLoading),
+    error: equity.length === 0 && equityError,
+    empty: windowed.length === 0,
+  });
+  const curveDetail = equityError
+    ? "The equity curve for this run could not be loaded."
     : equity.length === 0
-      ? summaryLoading || equityLoading
-        ? "Loading…"
-        : equityError
-          ? "Equity unavailable"
-          : "No equity points"
-      : windowed.length === 0
-        ? "No points in range"
-        : summaryError && !summary
-          ? "Summary unavailable"
-          : undefined;
+      ? "This run has no equity points yet."
+      : "No equity points fall inside this range.";
+  // A missing summary does not stop the curve drawing, so it stays a caption.
+  const curveNote = curveStatus === "ready" && summaryError && !summary ? "Summary unavailable" : undefined;
 
   return (
     <div className="@container flex min-w-0 flex-col gap-4">
@@ -382,7 +386,9 @@ export function OverviewView({ runId }: { runId?: string }) {
               </div>
             ))}
           </div>
-          <BaseChart option={chartOption} style={{ height: 300 }} />
+          <ChartState status={curveStatus} detail={curveDetail} height={300}>
+            <BaseChart option={chartOption} style={{ height: 300 }} />
+          </ChartState>
         </div>
       </div>
 

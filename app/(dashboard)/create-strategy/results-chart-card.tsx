@@ -3,6 +3,7 @@
 // white, 16/12 inset, Surface-main background, bottom border) carrying an optional control and the
 // expand affordance on the right, above the chart body.
 import { MaximizeSquareMinimalistic } from "@solar-icons/react";
+import { ChartState, type ChartStatus } from "@/components/charts/chart-state";
 import { cn } from "@/lib/utils";
 
 export function ChartCard({
@@ -11,6 +12,9 @@ export function ChartCard({
   children,
   className,
   expandable = true,
+  status = "ready",
+  detail,
+  bodyHeight,
 }: {
   title: string;
   /** Right-aligned control (period select, unit toggle…), shown before the expand button. */
@@ -19,6 +23,12 @@ export function ChartCard({
   className?: string;
   /** Figma omits the expand affordance on some panels (15039:42982 / 15039:43339). */
   expandable?: boolean;
+  /** Anything but "ready" replaces the body with a skeleton or an explained empty/error state. */
+  status?: ChartStatus;
+  /** The call site’s own explanation, shown under the state title. */
+  detail?: string;
+  /** Height the state stands in at — match the chart it replaces so the card does not jump. */
+  bodyHeight?: number;
 }) {
   return (
     <div className={cn("flex min-w-0 flex-col overflow-hidden rounded-xl border border-border", className)}>
@@ -37,7 +47,11 @@ export function ChartCard({
           )}
         </div>
       </div>
-      <div className="min-w-0 p-4">{children}</div>
+      <div className="min-w-0 p-4">
+        <ChartState status={status} detail={detail} height={bodyHeight}>
+          {children}
+        </ChartState>
+      </div>
     </div>
   );
 }

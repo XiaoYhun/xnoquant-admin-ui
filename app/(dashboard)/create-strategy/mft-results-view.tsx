@@ -11,6 +11,7 @@ import { cn, formatAmount } from "@/lib/utils";
 import { USE_MOCK } from "@/lib/constant";
 import { CloseIcon } from "@/components/icons/close";
 import { BaseChart } from "@/components/charts/base-chart";
+import { ChartState, chartStatus } from "@/components/charts/chart-state";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -358,21 +359,27 @@ function SeriesChartCard({
   onRemove: () => void;
 }) {
   const meta = SERIES_META[series] ?? { title: series, kind: "green" as const };
-  const { data, isLoading } = useStrategyChart(strategyId, series);
+  const { data, isLoading, isError } = useStrategyChart(strategyId, series);
+  const status = chartStatus({
+    idle: !strategyId,
+    loading: isLoading,
+    error: isError,
+    empty: !data?.times?.length,
+  });
 
   return (
     <ChartCard title={meta.title} onRemove={onRemove}>
-      {isLoading ? (
-        <div className="flex h-[240px] items-center justify-center text-sm text-muted-foreground">
-          Loading data...
-        </div>
-      ) : !data?.times?.length ? (
-        <div className="flex h-[240px] items-center justify-center text-sm text-muted-foreground">
-          No data available
-        </div>
-      ) : (
-        <BaseChart option={buildMultiStageOption(data, stage)} style={{ height: 240 }} />
-      )}
+      <ChartState
+        status={status}
+        detail={
+          isError
+            ? `The ${meta.title} series could not be loaded.`
+            : `No ${meta.title} points for this stage.`
+        }
+      >
+        {/* JSX children evaluate before ChartState picks a branch, so guard the builder. */}
+        {data && <BaseChart option={buildMultiStageOption(data, stage)} style={{ height: 240 }} />}
+      </ChartState>
     </ChartCard>
   );
 }

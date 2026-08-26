@@ -14,6 +14,7 @@ import { useMemo } from "react";
 import type { EChartsOption } from "echarts";
 
 import { BaseChart } from "@/components/charts/base-chart";
+import { chartStatus, type ChartStateProps } from "@/components/charts/chart-state";
 import { useRunCurrency, useRunEquity, useRunSummary } from "@/hooks/api/use-runs";
 import { mergeLiveSummary, preferLiveEquity, useLiveSnapshot } from "@/hooks/api/use-run-live-snapshot";
 import {
@@ -31,7 +32,7 @@ import {
   type DayPoint,
   type MonthPnl,
 } from "@/lib/transform/results";
-import { cn, formatAmount, formatSignedAmount } from "@/lib/utils";
+import { cn, currencyDigits, formatAmount, formatSignedAmount } from "@/lib/utils";
 import { ChartCard, MockNote } from "./results-chart-card";
 
 // Gradient text — Figma cells/values use these clipped gradients (angles vary 143–165° per
@@ -231,17 +232,20 @@ function MonthlyReturnPanel({
   step,
   isPct,
   note,
+  state,
 }: {
   rows: YearlyReturns[];
   step: number;
   isPct: boolean;
   note?: string;
+  state: ChartStateProps;
 }) {
   // Heatmap cells are ~48px wide; two decimals do not fit.
   const fmt = (v: number) => (isPct ? fmtPct(v, 1) : fmtSigned(v, 0));
   return (
     <ChartCard
       title="Monthly Return"
+      {...state}
       controls={
         <>
           {note && <MockNote>{note}</MockNote>}
@@ -325,10 +329,15 @@ function MonthlyReturnPanel({
  * Signed PnL bars on a zero-mirrored axis — shared by the by-date and by-weekday panels, which
  * differ only in bar width and how many categories they carry.
  */
-export function buildSignedPnlOption(points: DayPoint[], barWidth: number | string): EChartsOption {
+export function buildSignedPnlOption(
+  points: DayPoint[],
+  barWidth: number | string,
+  /** Decimals in the tooltip — 0 for VND, which has no sub-unit. */
+  digits = 2,
+): EChartsOption {
   const bound = niceSymmetricMax(points.map((p) => p.value));
   return {
-    tooltip: { trigger: "axis" },
+    tooltip: { trigger: "axis", valueFormatter: (v: unknown) => formatAmount(Number(v), digits) },
     grid: { left: 8, right: 8, top: 16, bottom: 8, containLabel: true },
     xAxis: { ...CATEGORY_AXIS, data: points.map((p) => p.label) },
     yAxis: {
@@ -357,17 +366,21 @@ function NetDailyPnlPanel({
   points,
   currency,
   note,
+  state,
 }: {
   points: DayPoint[];
   currency: string;
   note?: string;
+  state: ChartStateProps;
 }) {
-  const option = useMemo(() => buildSignedPnlOption(points, "42%"), [points]);
+  const digits = currencyDigits(currency);
+  const option = useMemo(() => buildSignedPnlOption(points, "42%", digits), [points, digits]);
   return (
     <ChartCard
       title={`Net Daily PNL (${currency})`}
       controls={note ? <MockNote>{note}</MockNote> : undefined}
       expandable={false}
+      {...state}
     >
       <BaseChart option={option} />
     </ChartCard>
@@ -378,18 +391,22 @@ function WeeklyPerformancePanel({
   points,
   currency,
   note,
+  state,
 }: {
   points: DayPoint[];
   currency: string;
   note?: string;
+  state: ChartStateProps;
 }) {
   // Wider bars: seven categories at most, and the design draws them as 20px slabs.
-  const option = useMemo(() => buildSignedPnlOption(points, 20), [points]);
+  const digits = currencyDigits(currency);
+  const option = useMemo(() => buildSignedPnlOption(points, 20, digits), [points, digits]);
   return (
     <ChartCard
       title={`Weekly performance (${currency})`}
       controls={note ? <MockNote>{note}</MockNote> : undefined}
       expandable={false}
+      {...state}
     >
       <BaseChart option={option} />
     </ChartCard>
@@ -460,16 +477,19 @@ function DistributionPanel({
   bins,
   isPct,
   note,
+  state,
 }: {
   bins: HistogramBin[];
   isPct: boolean;
   note?: string;
+  state: ChartStateProps;
 }) {
   const option = useMemo(() => buildDistributionOption(bins, isPct), [bins, isPct]);
   return (
     <ChartCard
       title="Daily Return Distribution"
       controls={note ? <MockNote>{note}</MockNote> : undefined}
+      {...state}
     >
       <BaseChart option={option} />
     </ChartCard>
@@ -502,6 +522,7 @@ export function PerformanceView({ runId }: { runId?: string }) {
   const scale = capital === null ? 1 : 100 / capital; // PnL → % of starting capital
 
   const currency = useRunCurrency(runId);
+  const digits = currencyDigits(currency);
   const stats = useMemo(() => equityStats(equity), [equity]);
   // A rolling 30-day window: padded up to 30 days so a single-day HFT run reads as a bar in
   // context rather than one lone column, and cut to the most recent 30 so a long backtest doesn't
@@ -544,14 +565,14 @@ export function PerformanceView({ runId }: { runId?: string }) {
       [
         {
           label: "Gross PnL",
-          value: fmtSigned(grossPnl),
+          value: fmtSigned(grossPnl, digits),
           unit: currency,
-          delta: `Fees ${fmtSigned(-summary.total_fee)}`,
+          delta: `Fees ${fmtSigned(-summary.total_fee, digits)}`,
           tone: toneOf(grossPnl),
         },
         {
           label: "Net PnL",
-          value: fmtSigned(summary.net_pnl),
+          value: fmtSigned(summary.net_pnl, digits),
           unit: currency,
           delta: summary.return_pct == null ? undefined : fmtPct(summary.return_pct * 100),
           tone: toneOf(summary.net_pnl),
@@ -566,51 +587,57 @@ export function PerformanceView({ runId }: { runId?: string }) {
         { label: "CAGR", value: cagr },
         {
           label: "Avg Daily PnL",
-          value: stats ? fmtSigned(stats.avgDailyPnl, 2) : DASH,
+          value: stats ? fmtSigned(stats.avgDailyPnl, digits) : DASH,
           unit: stats ? currency : undefined,
         },
         {
           label: "Best day",
-          value: stats ? fmtSigned(stats.bestDay) : DASH,
+          value: stats ? fmtSigned(stats.bestDay, digits) : DASH,
           unit: stats ? currency : undefined,
           tone: stats ? "green" : undefined,
         },
         {
           label: "Worst day",
-          value: stats ? fmtSigned(stats.worstDay) : DASH,
+          value: stats ? fmtSigned(stats.worstDay, digits) : DASH,
           unit: stats ? currency : undefined,
           tone: stats ? "red" : undefined,
         },
       ],
     ];
-  }, [summary, stats, equity, currency]);
+  }, [summary, stats, equity, currency, digits]);
 
   // One note drives every panel: which of "no run / loading / failed / empty" applies, plus the
   // absolute-instead-of-% caveat once data is actually on screen.
   const loading = summaryLoading || equityLoading;
-  const note = !runId
-    ? "Pick a run"
-    : loading
-      ? "Loading…"
-      : summaryError && equityError
-        ? "Results unavailable"
+  // The equity curve is what every panel draws, so it decides the state; a summary failure on
+  // its own only changes the wording.
+  const state: ChartStateProps = {
+    status: chartStatus({
+      idle: !runId,
+      loading,
+      error: equityError,
+      empty: equity.length === 0,
+    }),
+    detail:
+      summaryError && equityError
+        ? "Neither the summary nor the equity curve could be loaded for this run."
         : equityError
-          ? "Equity unavailable"
-          : equity.length === 0
-            ? "No equity points"
-            : isPct
-              ? undefined
-              : "Absolute PnL — no starting capital";
+          ? "The equity curve for this run could not be loaded."
+          : "This run has no equity points yet.",
+  };
+  // Informational only — the panels still draw. Absolute mode is a fact about the numbers, not
+  // a failure to produce them.
+  const note = state.status === "ready" && !isPct ? "Absolute PnL — no starting capital" : undefined;
 
   return (
     <div className="@container flex min-w-0 flex-col gap-4">
       <SummaryCard rows={summaryRows} />
-      <MonthlyReturnPanel rows={monthlyRows} step={heatStep} isPct={isPct} note={note} />
+      <MonthlyReturnPanel rows={monthlyRows} step={heatStep} isPct={isPct} note={note} state={state} />
       <div className="grid min-w-0 grid-cols-1 gap-4 @[560px]:grid-cols-2">
-        <NetDailyPnlPanel points={daily} currency={currency} note={note} />
-        <WeeklyPerformancePanel points={weekly} currency={currency} note={note} />
+        <NetDailyPnlPanel points={daily} currency={currency} note={note} state={state} />
+        <WeeklyPerformancePanel points={weekly} currency={currency} note={note} state={state} />
       </div>
-      <DistributionPanel bins={histogram} isPct={isPct} note={note} />
+      <DistributionPanel bins={histogram} isPct={isPct} note={note} state={state} />
     </div>
   );
 }

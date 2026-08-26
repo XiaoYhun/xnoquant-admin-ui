@@ -16,13 +16,14 @@ import { useMemo, useState } from "react";
 import type { EChartsOption } from "echarts";
 
 import { BaseChart } from "@/components/charts/base-chart";
+import { chartStatus } from "@/components/charts/chart-state";
 import { useRunCostCurve, useRunCurrency, useRunSummary, useRunTurnover } from "@/hooks/api/use-runs";
 import { mergeLiveSummary, useLiveSnapshot } from "@/hooks/api/use-run-live-snapshot";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { lastCumulative, toCostSeries } from "@/lib/cost-curve";
 import { aggregateTurnover, type TurnoverPeriod } from "@/lib/turnover-curve";
 import { costDragPct } from "@/lib/transform/results";
-import { cn, formatAmount, formatCompact } from "@/lib/utils";
+import { cn, currencyDigits, formatAmount, formatCompact } from "@/lib/utils";
 import { currencySymbol } from "@/lib/transform/runs";
 import { ChartCard, MockNote } from "./results-chart-card";
 
@@ -40,7 +41,7 @@ const DASH = "—";
 const moneyIn = (currency: string) => (n: number | null | undefined) =>
   n == null || !Number.isFinite(n)
     ? DASH
-    : `${n < 0 ? "-" : ""}${formatAmount(Math.abs(n))} ${currencySymbol(currency)}`;
+    : `${n < 0 ? "-" : ""}${formatAmount(Math.abs(n), currencyDigits(currency))} ${currencySymbol(currency)}`;
 
 /** Chart axis ticks only — a `111,000,000.00` label does not fit; tooltips use `money`. */
 const axisMoneyIn = (currency: string) => (n: number) => `${formatCompact(n)} ${currencySymbol(currency)}`;
@@ -199,15 +200,15 @@ export function CostCapacityView({ runId }: { runId?: string }) {
     [costSeries, money, axisMoney],
   );
 
-  const costNote = !runId
-    ? "Pick a run"
-    : costLoading
-      ? "Loading…"
-      : costError
-        ? "Cost curve unavailable"
-        : costSeries.length === 0
-          ? "No cost points"
-          : undefined;
+  const costStatus = chartStatus({
+    idle: !runId,
+    loading: costLoading,
+    error: costError,
+    empty: costSeries.length === 0,
+  });
+  const costDetail = costError
+    ? "The cost curve for this run could not be loaded."
+    : "No fees have been recorded for this run yet.";
 
   const turnoverSeries = useMemo(
     () => aggregateTurnover(turnover, period as TurnoverPeriod),
@@ -217,7 +218,7 @@ export function CostCapacityView({ runId }: { runId?: string }) {
   const turnoverOption = useMemo<EChartsOption>(
     () => ({
       grid: { left: 8, right: 8, top: 16, bottom: 8, containLabel: true },
-      tooltip: { trigger: "axis", valueFormatter: (v: unknown) => formatAmount(Number(v)) },
+      tooltip: { trigger: "axis", valueFormatter: (v: unknown) => formatAmount(Number(v), currencyDigits(currency)) },
       xAxis: {
         type: "category",
         data: turnoverSeries.map((d) => d.label),
@@ -234,18 +235,18 @@ export function CostCapacityView({ runId }: { runId?: string }) {
         },
       ],
     }),
-    [turnoverSeries],
+    [turnoverSeries, currency],
   );
 
-  const turnoverNote = !runId
-    ? "Pick a run"
-    : turnoverLoading
-      ? "Loading…"
-      : turnoverError
-        ? "Turnover unavailable"
-        : turnoverSeries.length === 0
-          ? "No turnover points"
-          : undefined;
+  const turnoverStatus = chartStatus({
+    idle: !runId,
+    loading: turnoverLoading,
+    error: turnoverError,
+    empty: turnoverSeries.length === 0,
+  });
+  const turnoverDetail = turnoverError
+    ? "Turnover for this run could not be loaded."
+    : "No turnover has been recorded for this run yet.";
 
   const capacityOption = useMemo<EChartsOption>(
     () => ({
@@ -296,7 +297,12 @@ export function CostCapacityView({ runId }: { runId?: string }) {
       </div>
 
       <div className="grid min-w-0 gap-4 lg:grid-cols-2">
-        <ChartCard title={`Cost Breakdown (${currency})`} controls={costNote ? <MockNote>{costNote}</MockNote> : undefined}>
+        <ChartCard
+          title={`Cost Breakdown (${currency})`}
+          status={costStatus}
+          detail={costDetail}
+          bodyHeight={148}
+        >
           <div className="flex min-w-0 flex-wrap items-center justify-center gap-4">
             <div className="relative size-[148px] shrink-0">
               <BaseChart option={donutOption} style={{ height: 148 }} />
@@ -337,7 +343,9 @@ export function CostCapacityView({ runId }: { runId?: string }) {
 
         <ChartCard
           title="Cost Over Time (Cumulative)"
-          controls={costNote ? <MockNote>{costNote}</MockNote> : undefined}
+          status={costStatus}
+          detail={costDetail}
+          bodyHeight={212}
         >
           <BaseChart option={cumulativeOption} style={{ height: 212 }} />
           <div className="mt-2 flex flex-wrap justify-center gap-x-3 gap-y-1">
@@ -355,12 +363,10 @@ export function CostCapacityView({ runId }: { runId?: string }) {
       <div className="grid min-w-0 gap-4 lg:grid-cols-2">
         <ChartCard
           title="Turn over time"
-          controls={
-            <>
-              {turnoverNote && <MockNote>{turnoverNote}</MockNote>}
-              <PillSelect value={period} onChange={setPeriod} options={PERIOD_OPTIONS} />
-            </>
-          }
+          controls={<PillSelect value={period} onChange={setPeriod} options={PERIOD_OPTIONS} />}
+          status={turnoverStatus}
+          detail={turnoverDetail}
+          bodyHeight={244}
         >
           <BaseChart option={turnoverOption} style={{ height: 244 }} />
         </ChartCard>

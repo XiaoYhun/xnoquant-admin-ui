@@ -17,6 +17,7 @@ import { useMemo, useState } from "react";
 import type { EChartsOption } from "echarts";
 
 import { BaseChart } from "@/components/charts/base-chart";
+import { chartStatus } from "@/components/charts/chart-state";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useRunTraceHistory, useRunTraceStream } from "@/hooks/api/use-run-trace";
 import {
@@ -230,25 +231,30 @@ export function ExecutionView({ runId, isLive }: { runId?: string; isLive?: bool
   const slippage = useMemo(() => distributionOption(SLIPPAGE_BUCKETS, SLIPPAGE_COUNTS), []);
   const latency = useMemo(() => distributionOption(LATENCY_BUCKETS, LATENCY_COUNTS), []);
 
-  const fillNote = !runId
-    ? "Pick a run"
-    : isError
-      // Say WHY — a bare "unavailable" reads like the endpoint is down even when the real answer
-      // is a transient 503 or a run that never journaled.
-      ? error instanceof Error && error.message
-        ? error.message
-        : "Trace unavailable"
-      : isLoading
-        ? "Loading…"
-        : fillSeries.length === 0
-          ? streamState === "open"
-            ? "Waiting for orders…"
-            : "No order events in trace"
-          : data?.truncated
-            ? "Partial — journal cut short"
-            : streamState === "open"
-              ? "Live"
-              : undefined;
+  const fillStatus = chartStatus({
+    idle: !runId,
+    loading: isLoading,
+    error: isError,
+    empty: fillSeries.length === 0,
+  });
+  // Say WHY — a bare "unavailable" reads like the endpoint is down even when the real answer is
+  // a transient 503 or a run that never journaled.
+  const fillDetail = isError
+    ? error instanceof Error && error.message
+      ? error.message
+      : "The trace for this run could not be loaded."
+    : streamState === "open"
+      ? "Waiting for the first orders to arrive."
+      : "This run’s trace holds no order events.";
+  // Qualifies a chart that IS drawing, so it stays a header caption rather than a state.
+  const fillNote =
+    fillStatus !== "ready"
+      ? undefined
+      : data?.truncated
+        ? "Partial — journal cut short"
+        : streamState === "open"
+          ? "Live"
+          : undefined;
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
@@ -262,6 +268,9 @@ export function ExecutionView({ runId, isLive }: { runId?: string; isLive?: bool
             <PillSelect value={period} onChange={setPeriod} options={PERIOD_OPTIONS} />
           </>
         }
+        status={fillStatus}
+        detail={fillDetail}
+        bodyHeight={260}
       >
         <BaseChart option={fillOption} style={{ height: 260 }} />
       </ChartCard>

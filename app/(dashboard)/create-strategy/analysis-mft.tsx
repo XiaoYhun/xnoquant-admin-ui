@@ -9,6 +9,7 @@ import { CheckCircle, CloseCircle, AltArrowDown, Record as RecordIcon } from "@s
 
 import { cn, formatAmount } from "@/lib/utils";
 import { BaseChart } from "@/components/charts/base-chart";
+import { ChartState, chartStatus } from "@/components/charts/chart-state";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -353,15 +354,29 @@ function buildComparisonOption(
 }
 
 function ComparisonChart({ strategyId, eventId }: { strategyId?: string; eventId?: string }) {
-  const { data } = useStrategyComparison(strategyId, eventId);
+  const { data, isLoading, isError } = useStrategyComparison(strategyId, eventId);
   const before = data?.before ?? {};
   const after = data?.after ?? {};
+  const status = chartStatus({
+    idle: !strategyId || !eventId,
+    loading: isLoading,
+    error: isError,
+    empty: !before.times?.length,
+  });
 
-  if (!before.times?.length) {
-    return <p className="text-sm text-muted-foreground">No comparison data</p>;
-  }
-
-  return <BaseChart option={buildComparisonOption(before, after)} style={{ height: 260 }} />;
+  return (
+    <ChartState
+      status={status}
+      detail={
+        isError
+          ? "The before/after comparison could not be loaded."
+          : "No comparison data for this event."
+      }
+      height={260}
+    >
+      <BaseChart option={buildComparisonOption(before, after)} style={{ height: 260 }} />
+    </ChartState>
+  );
 }
 
 function EventAnalytics({ strategy, strategyId }: { strategy: StrategyInfo; strategyId?: string }) {

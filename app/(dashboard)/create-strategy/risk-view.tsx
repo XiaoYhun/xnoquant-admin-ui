@@ -15,6 +15,7 @@ import { MaximizeSquareMinimalistic } from "@solar-icons/react";
 import type { EChartsOption } from "echarts";
 
 import { BaseChart } from "@/components/charts/base-chart";
+import { ChartState, chartStatus, type ChartStatus } from "@/components/charts/chart-state";
 import {
   preferLiveEquity,
   useLiveSnapshot,
@@ -146,14 +147,22 @@ function ExpandButton({ label }: { label: string }) {
   );
 }
 
+// NOTE: a near-copy of ./results-chart-card ChartCard (this one always shows the expand button and
+// drops the className hook). Left as-is rather than consolidated — out of scope here.
 function ChartCard({
   title,
   controls,
   children,
+  status,
+  detail,
+  bodyHeight,
 }: {
   title: string;
   controls: React.ReactNode;
   children: React.ReactNode;
+  status?: ChartStatus;
+  detail?: string;
+  bodyHeight?: number;
 }) {
   return (
     <div className="min-w-0 overflow-hidden rounded-xl border border-border">
@@ -164,7 +173,11 @@ function ChartCard({
           <ExpandButton label={title} />
         </div>
       </div>
-      <div className="min-w-0 p-4">{children}</div>
+      <div className="min-w-0 p-4">
+        <ChartState status={status} detail={detail} height={bodyHeight}>
+          {children}
+        </ChartState>
+      </div>
     </div>
   );
 }
@@ -378,15 +391,16 @@ export function RiskView({ runId, isLive }: { runId?: string; isLive?: boolean }
   );
   // Points win over a REST error: a running run's `/equity-curve` always errors, and the series
   // being drawn came off the live frame instead.
-  const drawdownNote = !runId
-    ? "Pick a run"
-    : drawdownPoints.length > 0
-      ? undefined
-      : equityLoading
-        ? "Loading…"
-        : equityError
-          ? "Equity unavailable"
-          : "No equity points";
+  const hasDrawdown = drawdownPoints.length > 0;
+  const drawdownStatus = chartStatus({
+    idle: !runId,
+    loading: !hasDrawdown && equityLoading,
+    error: !hasDrawdown && equityError,
+    empty: !hasDrawdown,
+  });
+  const drawdownDetail = equityError
+    ? "The equity curve for this run could not be loaded."
+    : "No equity points fall inside this window.";
 
   // Live sharpe samples — only while the run is running (Redis stream). Finished/backtest runs
   // fall back to equity-curve rolling Sharpe (backend-aligned, not annualized).
@@ -411,27 +425,24 @@ export function RiskView({ runId, isLive }: { runId?: string; isLive?: boolean }
     () => buildRollingSharpeOption(rollingSamples, isLive ? clockLabel : equityDayLabel),
     [rollingSamples, isLive],
   );
-  const rollingNote = !runId
-    ? "Pick a run"
-    : isLive
-      ? liveState === "connecting"
-        ? "Connecting…"
-        : liveState === "error"
-          ? "Live stream unavailable"
-          : rollingSamples.length === 0
-            ? liveState === "open"
-              ? "Waiting for snapshots…"
-              : "No sharpe samples"
-            : liveState === "open"
-              ? "Live"
-              : undefined
-      : equityLoading
-        ? "Loading…"
-        : equityError
-          ? "Equity unavailable"
-          : rollingSamples.length === 0
-            ? "Need more equity points"
-            : undefined;
+  const hasRolling = rollingSamples.length > 0;
+  const rollingStatus = chartStatus({
+    idle: !runId,
+    loading: !hasRolling && (isLive ? liveState === "connecting" : equityLoading),
+    error: !hasRolling && (isLive ? liveState === "error" : equityError),
+    empty: !hasRolling,
+  });
+  const rollingDetail = isLive
+    ? liveState === "error"
+      ? "The live stream for this run could not be reached."
+      : liveState === "open"
+        ? "Waiting for the first snapshots to arrive."
+        : "No Sharpe samples have arrived yet."
+    : equityError
+      ? "The equity curve for this run could not be loaded."
+      : "Not enough equity points to compute a rolling Sharpe.";
+  // Only meaningful once the chart is actually drawing.
+  const rollingNote = hasRolling && isLive && liveState === "open" ? "Live" : undefined;
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
@@ -439,9 +450,11 @@ export function RiskView({ runId, isLive }: { runId?: string; isLive?: boolean }
 
       <ChartCard
         title="Drawdown"
+        status={drawdownStatus}
+        detail={drawdownDetail}
+        bodyHeight={260}
         controls={
           <>
-            {drawdownNote && <MockNote>{drawdownNote}</MockNote>}
             <Tabs value={timeWindow} onValueChange={(v) => v && setTimeWindow(v as TimeWindow)}>
               <TabsList>
                 {TIME_WINDOWS.map((w) => (
@@ -460,6 +473,9 @@ export function RiskView({ runId, isLive }: { runId?: string; isLive?: boolean }
 
       <ChartCard
         title="Rolling Sharpe"
+        status={rollingStatus}
+        detail={rollingDetail}
+        bodyHeight={260}
         controls={
           <>
             {rollingNote && <MockNote>{rollingNote}</MockNote>}

@@ -84,6 +84,19 @@ function RunFailedNotice({ reason }: { reason?: string | null }) {
   );
 }
 
+// `/summary` reads a parquet sidecar the engine only finalizes when a run stops. A run that has
+// written no PnL rows yet leaves a 0-byte file behind, and the reader answers 500 quoting its own
+// path ("Parquet file too small. Size is 0 but need 8"). To a reader that is the same fact as the
+// 404 — this run has no artifacts — so it says so, instead of putting a server-side file path on
+// screen. Anything else falls back to the shared RBAC-aware copy.
+function summaryErrorMessage(error: unknown): string {
+  const noArtifacts =
+    error instanceof ApiError && (error.status === 404 || /parquet file too small/i.test(error.message));
+  return noArtifacts
+    ? "No results — this run produced no artifacts (it never traded)."
+    : resourceErrorMessage(error, "this run's results");
+}
+
 function ChartsTab({
   runId,
   isLive,
@@ -99,22 +112,23 @@ function ChartsTab({
   failed: boolean;
   failureReason?: string | null;
 }) {
-  if (error) {
+  // A RUNNING run's `/summary` always fails — see summaryErrorMessage: the sidecar stays empty
+  // until it stops. That is the normal path for a live paper run, not a dead end, so it must not
+  // take the tab down: every view below reads the `/live/stream` frames itself (mergeLiveSummary)
+  // and owns its own empty state. Only once the run is no longer producing frames does a summary
+  // failure mean there is genuinely nothing to show.
+  if (error && !isLive) {
     return (
       <div className="p-4">
         {failed ? (
           <RunFailedNotice reason={failureReason} />
         ) : (
-          <p className="text-sm text-[#9db2ce]">
-            {error instanceof ApiError && error.status === 404
-              ? "No results — this run produced no artifacts (it never traded)."
-              : `Failed to load results: ${error instanceof Error ? error.message : ""}`}
-          </p>
+          <p className="text-sm text-[#9db2ce]">{summaryErrorMessage(error)}</p>
         )}
       </div>
     );
   }
-  if (summaryLoading) {
+  if (summaryLoading && !isLive) {
     return <div className="p-4 text-sm text-[#9db2ce]">Loading results…</div>;
   }
   return (
@@ -199,11 +213,7 @@ function LiveChartsTab({
         {failed ? (
           <RunFailedNotice reason={failureReason} />
         ) : (
-          <p className="text-sm text-[#9db2ce]">
-            {error instanceof ApiError && error.status === 404
-              ? "No results — this run produced no artifacts (it never traded)."
-              : `Failed to load results: ${error instanceof Error ? error.message : ""}`}
-          </p>
+          <p className="text-sm text-[#9db2ce]">{summaryErrorMessage(error)}</p>
         )}
       </div>
     );

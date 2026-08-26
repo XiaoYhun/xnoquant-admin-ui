@@ -117,3 +117,55 @@ button:not(:disabled) {
 *::-webkit-scrollbar-corner {
   background: transparent;
 }
+
+/* Auth screen: the blurred brand-colour orbs drift slowly behind the login card. Held still for
+   anyone who asked for reduced motion. */
+@keyframes orb-drift {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(var(--orb-dx, 0px), var(--orb-dy, -28px), 0) scale(var(--orb-ds, 1.08));
+  }
+}
+.auth-orb {
+  animation: orb-drift 18s ease-in-out infinite alternate;
+}
+@media (prefers-reduced-motion: reduce) {
+  .auth-orb {
+    animation: none;
+  }
+}
+
+/* Chrome paints autofilled inputs light blue, which blew a hole in the dark login form. The
+   background itself can't be set, so flood it with an inset shadow and keep the text light. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--foreground);
+  -webkit-box-shadow: 0 0 0 1000px var(--background) inset;
+  caret-color: var(--foreground);
+  /* Chrome only repaints the yellow/blue wash on transition end — push it out of reach. */
+  transition: background-color 9999s ease-in-out 0s;
+}
+
+/* Auth screen entrance: logo, headline, card and footnote rise into place in sequence, each one
+   offset by its own inline animation-delay. `both` keeps them hidden until their turn. */
+@keyframes auth-rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 20px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+.auth-in {
+  animation: auth-rise 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .auth-in {
+    animation: none;
+  }
+}

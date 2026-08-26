@@ -1,14 +1,15 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/api-client";
 import { USE_MOCK, HFT_API_URL } from "@/lib/constant";
 import type { EditorTab } from "@/lib/mock/strategy-builder";
 import { HFT_SAMPLES } from "@/lib/mock/hft-strategy-samples";
+import { scriptApiQuery, withApiHeader } from "@/hooks/api/use-hft-script-api";
 import type { components } from "@/types/api/hft";
 
 // HFT strategies (`GET/POST /api/strategies`, raw — no envelope) surfaced as editor tabs
 // alongside the XALPHA/MFT editors (see use-strategy-builder.ts's useEditors).
 // NOTE: `validate-features`/`feature-catalog` are in use-hft-features.ts; `script-api` is in
-// use-hft-script-api.ts (Samples tab reference). The Settings save below uses
+// use-hft-script-api.ts (Samples tab reference + the seed header below). The Settings save uses
 // `PUT /api/strategies/{id}` and independently updates `strategy_type`/`code`/`features`, re-sending
 // the current value of whichever field isn't passed in so it isn't wiped.
 type Strategy = components["schemas"]["Strategy"];
@@ -41,6 +42,20 @@ export function useHftStrategies() {
   });
 }
 
+async function scaffoldWithApiHeader(
+  qc: QueryClient,
+  scaffold: string,
+  strategyType: HftStrategyType,
+): Promise<string> {
+  try {
+    const apis = await qc.fetchQuery(scriptApiQuery);
+    const api = apis.find((a) => a.strategy_type === strategyType);
+    return api ? withApiHeader(scaffold, api) : scaffold;
+  } catch {
+    return scaffold;
+  }
+}
+
 export function useCreateHftStrategy() {
   const qc = useQueryClient();
   return useMutation({
@@ -54,8 +69,12 @@ export function useCreateHftStrategy() {
       /** Source to start from. Cloning passes the original's code; omit for a fresh strategy. */
       code?: string;
     }): Promise<EditorTab> => {
-      // Seed a new HFT strategy with the first sample template matching its type.
-      const code = seed ?? HFT_SAMPLES[strategyType]?.[0]?.code ?? "";
+      // Seed a new HFT strategy with the first sample template matching its type, its instruction
+      // header re-rendered from `GET /api/strategies/script-api` so the script documents the
+      // surface that compiles today. The transcribed header stands in if that endpoint is down —
+      // a stale comment beats failing to create the strategy.
+      const scaffold = HFT_SAMPLES[strategyType]?.[0]?.code ?? "";
+      const code = seed ?? (await scaffoldWithApiHeader(qc, scaffold, strategyType));
       if (USE_MOCK) {
         return { id: crypto.randomUUID(), name, code, type: "hft" };
       }

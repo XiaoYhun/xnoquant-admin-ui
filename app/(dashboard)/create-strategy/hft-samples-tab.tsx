@@ -3,7 +3,7 @@
 // Taker/Maker/Arbitrage sub-tabs + static curated sample cards ("View source" expands the code
 // inline, "Use template" loads it into the editor) + Script API Reference from
 // `GET /api/strategies/script-api` (filtered to the selected strategy type).
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { CheckCircle, Code, Database, NotebookBookmark } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { resourceErrorMessage } from "@/lib/api-client";
@@ -11,6 +11,7 @@ import { HFT_SAMPLES, type HftSample } from "@/lib/mock/hft-strategy-samples";
 import {
   paramSummary,
   useScriptApi,
+  withApiHeader,
   type StrategyScriptApi,
 } from "@/hooks/api/use-hft-script-api";
 
@@ -96,7 +97,15 @@ function ScriptApiBody({ api }: { api: StrategyScriptApi }) {
 export function HftSamplesTab({ onUseTemplate }: { onUseTemplate?: (code: string, features: HftSample["features"]) => void }) {
   const [type, setType] = useState<StrategyType>("taker");
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const samples: HftSample[] = HFT_SAMPLES[type];
+  // Same cache entry the reference below reads. The scaffold ([0]) is the one sample whose body IS
+  // the instruction header, so it gets the live one — the same code a new strategy is seeded with.
+  // The curated templates after it are hand-written strategies and stay as transcribed.
+  const { data: apis } = useScriptApi();
+  const samples: HftSample[] = useMemo(() => {
+    const api = apis?.find((a) => a.strategy_type === type);
+    if (!api) return HFT_SAMPLES[type];
+    return HFT_SAMPLES[type].map((s, i) => (i === 0 ? { ...s, code: withApiHeader(s.code, api) } : s));
+  }, [apis, type]);
 
   return (
     <div className="flex flex-col gap-4 p-4">

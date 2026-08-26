@@ -134,6 +134,63 @@ export function paramSummary(fn: RhaiFunctionDoc): string {
     .join(" ");
 }
 
+/** `//   name  description` rows, names padded to one column. */
+function commentRows(rows: { name: string; description: string }[], indent: string): string[] {
+  const width = Math.max(...rows.map((r) => r.name.length));
+  return rows.map((r) => `//${indent}${r.name.padEnd(width)}  ${r.description}`);
+}
+
+/**
+ * The instruction header a scaffold opens with, rendered from the live `script-api` response —
+ * the same table the backend "Check" validator is generated from, so a new script documents the
+ * surface that actually compiles today rather than a transcription that silently drifts.
+ * Descriptions are emitted on one line each (unwrapped), like the engine's own header.
+ */
+export function scriptApiHeader(api: StrategyScriptApi): string {
+  const lines = [`// ${api.intro}`, "//"];
+
+  if (api.functions.length > 0) {
+    lines.push("// Function:");
+    for (const fn of api.functions) {
+      // The last overload is the widest — later overloads only add params.
+      const widest = fn.overloads[fn.overloads.length - 1];
+      lines.push(`//   ${fn.name}(${widest?.params.map((p) => `${p.name}: ${p.ty}`).join(", ") ?? ""})`);
+      const params = dedupedParams(fn);
+      if (params.length > 0) {
+        lines.push(
+          ...commentRows(
+            params.map((p) => ({
+              name: p.name,
+              description:
+                p.description +
+                (p.choices.length > 0
+                  ? `: ${p.choices.map((c) => `"${c.value}" (${c.description})`).join(", ")}`
+                  : ""),
+            })),
+            "     ",
+          ),
+        );
+      }
+    }
+    lines.push("//");
+  }
+
+  if (api.scope.length > 0) {
+    lines.push("// Scope:", ...commentRows(api.scope, "   "), "//");
+  }
+
+  const mainFn = api.functions[0]?.name;
+  if (mainFn) {
+    lines.push(`// Call \`return ${mainFn}(...)\` to act this tick; fall through (no`, "// return) to hold.");
+  }
+  return lines.join("\n");
+}
+
+/** Swaps a scaffold's leading comment block for the API-rendered one, keeping its starter code. */
+export function withApiHeader(scaffold: string, api: StrategyScriptApi): string {
+  return `${scriptApiHeader(api)}\n\n${scaffold.replace(/^(?:\/\/.*\n|[ \t]*\n)*/, "")}`;
+}
+
 // Mirrors `common::strategy_script_api` so mock mode still shows a useful reference.
 const TARGET_POS_API = {
   intro: "Runs once per tick.",
@@ -228,14 +285,18 @@ const MOCK_SCRIPT_APIS: StrategyScriptApi[] = [
   },
 ];
 
+// Shared so `useCreateHftStrategy` can pull the same cache entry off the query client when it
+// seeds a new strategy's header — outside a component, where the hook isn't available.
+export const scriptApiQuery = {
+  queryKey: ["hft-script-api"],
+  queryFn: async (): Promise<StrategyScriptApi[]> => {
+    if (USE_MOCK) return MOCK_SCRIPT_APIS;
+    const raw = await apiGet<unknown>(`${HFT_API_URL}/api/strategies/script-api`);
+    return normalizeScriptApis(raw);
+  },
+  staleTime: Infinity,
+};
+
 export function useScriptApi() {
-  return useQuery({
-    queryKey: ["hft-script-api"],
-    queryFn: async (): Promise<StrategyScriptApi[]> => {
-      if (USE_MOCK) return MOCK_SCRIPT_APIS;
-      const raw = await apiGet<unknown>(`${HFT_API_URL}/api/strategies/script-api`);
-      return normalizeScriptApis(raw);
-    },
-    staleTime: Infinity,
-  });
+  return useQuery(scriptApiQuery);
 }

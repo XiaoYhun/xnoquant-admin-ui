@@ -93,7 +93,9 @@ function Backtesting() {
   if (selectedRun && alignedRunId !== selectedRun.id) {
     setAlignedRunId(selectedRun.id);
     const runMarket = marketOf(selectedRun);
-    if (runMarket && runMarket !== market) {
+    // Realign only when the current tab actually HIDES the run — comparing the run's market to
+    // the tab would drag the reader off All, which was already showing the row.
+    if (runMarket && !matchesMarket(selectedRun, market)) {
       setMarket(runMarket);
       setPage(1);
     }

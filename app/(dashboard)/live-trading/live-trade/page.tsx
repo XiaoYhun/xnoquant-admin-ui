@@ -24,7 +24,7 @@ import { resourceErrorMessage } from "@/lib/api-client";
 import { cn, formatPercent, idQueryNeedle, isIdQuery } from "@/lib/utils";
 import { LiveRunsTable } from "./live-runs-table";
 import { OrderbookPanel } from "./orderbook-panel";
-import { MarketTabs, marketFromParam, marketOf, matchesMarket, type Market } from "@/components/market-tabs";
+import { ALL_MARKETS, MarketTabs, marketFromParam, marketOf, matchesMarket, type Market } from "@/components/market-tabs";
 import { useOrderbookSymbols } from "@/hooks/api/use-orderbook-symbols";
 import { RunDetailInline } from "../../paper-trading/run-detail-panel";
 
@@ -125,11 +125,12 @@ function LiveTrade() {
   // user picks — the panel defaults to the first symbol of the market tab.
   const [bookSymbol, setBookSymbol] = useState<string | null>(null);
   const allOrderbookSymbols = useOrderbookSymbols();
-  // The rail follows the Stocks/Future/Crypto tab: the catalog spans every venue, so without this
-  // the picker opens on an unrelated market's instrument. A symbol picked under one tab simply
-  // isn't in the next tab's options, and the panel falls back to that market's first symbol.
+  // The rail follows the market tab: the catalog spans every venue, so without this the picker
+  // opens on an unrelated market's instrument. A symbol picked under one tab simply isn't in the
+  // next tab's options, and the panel falls back to that market's first symbol. On All the whole
+  // catalog is offered — an empty rail would be the alternative, since no symbol is tagged "all".
   const orderbookSymbols = useMemo(
-    () => allOrderbookSymbols.filter((o) => o.market === market),
+    () => (market === ALL_MARKETS ? allOrderbookSymbols : allOrderbookSymbols.filter((o) => o.market === market)),
     [allOrderbookSymbols, market],
   );
 
@@ -150,7 +151,9 @@ function LiveTrade() {
   if (selectedRun && alignedRunId !== selectedRun.id) {
     setAlignedRunId(selectedRun.id);
     const runMarket = marketOf(selectedRun);
-    if (runMarket && runMarket !== market) {
+    // Realign only when the current tab actually HIDES the run — comparing the run's market to
+    // the tab would drag the reader off All, which was already showing the row.
+    if (runMarket && !matchesMarket(selectedRun, market)) {
       setMarket(runMarket);
       setPage(1);
     }

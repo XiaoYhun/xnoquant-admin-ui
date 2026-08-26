@@ -11,16 +11,18 @@ import type { FeatureDef } from "@/hooks/api/use-hft-strategies";
 // Observed live shape of the catalog (hft-dev, 2026-08-26):
 //   { fields:    [{ name, description }]                            — 59 entries
 //     functions: [{ name, min_args, max_args, description, usage }] — 22 entries }
-// Every entry carries a description. `min_args`/`max_args`/`usage` (e.g. "ema(field, window)")
-// are NOT parsed yet — they are what the Figma arity suffix (`abs (1)`) would need. Nothing here
-// may ASSUME those keys: the spec promises no schema, so the normalizer stays tolerant of the
-// older name-only shape.
+// Every entry carries a description. `usage` (e.g. "ema(field, window)") is read below so the
+// card can name a function's arguments; `min_args`/`max_args` are still unused — they are what
+// the Figma arity suffix (`abs (1)`) would need. Nothing here may ASSUME those keys: the spec
+// promises no schema, so the normalizer stays tolerant of the older name-only shape.
 
 export type FeatureCatalogItem = {
   name: string;
   returns: string;
   /** One-line explanation from the engine registry; absent on older payloads. */
   description?: string;
+  /** Call signature ("ema(field, window)"). Functions only — a field's name is the whole token. */
+  usage?: string;
 };
 export type FeatureValidationError = { index?: number; name?: string; error: string };
 
@@ -33,7 +35,8 @@ function toCatalogItem(entry: unknown, fallbackReturns: "FN" | "FIELD"): Feature
   const kind = rec.kind ?? rec.returns ?? rec.type;
   const returns = typeof kind === "string" && kind.length > 0 ? kind : fallbackReturns;
   const description = typeof rec.description === "string" && rec.description.length > 0 ? rec.description : undefined;
-  return { name, returns, description };
+  const usage = typeof rec.usage === "string" && rec.usage.length > 0 ? rec.usage : undefined;
+  return { name, returns, description, usage };
 }
 
 // Tolerates: (a) a bare array of `{name, ...}` entries, (b) an object with `fields`/`functions`
@@ -46,15 +49,18 @@ function normalizeCatalog(raw: unknown): FeatureCatalogItem[] {
     const rec = raw as Record<string, unknown>;
     const fields = Array.isArray(rec.fields) ? rec.fields.map((e) => toCatalogItem(e, "FIELD")) : [];
     const functions = Array.isArray(rec.functions) ? rec.functions.map((e) => toCatalogItem(e, "FN")) : [];
-    const combined = [...fields, ...functions].filter((x): x is FeatureCatalogItem => x !== null);
+    // Functions lead. There are ~22 of them against ~59 fields, and the fields are dominated by
+    // per-depth-level runs (ask_1 … ask_10, bid_1 …) — putting those first buried every function
+    // below a screen of book levels. Each group keeps the order the engine registry sent.
+    const combined = [...functions, ...fields].filter((x): x is FeatureCatalogItem => x !== null);
     if (combined.length > 0) return combined;
   }
   return [];
 }
 
 const MOCK_CATALOG: FeatureCatalogItem[] = [
-  { name: "sma", returns: "FN", description: "Simple moving average over the last `window` samples." },
-  { name: "vwap", returns: "FN", description: "Volume-weighted average price over the last `window` samples." },
+  { name: "sma", returns: "FN", usage: "sma(field, window)", description: "Simple moving average over the last `window` samples." },
+  { name: "vwap", returns: "FN", usage: "vwap(field, window)", description: "Volume-weighted average price over the last `window` samples." },
   { name: "close", returns: "FIELD", description: "Close price of the current bar." },
 ];
 

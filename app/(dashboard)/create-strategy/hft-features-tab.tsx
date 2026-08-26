@@ -66,7 +66,9 @@ export function HftFeaturesTab({ strategyId }: { strategyId?: string }) {
   const filteredCatalog = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return catalog;
-    return catalog.filter((c) => c.name.toLowerCase().includes(q));
+    // Match the signature too — the card shows `ema(field, window)`, so typing any of that (or an
+    // argument name, to find what takes a `window`) has to find it.
+    return catalog.filter((c) => `${c.name} ${c.usage ?? ""}`.toLowerCase().includes(q));
   }, [catalog, query]);
 
   function updateRow(index: number, patch: Partial<DraftRow>) {
@@ -302,7 +304,15 @@ export function HftFeaturesTab({ strategyId }: { strategyId?: string }) {
                   </span>
                   <div className="flex min-w-0 flex-1 flex-col gap-1">
                     <div className="flex items-center gap-3">
-                      <p className="min-w-0 flex-1 truncate text-sm font-medium text-white">{c.name}</p>
+                      {/* The signature, not the bare name: Add inserts `ema()` with the caret
+                          between the parens, and the name alone never said what goes there.
+                          Fields have no `usage` — their name IS the whole token. */}
+                      <p
+                        title={c.usage ?? c.name}
+                        className="min-w-0 flex-1 truncate font-mono text-sm font-medium text-white"
+                      >
+                        {c.usage ?? c.name}
+                      </p>
                     </div>
                     {/* Clamped to two lines — some registry descriptions run to a paragraph, and the
                         grid is two narrow columns. `title` keeps the full text reachable. */}

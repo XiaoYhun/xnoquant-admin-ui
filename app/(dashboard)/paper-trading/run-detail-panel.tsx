@@ -112,6 +112,16 @@ function ChartsTab({
   failed: boolean;
   failureReason?: string | null;
 }) {
+  // The engine died before finalizing any artifact, so `/summary`, `/equity-curve`, `/cost-curve`
+  // and `/trades` can only 404/500 for this run. The notice is the whole tab: rendering the views
+  // under it would fire all four and draw six empty cards around the one fact that matters.
+  if (failed) {
+    return (
+      <div className="p-4">
+        <RunFailedNotice reason={failureReason} />
+      </div>
+    );
+  }
   // A RUNNING run's `/summary` always fails — see summaryErrorMessage: the sidecar stays empty
   // until it stops. That is the normal path for a live paper run, not a dead end, so it must not
   // take the tab down: every view below reads the `/live/stream` frames itself (mergeLiveSummary)
@@ -120,11 +130,7 @@ function ChartsTab({
   if (error && !isLive) {
     return (
       <div className="p-4">
-        {failed ? (
-          <RunFailedNotice reason={failureReason} />
-        ) : (
-          <p className="text-sm text-[#9db2ce]">{summaryErrorMessage(error)}</p>
-        )}
+        <p className="text-sm text-[#9db2ce]">{summaryErrorMessage(error)}</p>
       </div>
     );
   }
@@ -133,9 +139,6 @@ function ChartsTab({
   }
   return (
     <div className="flex flex-col gap-3 p-4">
-      {/* A failed run can still have written partial artifacts, so the views stay — but they
-          describe a run that died, and that has to be said before they are read. */}
-      {failed && <RunFailedNotice reason={failureReason} />}
       <ResultsViews runId={runId} isLive={isLive} />
     </div>
   );
@@ -207,14 +210,19 @@ function LiveChartsTab({
   const { snapshot } = useLiveSnapshot();
   const liveSummary = mergeLiveSummary(summary, snapshot);
 
+  // See ChartsTab: a failed run has no artifacts to draw, so the notice replaces the views
+  // rather than sitting above them.
+  if (failed) {
+    return (
+      <div className="p-4">
+        <RunFailedNotice reason={failureReason} />
+      </div>
+    );
+  }
   if (error && !liveSummary) {
     return (
       <div className="p-4">
-        {failed ? (
-          <RunFailedNotice reason={failureReason} />
-        ) : (
-          <p className="text-sm text-[#9db2ce]">{summaryErrorMessage(error)}</p>
-        )}
+        <p className="text-sm text-[#9db2ce]">{summaryErrorMessage(error)}</p>
       </div>
     );
   }
@@ -224,7 +232,6 @@ function LiveChartsTab({
 
   return (
     <div className="flex flex-col gap-3 p-4">
-      {failed && <RunFailedNotice reason={failureReason} />}
       <ResultsViews runId={runId} isLive={isLive} />
     </div>
   );
@@ -318,13 +325,22 @@ function OpenPositions({ run }: { run: PaperRunRow }) {
 }
 
 function TradesTab({ run }: { run: PaperRunRow }) {
-  const { data: restTrades = [], isLoading, isError, error } = useTradeHistory(run.id);
+  const failed = run.status === "failed";
+  const { data: restTrades = [], isLoading, isError, error } = useTradeHistory(failed ? undefined : run.id);
   // The REST /trades endpoint 500s for the whole life of a running run (parquet artifact still
   // being written), but the live stream keeps delivering fills — merge so the table isn't hidden
   // behind that REST error while a healthy stream has data.
   const { snapshot } = useLiveSnapshot();
   const trades = useMemo(() => mergeLiveTrades(restTrades, snapshot), [restTrades, snapshot]);
   const hasTrades = trades.length > 0;
+  // `/trades` reads the same never-written parquet as the Charts tab's artifacts — see ChartsTab.
+  if (failed) {
+    return (
+      <div className="p-4">
+        <RunFailedNotice reason={run.error} />
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col gap-4 p-4">
       <OpenPositions run={run} />
@@ -800,8 +816,11 @@ function RunDetailBody({
   const visibleTabs = tabsFor(run.mode);
   const activeTab: Tab = visibleTabs.includes(tab) ? tab : "Charts";
   // Only /summary is fetched here — the Results views own every chart now and query their own
-  // curves. Skipped in mock mode (synthetic ids the real endpoints can't resolve).
-  const summaryQ = useRunSummary(!USE_MOCK ? run.id : undefined);
+  // curves. Skipped in mock mode (synthetic ids the real endpoints can't resolve), and for a
+  // failed run: the engine died before finalizing the pnl sidecar, so /summary can only 404/500
+  // and the tabs render RunFailedNotice from `run.error` regardless of what it would have said.
+  const failed = run.status === "failed";
+  const summaryQ = useRunSummary(!USE_MOCK && !failed ? run.id : undefined);
   const lazy = !USE_MOCK;
   const isLive = run.status === "running";
   // Live frames name symbols by dense index only, so the manifest supplies the tickers — without
@@ -867,7 +886,7 @@ function RunDetailBody({
                 summary={summaryQ.data}
                 summaryLoading={summaryLoading}
                 error={summaryError}
-                failed={run.status === "failed"}
+                failed={failed}
                 failureReason={run.error}
               />
             ) : (
@@ -876,7 +895,7 @@ function RunDetailBody({
                 isLive={isLive}
                 error={summaryError}
                 summaryLoading={summaryLoading}
-                failed={run.status === "failed"}
+                failed={failed}
                 failureReason={run.error}
               />
             ))}

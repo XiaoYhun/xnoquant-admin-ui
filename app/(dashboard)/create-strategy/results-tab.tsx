@@ -1,8 +1,9 @@
 "use client";
-// Create Strategy "Results" tab shell — Figma 14876:146505. One row: pill view-tabs on the left,
-// the run-history picker on the right. The old "Period:" row (Train/Test/Simulate/Paper Trade) is
-// gone from the design. Each view lives in its own file. Everything here stays width-responsive:
-// min-w-0 so the panel never forces horizontal overflow.
+// Create Strategy "Results" tab shell — Figma 14876:146505. First row: pill view-tabs on the left,
+// the run-history picker on the right. Second row: the "Period:" pills (Figma 15235:33194) — a
+// narrower All/IS/OS, not the old Train/Test/Simulate/Paper Trade row that design dropped. Each
+// view lives in its own file. Everything here stays width-responsive: min-w-0 so the panel never
+// forces horizontal overflow.
 import { useMemo, useState } from "react";
 import { Danger } from "@solar-icons/react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -29,6 +30,21 @@ const TAB_LIST = "gap-2 rounded-none bg-transparent p-0";
 const TAB_TRIGGER =
   "rounded-[40px] px-3 py-2 text-sm text-[#9db2ce] data-[state=active]:bg-[#1d2939] data-[state=active]:text-white data-[state=active]:shadow-none";
 
+// Figma 15235:33194 — the "Period:" row, HFT only. Same pill as the view tabs one size down:
+// 12px text, 12px gaps, active = Neutral/Black 800.
+//
+// NOT WIRED TO DATA, deliberately. In-sample / out-of-sample exists nowhere in the HFT API — no
+// query param on /summary, /equity-curve, /cost-curve or /trades, and no split marker on Run or
+// RunManifest (only `backtest_range` start→end). So the selection is held here and read by
+// nothing; All/IS/OS all describe the whole run until the backend can split it. Inventing a
+// client-side split ratio would put a number on screen that no backtest produced.
+const PERIODS = ["All", "IS", "OS"] as const;
+type Period = (typeof PERIODS)[number];
+
+const PERIOD_TAB_LIST = "gap-3 rounded-none bg-transparent p-0";
+const PERIOD_TAB_TRIGGER =
+  "rounded-[40px] px-3 py-1 text-xs font-normal leading-[18px] text-[#9db2ce] data-[state=active]:bg-[#1d2939] data-[state=active]:text-white data-[state=active]:shadow-none";
+
 // A failed run wrote no artifacts worth charting — the engine died before or during it — so the
 // six views below would render an all-"—" shell that never says why. Replace them with the reason
 // the API recorded (`Run.error`), the same failure the run-history picker badges "Failed".
@@ -52,6 +68,12 @@ function RunFailedScreen({ reason }: { reason?: string | null }) {
   );
 }
 
+/**
+ * Which Results screen a strategy gets. The two are separate components rather than one with
+ * branches: the MFT engine reports bar-level results with no orderbook, no fill latency and no
+ * per-tick attribution, so its views diverge from the HFT set rather than subsetting it — and
+ * HFT-only chrome (the Period row below) has no meaning on the MFT side.
+ */
 export function ResultsTab({
   variant = "hft",
   strategyId,
@@ -62,7 +84,19 @@ export function ResultsTab({
   /** A just-launched run to select, overriding the picker's newest-run default. */
   focusRun?: Run;
 }) {
+  if (variant === "mft") return <MftResultsView strategyId={strategyId} />;
+  return <HftResultsTab strategyId={strategyId} focusRun={focusRun} />;
+}
+
+function HftResultsTab({
+  strategyId,
+  focusRun,
+}: {
+  strategyId?: string;
+  focusRun?: Run;
+}) {
   const [view, setView] = useState<string>("Overview");
+  const [period, setPeriod] = useState<Period>("All");
   // Which run the views describe. Undefined = the picker's default (the newest run).
   const [selectedRun, setSelectedRun] = useState<Run | undefined>(undefined);
   // Drop the selection when the strategy tab changes: the picker re-defaults to the new strategy's
@@ -94,8 +128,6 @@ export function ResultsTab({
   const { data: run } = useRun(isLive ? selectedRun?.id : undefined);
   const symbolNames = useMemo(() => symbolNamesOf(run), [run]);
 
-  if (variant === "mft") return <MftResultsView strategyId={strategyId} />;
-
   return (
     <div className="flex min-w-0 flex-col gap-4 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -109,6 +141,19 @@ export function ResultsTab({
           </TabsList>
         </Tabs>
         <RunHistoryPicker strategyId={strategyId} selectedRunId={selectedRun?.id} onSelect={setSelectedRun} />
+      </div>
+
+      <div className="flex items-center gap-3">
+        <span className="text-xs leading-[18px] font-medium text-white">Period:</span>
+        <Tabs value={period} onValueChange={(v) => v && setPeriod(v as Period)}>
+          <TabsList className={PERIOD_TAB_LIST}>
+            {PERIODS.map((p) => (
+              <TabsTrigger key={p} value={p} className={PERIOD_TAB_TRIGGER}>
+                {p}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
       </div>
 
       {/* What the views below are describing: symbols, engine, account, period. Reads the

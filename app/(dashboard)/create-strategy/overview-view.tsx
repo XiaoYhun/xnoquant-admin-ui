@@ -307,14 +307,26 @@ function equityChartOption(points: EquityPoint[], gross: number[] | null, digits
   };
 }
 
-export function OverviewView({ runId, summaryEnabled = true }: { runId?: string; summaryEnabled?: boolean }) {
+export function OverviewView({
+  runId,
+  summaryEnabled = true,
+  isLive = false,
+}: {
+  runId?: string;
+  summaryEnabled?: boolean;
+  isLive?: boolean;
+}) {
   const [range, setRange] = useState<Range>("All");
-  const { data: restTrades = [], isLoading, isError, error } = useTradeHistory(runId);
+  // Every persisted artifact 409s for the whole life of a running run — the parquet sidecars are
+  // mid-write, so the `/live/stream` frame merged below is the only source there is until it
+  // stops. Asking anyway is three requests per view that can only fail.
+  const artifactId = isLive ? undefined : runId;
+  const { data: restTrades = [], isLoading, isError, error } = useTradeHistory(artifactId);
 
   const { data: restSummary, isLoading: summaryLoading, isError: summaryError } = useRunSummary(summaryEnabled ? runId : undefined);
-  const { data: restEquity = [], isLoading: equityLoading, isError: equityError } = useRunEquity(runId);
+  const { data: restEquity = [], isLoading: equityLoading, isError: equityError } = useRunEquity(artifactId);
   // Fees are optional: the spec notes many runs answer `[]` here even when equity has points.
-  const { data: cost = [] } = useRunCostCurve(runId);
+  const { data: cost = [] } = useRunCostCurve(artifactId);
 
   // While the run is streaming, the live frame wins over the persisted artifacts — which 500 for
   // the whole life of a running run, so for those the frame is the only source there is.

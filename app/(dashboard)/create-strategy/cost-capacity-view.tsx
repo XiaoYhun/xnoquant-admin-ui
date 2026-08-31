@@ -109,7 +109,19 @@ function PillSelect({
   );
 }
 
-export function CostCapacityView({ runId, summaryEnabled = true }: { runId?: string; summaryEnabled?: boolean }) {
+export function CostCapacityView({
+  runId,
+  summaryEnabled = true,
+  isLive = false,
+}: {
+  runId?: string;
+  summaryEnabled?: boolean;
+  isLive?: boolean;
+}) {
+  // Every persisted artifact 409s for the whole life of a running run — the parquet sidecars are
+  // mid-write, so the `/live/stream` frame merged below is the only source there is until it
+  // stops. Asking anyway is three requests per view that can only fail.
+  const artifactId = isLive ? undefined : runId;
   const currency = useRunCurrency(runId);
   const money = useMemo(() => moneyIn(currency), [currency]);
   const axisMoney = useMemo(() => axisMoneyIn(currency), [currency]);
@@ -121,12 +133,12 @@ export function CostCapacityView({ runId, summaryEnabled = true }: { runId?: str
     data: costCurve = [],
     isLoading: costLoading,
     isError: costError,
-  } = useRunCostCurve(runId);
+  } = useRunCostCurve(artifactId);
   const {
     data: turnover = [],
     isLoading: turnoverLoading,
     isError: turnoverError,
-  } = useRunTurnover(runId);
+  } = useRunTurnover(artifactId);
   const [period, setPeriod] = useState<string>("Daily");
   const [capacityMetric, setCapacityMetric] = useState<string>("Sharpe");
 

@@ -161,6 +161,10 @@ const VIEW_TAB_TRIGGER =
   "rounded-[40px] px-3 py-2 text-sm text-[#9db2ce] data-[state=active]:bg-[#1d2939] data-[state=active]:text-white data-[state=active]:shadow-none";
 
 function ResultsViews({ runId, isLive }: { runId: string | undefined; isLive: boolean }) {
+  // A running run has no persisted artifact to read — /summary, /equity-curve, /cost-curve and
+  // /trades all refuse until it stops (see the `useRunSummary` call in RunDetailBody). The views
+  // merge the live frame instead, so they are told not to ask.
+  const summaryEnabled = !isLive;
   const [view, setView] = useState<View>("Overview");
   return (
     <div className="flex min-w-0 flex-col gap-4">
@@ -175,11 +179,11 @@ function ResultsViews({ runId, isLive }: { runId: string | undefined; isLive: bo
       </Tabs>
       {/* Same remount-per-run guard as the Results tab — see results-tab.tsx. */}
       <div key={runId ?? "no-run"} className="min-w-0">
-        {view === "Overview" && <OverviewView runId={runId} />}
-        {view === "Performance" && <PerformanceView runId={runId} />}
+        {view === "Overview" && <OverviewView runId={runId} summaryEnabled={summaryEnabled} isLive={isLive} />}
+        {view === "Performance" && <PerformanceView runId={runId} summaryEnabled={summaryEnabled} isLive={isLive} />}
         {view === "Risk" && <RiskView runId={runId} isLive={isLive} />}
         {view === "Execution" && <ExecutionView runId={runId} isLive={isLive} />}
-        {view === "Cost & Capacity" && <CostCapacityView runId={runId} />}
+        {view === "Cost & Capacity" && <CostCapacityView runId={runId} summaryEnabled={summaryEnabled} isLive={isLive} />}
         {view === "Latency" && <LatencyView isLive={isLive} />}
       </div>
     </div>
@@ -326,10 +330,13 @@ function OpenPositions({ run }: { run: PaperRunRow }) {
 
 function TradesTab({ run }: { run: PaperRunRow }) {
   const failed = run.status === "failed";
-  const { data: restTrades = [], isLoading, isError, error } = useTradeHistory(failed ? undefined : run.id);
-  // The REST /trades endpoint 500s for the whole life of a running run (parquet artifact still
-  // being written), but the live stream keeps delivering fills — merge so the table isn't hidden
-  // behind that REST error while a healthy stream has data.
+  // The REST /trades endpoint refuses for the whole life of a running run (parquet artifact still
+  // being written) and forever for a failed one, so neither is asked. The live stream keeps
+  // delivering fills either way, and the merge below is what fills the table until the run stops.
+  const running = run.status === "running";
+  const { data: restTrades = [], isLoading, isError, error } = useTradeHistory(
+    failed || running ? undefined : run.id,
+  );
   const { snapshot } = useLiveSnapshot();
   const trades = useMemo(() => mergeLiveTrades(restTrades, snapshot), [restTrades, snapshot]);
   const hasTrades = trades.length > 0;
@@ -815,14 +822,18 @@ function RunDetailBody({
   const { isAdmin } = useAuth();
   const visibleTabs = tabsFor(run.mode);
   const activeTab: Tab = visibleTabs.includes(tab) ? tab : "Charts";
-  // Only /summary is fetched here — the Results views own every chart now and query their own
-  // curves. Skipped in mock mode (synthetic ids the real endpoints can't resolve), and for a
-  // failed run: the engine died before finalizing the pnl sidecar, so /summary can only 404/500
-  // and the tabs render RunFailedNotice from `run.error` regardless of what it would have said.
   const failed = run.status === "failed";
-  const summaryQ = useRunSummary(!USE_MOCK && !failed ? run.id : undefined);
   const lazy = !USE_MOCK;
   const isLive = run.status === "running";
+  // Only /summary is fetched here — the Results views own every chart now and query their own
+  // curves. Three cases never ask for it:
+  //   - mock mode: synthetic ids the real endpoints can't resolve;
+  //   - a FAILED run: the engine died before finalizing the pnl sidecar, so /summary can only
+  //     404/500 and the tabs render RunFailedNotice from `run.error` instead;
+  //   - a RUNNING run: the sidecar is mid-write for the whole life of the run, so /summary 500s
+  //     the entire time — the `/live/stream` frame is the only source of these fields until it
+  //     stops, and mergeLiveSummary already reads it.
+  const summaryQ = useRunSummary(!USE_MOCK && !failed && !isLive ? run.id : undefined);
   // Live frames name symbols by dense index only, so the manifest supplies the tickers — without
   // it every live fill in the Results views' trade tables reads "#0". Only a running run has
   // frames to label, so the extra fetch is scoped to one.

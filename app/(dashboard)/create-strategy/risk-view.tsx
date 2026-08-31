@@ -378,7 +378,9 @@ export function RiskView({ runId, isLive }: { runId?: string; isLive?: boolean }
 
   // Drawdown series from the run's equity curve (same query paper/live detail uses), or from the
   // live frame's own `equity` while the run is running — `/equity-curve` 500s for its whole life.
-  const { data: restEquity = [], isLoading: equityLoading, isError: equityError } = useRunEquity(runId);
+  const { data: restEquity = [], isLoading: equityLoading, isError: equityError } = useRunEquity(
+    isLive ? undefined : runId,
+  );
   const { snapshot, sharpeSamples: liveSharpe, state: liveState } = useLiveSnapshot();
   const equity = useMemo(() => preferLiveEquity(restEquity, snapshot), [restEquity, snapshot]);
   const drawdownPoints = useMemo(() => {

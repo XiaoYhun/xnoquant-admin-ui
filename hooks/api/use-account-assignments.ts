@@ -51,6 +51,28 @@ export function useAssignmentCountsByUser(accountIds: string[], exceptAccountId:
   });
 }
 
+/**
+ * The assignees of many accounts at once, keyed by account id. Same per-account fan-out (and the
+ * same query keys) as `useAssignmentCountsByUser`, so both read one fetch per account.
+ * The endpoint is admin-only — pass `enabled: false` for everyone else.
+ */
+export function useAssigneesByAccount(accountIds: string[], enabled: boolean) {
+  return useQueries({
+    queries: accountIds.map((id) => ({
+      queryKey: assignmentsKey(id),
+      queryFn: () => fetchAssignments(id),
+      enabled,
+      retry: retryUnlessForbidden,
+      staleTime: 60_000,
+    })),
+    combine: (results) => {
+      const byAccount = new Map<string, string[]>();
+      results.forEach((r, i) => byAccount.set(accountIds[i], (r.data ?? []).map((a) => a.user_id)));
+      return byAccount;
+    },
+  });
+}
+
 export function useAssignAccount(accountId: string | undefined) {
   const qc = useQueryClient();
   return useMutation({

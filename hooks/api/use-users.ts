@@ -14,7 +14,8 @@ export type UserRosterEntry = components["schemas"]["UserRosterEntry"];
 // raw id.
 const ALL_ROLES = "default,contributor,researcher,research-lead,pm,trader,admin";
 
-export function useUserRoster() {
+/** `enabled` gates the call for non-admins, whom the endpoint answers with 403. */
+export function useUserRoster(enabled = true) {
   return useQuery({
     queryKey: ["user-roster"],
     queryFn: async (): Promise<UserRosterEntry[]> => {
@@ -22,6 +23,7 @@ export function useUserRoster() {
       const data = await apiGet<UserRosterEntry[]>(`${HFT_API_URL}/api/users?role=${ALL_ROLES}`);
       return Array.isArray(data) ? data : [];
     },
+    enabled,
     retry: retryUnlessForbidden,
     // The roster barely changes and every row on the list reads it.
     staleTime: 5 * 60_000,

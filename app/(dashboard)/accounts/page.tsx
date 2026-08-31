@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { MinimalisticMagnifer } from "@solar-icons/react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAccounts } from "@/hooks/api/use-accounts";
+import { useAuth } from "@/hooks/use-auth";
 import { NewAccountForm } from "./new-account-form";
 import { AccountList } from "./account-list";
 import { EditAccountModal } from "./edit-account-modal";
@@ -11,6 +12,7 @@ import type { Account } from "@/types/domain";
 
 export default function Page() {
   const { data: accounts = [], isPending, isError } = useAccounts();
+  const { isAdmin } = useAuth();
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
@@ -51,7 +53,8 @@ export default function Page() {
         </Select>
       </div>
       <div className="flex min-h-0 flex-1 gap-4">
-        <NewAccountForm />
+        {/* Only an admin may create and assign accounts; other roles just see their own. */}
+        {isAdmin && <NewAccountForm />}
         <AccountList
           accounts={filtered}
           total={filtered.length}

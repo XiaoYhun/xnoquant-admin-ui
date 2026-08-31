@@ -17,8 +17,8 @@ import { resourceErrorMessage } from "@/lib/api-client";
 import type { Account } from "@/types/domain";
 
 // Only trader/pm can hold an account assignment (`POST /assignments` — "grant a trader/pm
-// access"), and each role caps how many accounts one user may hold. Shown to the admin as the
-// "Rules:" line under the table.
+// access"), and each role caps how many accounts one user may hold — surfaced per row as the
+// "Current Account" count and the At limit / Available status.
 const ROLE_LIMITS = [
   { role: "pm", label: "PM", limit: 10 },
   { role: "trader", label: "Trader", limit: 1 },
@@ -209,7 +209,6 @@ export function AssignUsersModal({ account, onClose }: { account: Account; onClo
             )}
           </div>
 
-          <p className="text-xs text-muted-foreground">Rules: Trader max 1 account. PM max 10 accounts.</p>
           {error && <p className="text-xs text-destructive">{error}</p>}
         </div>
 

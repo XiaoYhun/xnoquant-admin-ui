@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Key, Pen2, TrashBinTrash, UsersGroupRounded } from "@solar-icons/react";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -14,6 +14,9 @@ import {
 } from "@/components/ui/dialog";
 import { useVenues } from "@/hooks/api/use-venues";
 import { useDeleteAccount } from "@/hooks/api/use-accounts";
+import { useAssigneesByAccount } from "@/hooks/api/use-account-assignments";
+import { useUserRoster, userLabelMap } from "@/hooks/api/use-users";
+import { useAuth } from "@/hooks/use-auth";
 import { RefreshDnseTokenDialog } from "./refresh-dnse-token-dialog";
 import { AssignUsersModal } from "./assign-users-modal";
 import { resourceErrorMessage } from "@/lib/api-client";
@@ -23,10 +26,10 @@ import type { Account } from "@/types/domain";
 const COLS = [
   { key: "name", label: "Name", w: "16%" },
   { key: "venue", label: "Venue", w: "15%" },
-  { key: "owner", label: "Owner", w: "12%" },
+  { key: "assigned", label: "Assigned users", w: "16%" },
   { key: "capital", label: "Capital", w: "14%" },
   { key: "strategy", label: "Strategy", w: "14%" },
-  { key: "asset", label: "Asset", w: "13%" },
+  { key: "asset", label: "Asset", w: "9%" },
   { key: "action", label: "", w: "16%" },
 ] as const;
 
@@ -45,6 +48,18 @@ export function AccountList({
 }) {
   const { data: venues = [] } = useVenues();
   const deleteAccount = useDeleteAccount();
+  const { isAdmin, user } = useAuth();
+  // Both endpoints are admin-only. A non-admin's list is already just the accounts assigned to
+  // them (`GET /api/accounts` — "caller's own assigned accounts"), so their own name is the row.
+  const assignees = useAssigneesByAccount(
+    accounts.map((a) => a.id),
+    isAdmin,
+  );
+  const { data: roster = [] } = useUserRoster(isAdmin);
+  const labels = useMemo(() => userLabelMap(roster), [roster]);
+  const self = user?.username?.trim() || user?.fullname?.trim() || user?.email || null;
+  const assignedNames = (accountId: string) =>
+    isAdmin ? (assignees.get(accountId) ?? []).map((id) => labels.get(id) ?? id) : self ? [self] : [];
   const [pendingDelete, setPendingDelete] = useState<Account | null>(null);
   const [pendingRefresh, setPendingRefresh] = useState<Account | null>(null);
   const [pendingAssign, setPendingAssign] = useState<Account | null>(null);
@@ -90,8 +105,8 @@ export function AccountList({
                     {a.name}
                   </TableCell>
                   <TableCell className="truncate text-sm text-foreground">{venueName(a.venue_id)}</TableCell>
-                  <TableCell className="truncate text-sm text-foreground" title={a.owner_username ?? undefined}>
-                    {a.owner_username ?? <span className="text-muted-foreground">-</span>}
+                  <TableCell className="truncate text-sm text-foreground" title={assignedNames(a.id).join(", ")}>
+                    {assignedNames(a.id).join(", ") || <span className="text-muted-foreground">-</span>}
                   </TableCell>
                   {/* Capital/Strategy/Asset: not in the HFT Account schema — see docs/plans/api-integration.md. */}
                   <TableCell className="text-sm text-muted-foreground">-</TableCell>
@@ -113,37 +128,43 @@ export function AccountList({
                           <Key weight="Outline" className="size-5" />
                         </Button>
                       )}
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label={`Assign users to ${a.name}`}
-                        title="Assign users"
-                        className="text-muted-foreground hover:text-foreground"
-                        onClick={() => setPendingAssign(a)}
-                      >
-                        <UsersGroupRounded weight="Outline" className="size-5" />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label={`Edit ${a.name}`}
-                        className="text-muted-foreground hover:text-foreground"
-                        onClick={() => onEdit(a)}
-                      >
-                        <Pen2 weight="Outline" className="size-5" />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label={`Delete ${a.name}`}
-                        className="text-muted-foreground hover:text-destructive"
-                        onClick={() => setPendingDelete(a)}
-                      >
-                        <TrashBinTrash weight="Outline" className="size-5" />
-                      </Button>
+                      {/* Assign/update/delete are admin-only on the API (403 for everyone else);
+                          the DNSE token refresh above is not — an assigned trader may re-auth. */}
+                      {isAdmin && (
+                        <>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={`Assign users to ${a.name}`}
+                            title="Assign users"
+                            className="text-muted-foreground hover:text-foreground"
+                            onClick={() => setPendingAssign(a)}
+                          >
+                            <UsersGroupRounded weight="Outline" className="size-5" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={`Edit ${a.name}`}
+                            className="text-muted-foreground hover:text-foreground"
+                            onClick={() => onEdit(a)}
+                          >
+                            <Pen2 weight="Outline" className="size-5" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label={`Delete ${a.name}`}
+                            className="text-muted-foreground hover:text-destructive"
+                            onClick={() => setPendingDelete(a)}
+                          >
+                            <TrashBinTrash weight="Outline" className="size-5" />
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>

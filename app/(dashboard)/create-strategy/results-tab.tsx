@@ -4,7 +4,8 @@
 // narrower All/IS/OS, not the old Train/Test/Simulate/Paper Trade row that design dropped. Each
 // view lives in its own file. Everything here stays width-responsive: min-w-0 so the panel never
 // forces horizontal overflow.
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Danger } from "@solar-icons/react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { OverviewView } from "./overview-view";
@@ -17,7 +18,7 @@ import { MftResultsView } from "./mft-results-view";
 import { RunHistoryPicker } from "./run-history-picker";
 import { RunMetaStrip } from "./run-meta-strip";
 import { LiveSnapshotProvider } from "@/hooks/api/use-run-live-snapshot";
-import { symbolNamesOf, useRun } from "@/hooks/api/use-runs";
+import { isPendingBacktest, symbolNamesOf, useRun } from "@/hooks/api/use-runs";
 import type { Run } from "@/types/domain";
 
 // The Figma tab bar (14876:146506) shows five; Latency is kept on the end as a sixth — its
@@ -123,9 +124,29 @@ function HftResultsTab({
   // headline fields. Paper Trading's run-detail panel applies the running half of this gate too.
   const isBacktest = selectedRun?.mode === "backtest";
   const failed = selectedRun?.status === "failed";
-  // Frames name symbols by dense index only, so the manifest supplies the tickers.
-  const { data: run } = useRun(isLive ? selectedRun?.id : undefined);
+  // Frames name symbols by dense index only, so the manifest supplies the tickers. A backtest
+  // that is still queued is fetched for a second reason: useRun re-asks for it every 5s until the
+  // engine picks it up, so the tab moves off "pending" on its own.
+  const { data: run } = useRun(isLive || isPendingBacktest(selectedRun) ? selectedRun?.id : undefined);
   const symbolNames = useMemo(() => symbolNamesOf(run), [run]);
+
+  // The picker hands over a snapshot of the run and never revisits it, so the poll's copy has to
+  // replace it — otherwise the views keep querying under a status that has since changed. Compared
+  // during render, like the two syncs above.
+  if (run && run.id === selectedRun?.id && run.status !== selectedRun.status) setSelectedRun(run);
+
+  // Keep the list behind the picker honest too: it is a separate, unpolled query, so without this
+  // its row would still badge the run "Pending" after the poll saw it start. A cache write, not an
+  // invalidation — the record in hand is already the newer one.
+  const qc = useQueryClient();
+  useEffect(() => {
+    if (!selectedRun) return;
+    qc.setQueryData<Run[]>(["strategy-runs"], (prev) =>
+      prev?.some((r) => r.id === selectedRun.id && r.status !== selectedRun.status)
+        ? prev.map((r) => (r.id === selectedRun.id ? selectedRun : r))
+        : prev,
+    );
+  }, [selectedRun, qc]);
 
   return (
     <div className="flex min-w-0 flex-col gap-4 p-4">
@@ -173,7 +194,7 @@ function HftResultsTab({
               cost curve — survives into the next run's chart and draws data that isn't its own.
               Keying here also resets each view's local toggles (range, period) for the new run.
               Kept off the provider so the live subscription isn't torn down on a view switch. */}
-          <div key={selectedRun?.id ?? strategyId ?? "no-run"} className="min-w-0">
+          <div key={`${selectedRun?.id ?? strategyId ?? "no-run"}:${selectedRun?.status ?? ""}`} className="min-w-0">
             {view === "Overview" && <OverviewView runId={selectedRun?.id} summaryEnabled={isBacktest && !isLive} isLive={isLive} />}
             {view === "Performance" && <PerformanceView runId={selectedRun?.id} summaryEnabled={isBacktest && !isLive} isLive={isLive} />}
             {view === "Risk" && <RiskView runId={selectedRun?.id} isLive={isLive} />}

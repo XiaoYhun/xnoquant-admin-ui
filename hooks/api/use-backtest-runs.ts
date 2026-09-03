@@ -3,7 +3,7 @@ import { apiDelete, apiPost } from "@/lib/api-client";
 import { USE_MOCK, HFT_API_URL } from "@/lib/constant";
 import type { Run } from "@/types/domain";
 import type { PaperRunRow } from "@/lib/mock/paper-runs";
-import { fetchRuns, type RunsQuery } from "./use-runs";
+import { PENDING_RUN_POLL_MS, fetchRuns, type RunsQuery } from "./use-runs";
 import { toPaperRunRow } from "@/lib/transform/runs";
 
 // GAP-2: `GET /api/runs` has no `mode` filter — fetch a page, keep `mode==="backtest"`. Same shape
@@ -20,6 +20,12 @@ export function useBacktestRuns(query: RunsQuery = {}) {
     queryKey: ["backtest-runs", query.q ?? "", query.status ?? ""],
     queryFn: () => (USE_MOCK ? Promise.resolve<PaperRunRow[]>([]) : fetchBacktestRunRows(query)),
     placeholderData: (prev) => prev, // keep rows on screen while a new search resolves
+    // A queued backtest is the only row on this screen that changes without the user doing
+    // anything, so the list re-reads itself every 5s while one is loaded — and only then. With no
+    // pending row the list is static and a poll would be pure traffic. Same cadence as the run
+    // record's own poll (see useRun).
+    refetchInterval: (query) =>
+      query.state.data?.some((row) => row.status === "pending") ? PENDING_RUN_POLL_MS : false,
   });
 }
 

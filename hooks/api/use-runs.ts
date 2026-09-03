@@ -135,7 +135,20 @@ export function useRun(id: string | undefined) {
     queryFn: () => apiGet<Run>(`${HFT_API_URL}/api/runs/${id}`),
     enabled: !!id && !USE_MOCK,
     retry: retryUnlessForbidden,
+    refetchInterval: (query) => (isPendingBacktest(query.state.data) ? PENDING_RUN_POLL_MS : false),
   });
+}
+
+/** How often a queued backtest's record is re-read while it waits for the engine. */
+export const PENDING_RUN_POLL_MS = 5_000;
+
+/**
+ * A backtest that the engine hasn't picked up yet. It launches as `pending` with no artifacts
+ * behind it, so the record has to be re-asked for — unlike a paper/live run, which publishes its
+ * own `/live/stream` updates and needs no poll.
+ */
+export function isPendingBacktest(run: Run | undefined): boolean {
+  return run?.status === "pending" && run.mode === "backtest";
 }
 
 /**

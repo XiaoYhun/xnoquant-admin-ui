@@ -71,6 +71,11 @@ function fmtPct(v: number, digits = 2): string {
   return `${v > 0 ? "+" : ""}${formatAmount(v, digits)}%`;
 }
 
+/** Position sizes are quantities: a crypto lot can be 0.0035 BTC, a futures one 12,000 contracts. */
+function fmtQty(n: number): string {
+  return formatAmount(n, n !== 0 && Math.abs(n) < 1 ? 4 : 2);
+}
+
 function formatCompactUsd(n: number): string {
   if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
   if (Math.abs(n) >= 1_000) return `${Math.round(n / 1000)}K`;
@@ -121,6 +126,9 @@ function buildStats(
       value: summary?.fill_rate == null ? DASH : `${formatAmount(summary.fill_rate * 100, 1)}%`,
       className: GREEN_TEXT,
     },
+    // Largest absolute position held in any one symbol over the run (RunSummary.max_position) —
+    // a quantity in base-asset units, not money, so it carries no currency suffix.
+    { label: "Max Position", value: summary?.max_position == null ? DASH : fmtQty(summary.max_position) },
   ];
 }
 

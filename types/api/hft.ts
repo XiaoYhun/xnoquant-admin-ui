@@ -1398,9 +1398,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * GET /api/runs — page through the caller's runs, newest first, optionally filtered by exact
-         * @description `status`, a case-insensitive substring search over strategy name or run ID, an `asset_kind`
-         *     (`stock`/`futures`/`crypto`), and/or a `symbol` substring match.
+         * GET /api/runs — page through the caller's runs, newest first by default, optionally filtered
+         * @description by exact `status`, a case-insensitive substring search over strategy name or run ID, an
+         *     `asset_kind` (`stock`/`futures`/`crypto`), a `symbol` substring match, and/or bounds on
+         *     Sharpe/return%/drawdown%; sortable by any of those three performance fields as well.
          */
         get: {
             parameters: {
@@ -1417,6 +1418,22 @@ export interface paths {
                     asset_kind?: string | null;
                     /** @description Case-insensitive substring match against one of the run's traded symbols */
                     symbol?: string | null;
+                    /** @description Sort field: `created_at` (default), `sharpe`, `return_pct`, or `max_drawdown_pct` */
+                    sort_by?: string | null;
+                    /** @description Sort direction: `asc` or `desc` (default `desc`) */
+                    sort_dir?: string | null;
+                    /** @description Inclusive lower bound on annualized Sharpe ratio */
+                    min_sharpe?: number | null;
+                    /** @description Inclusive upper bound on annualized Sharpe ratio */
+                    max_sharpe?: number | null;
+                    /** @description Inclusive lower bound on total return % */
+                    min_return_pct?: number | null;
+                    /** @description Inclusive upper bound on total return % */
+                    max_return_pct?: number | null;
+                    /** @description Inclusive lower bound on max drawdown % */
+                    min_drawdown_pct?: number | null;
+                    /** @description Inclusive upper bound on max drawdown % */
+                    max_drawdown_pct?: number | null;
                 };
                 header?: never;
                 path?: never;
@@ -1453,8 +1470,10 @@ export interface paths {
         /**
          * POST /api/runs — launch a run binding a strategy to an account and an ordered set of symbols.
          * @description Validates ownership, that every symbol is tradable on the account's venue, and that the
-         *     strategy compiles, then snapshots a [`RunManifest`], records it as `running`, and dispatches
-         *     an [`EngineCommand::Launch`] to the worker pool to actually start the engine.
+         *     strategy compiles, then snapshots a [`RunManifest`] and records it. Live/paper are recorded
+         *     `running` and dispatched to the worker pool immediately. A backtest is recorded `pending`
+         *     and returns right away — its dataset is fetched from the venue/ClickHouse in a background
+         *     task, which flips it to `running` (dispatching it) or `failed` once that finishes.
          */
         post: {
             parameters: {
@@ -1645,7 +1664,10 @@ export interface paths {
         /** GET /api/runs/:id/cost-curve — downsampled cumulative trading-cost (fees) curve. */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description Which slice of a split backtest to compute over. Admin-only — non-admins are always forced to in_sample regardless of this value. */
+                    sample?: components["schemas"]["SampleScope"] | null;
+                };
                 header?: never;
                 path: {
                     /** @description Run ID */
@@ -1685,6 +1707,13 @@ export interface paths {
                     };
                     content?: never;
                 };
+                /** @description Run hasn't finished yet — parquet results aren't available until it's terminal; poll the live stream instead */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
             };
         };
         put?: never;
@@ -1705,7 +1734,10 @@ export interface paths {
         /** GET /api/runs/:id/equity-curve — downsampled cumulative realized-PnL curve. */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description Which slice of a split backtest to compute over. Admin-only — non-admins are always forced to in_sample regardless of this value. */
+                    sample?: components["schemas"]["SampleScope"] | null;
+                };
                 header?: never;
                 path: {
                     /** @description Run ID */
@@ -1745,62 +1777,8 @@ export interface paths {
                     };
                     content?: never;
                 };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/runs/{id}/live": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * GET /api/runs/:id/live — latest cached live snapshot (raw JSON published by the engine).
-         * @description `404` when Redis isn't configured or nothing has been published yet for this run.
-         */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    /** @description Run ID */
-                    id: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Latest live snapshot JSON (caller's own run; lab sharing does not extend to live runs; admins see any) */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-                /** @description Unauthorized */
-                401: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-                /** @description Caller's role has no access to this resource family */
-                403: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-                /** @description Not found or Redis not configured */
-                404: {
+                /** @description Run hasn't finished yet — parquet results aren't available until it's terminal; poll the live stream instead */
+                409: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -1866,6 +1844,80 @@ export interface paths {
                 };
                 /** @description Not found */
                 404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs/{id}/periodic-summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * GET /api/runs/:id/periodic-summary — yearly (or quarterly, when the requested scope's date
+         * @description range is under a year) performance breakdown. Empty for a paper/live run (no backtest date
+         *     range to bucket).
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Which slice of a split backtest to compute over. Admin-only — non-admins are always forced to in_sample regardless of this value. */
+                    sample?: components["schemas"]["SampleScope"] | null;
+                };
+                header?: never;
+                path: {
+                    /** @description Run ID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Yearly/quarterly performance breakdown (same visibility as the run itself); empty for paper/live runs */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PeriodSummary"][];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Caller's role has no access to this resource family */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Run hasn't finished yet — parquet results aren't available until it's terminal; poll the live stream instead */
+                409: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -1955,10 +2007,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** GET /api/runs/:id/summary — headline performance metrics, computed from parquet on read. */
+        /**
+         * GET /api/runs/:id/summary — headline performance metrics, computed from parquet on read
+         * @description (terminal runs only — see the module doc).
+         */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description Which slice of a split backtest to compute over. Admin-only — non-admins are always forced to in_sample regardless of this value. */
+                    sample?: components["schemas"]["SampleScope"] | null;
+                };
                 header?: never;
                 path: {
                     /** @description Run ID */
@@ -1998,6 +2056,13 @@ export interface paths {
                     };
                     content?: never;
                 };
+                /** @description Run hasn't finished yet — parquet results aren't available until it's terminal; poll the live stream instead */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
             };
         };
         put?: never;
@@ -2018,7 +2083,10 @@ export interface paths {
         /** GET /api/runs/:id/symbol-pnl — per-symbol PnL attribution. */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description Which slice of a split backtest to compute over. Admin-only — non-admins are always forced to in_sample regardless of this value. */
+                    sample?: components["schemas"]["SampleScope"] | null;
+                };
                 header?: never;
                 path: {
                     /** @description Run ID */
@@ -2053,6 +2121,13 @@ export interface paths {
                 };
                 /** @description Not found */
                 404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Run hasn't finished yet — parquet results aren't available until it's terminal; poll the live stream instead */
+                409: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -2210,6 +2285,8 @@ export interface paths {
                     page?: number | null;
                     /** @description Page size (default 100) */
                     size?: number | null;
+                    /** @description Which slice of a split backtest to compute over. Admin-only — non-admins are always forced to in_sample regardless of this value. */
+                    sample?: components["schemas"]["SampleScope"] | null;
                 };
                 header?: never;
                 path: {
@@ -2250,6 +2327,13 @@ export interface paths {
                     };
                     content?: never;
                 };
+                /** @description Run hasn't finished yet — parquet results aren't available until it's terminal; poll the live stream instead */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
             };
         };
         put?: never;
@@ -2270,7 +2354,10 @@ export interface paths {
         /** GET /api/runs/:id/turnover-curve — downsampled cumulative traded-notional curve. */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description Which slice of a split backtest to compute over. Admin-only — non-admins are always forced to in_sample regardless of this value. */
+                    sample?: components["schemas"]["SampleScope"] | null;
+                };
                 header?: never;
                 path: {
                     /** @description Run ID */
@@ -2305,6 +2392,13 @@ export interface paths {
                 };
                 /** @description Not found */
                 404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Run hasn't finished yet — parquet results aren't available until it's terminal; poll the live stream instead */
+                409: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -3881,6 +3975,15 @@ export interface components {
             imbalance_depth?: number | null;
             live_condition?: components["schemas"]["LiveConditionSettings"] | null;
             mode: components["schemas"]["RunMode"];
+            /**
+             * Format: date
+             * @description The in-sample/out-of-sample split date, computed once at launch time from
+             *     `backtest_range` and `data_kind` (see `routes::runs::launch::sample_window`): results
+             *     from `close_ts`/`fill_ts` on or after this date are out-of-sample and only ever shown to
+             *     admins (see [`crate::domain::result::SampleScope`]). `None` for live/paper runs and for
+             *     manifests persisted before this field existed — such runs have no sample split at all.
+             */
+            oos_start_date?: string | null;
             /** @description Strategy parameters (free-form). Empty until params are wired through the UI. */
             params?: Record<string, never>;
             strategy: components["schemas"]["ManifestStrategy"];
@@ -3926,6 +4029,12 @@ export interface components {
             artifact_root: string;
             /**
              * Format: double
+             * @description Mean holding period across all realized round-trips (`close_ts - open_ts` per
+             *     `pnl.parquet` row), in seconds. `0.0` when there are no trades.
+             */
+            avg_holding_time_secs: number;
+            /**
+             * Format: double
              * @description All-in trading cost (`total_fee`) per unit traded notional, in bps. Notional is the sum
              *     of `fill_price * fill_qty` over every fill (both legs of each round-trip). `0.0` when
              *     notional is zero.
@@ -3947,12 +4056,43 @@ export interface components {
              * @description Qty-weighted share of submitted order quantity that was actually filled, in `[0, 1]`,
              *     from `<run_dir>/trace.jsonl` order-lifecycle events (`OrderSubmitted` vs
              *     `OrderFilled`/`OrderPartiallyFilled`, matched by `client_order_id`). `0.0` when the run
-             *     never journaled trade cycles (predates the journal) or submitted no orders. Backtests
-             *     trend towards `1.0` since the simulator only leaves an order unfilled via
+             *     never journaled trade cycles (predates the journal) or submitted no orders. `SampleScope`-
+             *     filtered like every other field here, classifying each order as a whole by its *last*
+             *     lifecycle event (see `compute_fill_rate`) so an order straddling the split isn't
+             *     double-counted or dropped. Backtests trend towards `1.0` since the simulator only leaves
+             *     an order unfilled via
              *     `entry_order_ttl_ms` expiry or a strategy-side cancel — real rejects only happen on
              *     paper/live venues.
              */
             fill_rate: number;
+            /**
+             * Format: double
+             * @description Longest time it took the cumulative realized-PnL curve to climb back to a prior peak
+             *     after dropping below it, in days. `None` when the curve never both drew down *and*
+             *     recovered (e.g. fewer than 2 trades, monotonically non-decreasing equity, or the run
+             *     ended while still in its only drawdown).
+             */
+            longest_recovery_days?: number | null;
+            /**
+             * Format: int32
+             * @description Longest streak of consecutive trading days (calendar days with at least one round-trip,
+             *     gaps like weekends don't break the streak) whose summed `net_pnl` is negative. `0` when
+             *     there are no trades or no losing day.
+             */
+            max_consecutive_losing_days: number;
+            /**
+             * Format: int32
+             * @description Longest streak of consecutive round-trips (ordered by `close_ts`) with negative
+             *     `net_pnl`. `0` when there are no trades or no losing round-trip.
+             */
+            max_consecutive_losses: number;
+            /**
+             * Format: int32
+             * @description Mirrors [`max_consecutive_losing_days`](Self::max_consecutive_losing_days) for the
+             *     winning side: longest streak of consecutive trading days whose summed `net_pnl` is
+             *     positive.
+             */
+            max_consecutive_winning_days: number;
             /**
              * Format: double
              * @description Largest peak-to-trough drop of the cumulative realized-PnL curve, in PnL units.
@@ -3966,6 +4106,13 @@ export interface components {
              *     snapshot TODO lands).
              */
             max_drawdown_pct?: number | null;
+            /**
+             * Format: double
+             * @description Largest absolute position (signed running sum of `fill_qty`, `Buy` positive/`Sell`
+             *     negative) held in any single symbol over the run, reconstructed by folding
+             *     `fills.parquet` ordered by `fill_ts`. `0.0` when there are no fills.
+             */
+            max_position: number;
             /**
              * Format: double
              * @description Sum of per-symbol `net_pnl` (already net of fees).
@@ -4009,7 +4156,9 @@ export interface components {
              * Format: double
              * @description Mark-to-market PnL of whatever position was still open when the run stopped (e.g. a
              *     buy-and-hold strategy that never closes), from `<run_dir>/unrealized_pnl.json`. `0.0` when
-             *     the run ended flat, or for runs recorded before this sidecar existed.
+             *     the run ended flat, or for runs recorded before this sidecar existed. **Not**
+             *     [`SampleScope`]-filtered — it's a single run-end snapshot, not a series with a timestamp
+             *     per row to split on.
              */
             unrealized_pnl: number;
             /**
@@ -4322,6 +4471,8 @@ export interface components {
         VenueType: "binance_spot" | "binance_futures" | "tcbs" | "dnse" | "ssi";
         DnseBalanceResponse: Record<string, never>;
         DnseOtpRequest: Record<string, never>;
+        SampleScope: Record<string, never>;
+        PeriodSummary: Record<string, never>;
     };
     responses: never;
     parameters: never;

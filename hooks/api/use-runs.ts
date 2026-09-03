@@ -45,7 +45,11 @@ export async function fetchRunsPage(params: RunsQuery = {}): Promise<RunPage> {
 // report a `total` for both. They request the largest page instead and paginate locally.
 export async function fetchRuns(params: RunsQuery = {}): Promise<Run[]> {
   const page = await fetchRunsPage({ size: RUNS_MAX_PAGE_SIZE, ...params });
-  return page.runs;
+  // A page can carry the same run more than once (seen on dev: one id three times). Every list
+  // keys its rows on the run id, and React leaves ghost rows behind when keys collide — rows that
+  // survive a filter they don't match. Keep the first copy of each id.
+  const seen = new Set<string>();
+  return page.runs.filter((run) => !seen.has(run.id) && (seen.add(run.id), true));
 }
 
 export function fetchRunSummary(id: string): Promise<RunSummary> {

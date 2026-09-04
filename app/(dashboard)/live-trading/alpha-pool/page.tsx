@@ -22,6 +22,12 @@ import { useRuns } from "@/hooks/api/use-runs";
 import { useUrlParam } from "@/hooks/use-url-param";
 import { toPaperRunRow } from "@/lib/transform/runs";
 import { resourceErrorMessage } from "@/lib/api-client";
+import {
+  EMPTY_METRIC_RANGES,
+  MetricRangeFilters,
+  matchesMetricRanges,
+  type MetricRanges,
+} from "@/components/metric-range-filters";
 import { idQueryNeedle } from "@/lib/utils";
 import { AlphaPoolTable } from "./alpha-pool-table";
 import { MarketTabs, matchesMarket, marketFromParam, marketOf, type Market } from "@/components/market-tabs";
@@ -64,6 +70,8 @@ function AlphaPool() {
   const [search, setSearch] = useState("");
   const [symbolFilter, setSymbolFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  // Sharpe / Return % / Max DD % bounds, read off the member's source run.
+  const [ranges, setRanges] = useState<MetricRanges>(EMPTY_METRIC_RANGES);
   const [page, setPage] = useState(1);
   // The open panel is in the URL (`?run=<id>`) so the view can be linked and survives reload.
   const [selectedId, setSelectedId] = useUrlParam("run");
@@ -113,9 +121,9 @@ function AlphaPool() {
       // A member promoted without a source run has no market to attribute it to — keep it
       // visible on every tab rather than hiding it everywhere.
       const inMarket = !run || matchesMarket(run, market);
-      return matchesSearch && matchesStatus && matchesSymbol && inMarket;
+      return matchesSearch && matchesStatus && matchesSymbol && inMarket && matchesMetricRanges(run, ranges);
     });
-  }, [rows, search, statusFilter, symbolFilter, market]);
+  }, [rows, search, statusFilter, symbolFilter, market, ranges]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount);
@@ -133,7 +141,7 @@ function AlphaPool() {
         }}
       />
 
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <div className="flex h-8 w-64 items-center gap-2 rounded-[20px] border border-border px-3">
           <input
             value={search}
@@ -183,6 +191,13 @@ function AlphaPool() {
             ))}
           </SelectContent>
         </Select>
+        <MetricRangeFilters
+          value={ranges}
+          onChange={(next) => {
+            setRanges(next);
+            resetPage();
+          }}
+        />
       </div>
 
       <section className="flex shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-background">

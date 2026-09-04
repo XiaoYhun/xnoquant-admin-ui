@@ -21,7 +21,12 @@ import { useLiveRuns } from "@/hooks/api/use-live-runs";
 import { useDebounced } from "@/hooks/use-debounced";
 import { useUrlParam } from "@/hooks/use-url-param";
 import { resourceErrorMessage } from "@/lib/api-client";
-import { MetricFilters, NO_THRESHOLDS, matchesThresholds, type MetricThresholds } from "@/components/metric-filters";
+import {
+  EMPTY_METRIC_RANGES,
+  MetricRangeFilters,
+  matchesMetricRanges,
+  type MetricRanges,
+} from "@/components/metric-range-filters";
 import { cn, formatPercent, idQueryNeedle, isIdQuery } from "@/lib/utils";
 import { LiveRunsTable } from "./live-runs-table";
 import { OrderbookPanel } from "./orderbook-panel";
@@ -104,7 +109,9 @@ function LiveTrade() {
   const [search, setSearch] = useState("");
   const [symbolFilter, setSymbolFilter] = useState<string>("all");
   const [onlyRunning, setOnlyRunning] = useState(false);
-  const [thresholds, setThresholds] = useState<MetricThresholds>(NO_THRESHOLDS);
+  // Sharpe / Return % / Max DD % bounds — client-side, like symbol and paging: `GET /api/runs`
+  // has no metric filter.
+  const [ranges, setRanges] = useState<MetricRanges>(EMPTY_METRIC_RANGES);
 
   // Search and "Only Running" are served by `GET /api/runs` (`q`, `status`); market, symbol and
   // paging stay client-side — the API filters on neither market/symbol nor run mode.
@@ -168,9 +175,9 @@ function LiveTrade() {
           (!idSearch || r.id.toLowerCase().includes(idNeedle)) &&
           (symbolFilter === "all" || r.symbols.some((s) => s.symbol === symbolFilter)) &&
           matchesMarket(r, market) &&
-          matchesThresholds(r, thresholds),
+          matchesMetricRanges(r, ranges),
       ),
-    [runs, symbolFilter, market, idSearch, idNeedle, thresholds],
+    [runs, symbolFilter, market, idSearch, idNeedle, ranges],
   );
 
   // Headline numbers describe the current market tab, not the search/status narrowing.
@@ -205,7 +212,7 @@ function LiveTrade() {
         }}
       />
 
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <div className="flex h-8 w-64 items-center gap-2 rounded-[20px] border border-border px-3">
           <input
             value={search}
@@ -244,10 +251,10 @@ function LiveTrade() {
             ))}
           </SelectContent>
         </Select>
-        <MetricFilters
-          value={thresholds}
+        <MetricRangeFilters
+          value={ranges}
           onChange={(next) => {
-            setThresholds(next);
+            setRanges(next);
             resetPage();
           }}
         />

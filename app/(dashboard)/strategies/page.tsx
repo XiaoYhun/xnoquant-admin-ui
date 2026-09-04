@@ -16,7 +16,12 @@ import { idQueryNeedle, isIdQuery } from "@/lib/utils";
 import { useUrlParam } from "@/hooks/use-url-param";
 import { DEFAULT_MARKET, MarketTabs, marketOf, matchesMarket, type Market } from "@/components/market-tabs";
 import { resourceErrorMessage } from "@/lib/api-client";
-import { MetricFilters, NO_THRESHOLDS, matchesThresholds, type MetricThresholds } from "@/components/metric-filters";
+import {
+  EMPTY_METRIC_RANGES,
+  MetricRangeFilters,
+  matchesMetricRanges,
+  type MetricRanges,
+} from "@/components/metric-range-filters";
 import { BacktestRunsTable } from "./backtest-runs-table";
 import { RunDetailPanel } from "../paper-trading/run-detail-panel";
 
@@ -46,7 +51,9 @@ function Backtesting() {
   const [search, setSearch] = useState("");
   const [symbol, setSymbol] = useState("all");
   const [status, setStatus] = useState("all");
-  const [thresholds, setThresholds] = useState<MetricThresholds>(NO_THRESHOLDS);
+  // Sharpe / Return % / Max DD % bounds — client-side, like symbol and paging: `GET /api/runs`
+  // has no metric filter.
+  const [ranges, setRanges] = useState<MetricRanges>(EMPTY_METRIC_RANGES);
   const [page, setPage] = useState(1);
   // The open panel is in the URL (`?run=<id>`) so the view can be linked and survives reload.
   const [selectedId, setSelectedId] = useUrlParam("run");
@@ -77,10 +84,11 @@ function Backtesting() {
       runs.filter(
         (r) =>
           (!idSearch || r.id.toLowerCase().includes(idNeedle)) &&
-          (symbol === "all" || r.symbols.some((s) => s.symbol === symbol)) && matchesMarket(r, market) &&
-          matchesThresholds(r, thresholds),
+          (symbol === "all" || r.symbols.some((s) => s.symbol === symbol)) &&
+          matchesMarket(r, market) &&
+          matchesMetricRanges(r, ranges),
       ),
-    [runs, symbol, market, idSearch, idNeedle, thresholds],
+    [runs, symbol, market, idSearch, idNeedle, ranges],
   );
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
@@ -114,7 +122,7 @@ function Backtesting() {
         }}
       />
 
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <div className="flex h-8 w-64 items-center gap-2 rounded-[20px] border border-border px-3">
           <input
             value={search}
@@ -164,10 +172,10 @@ function Backtesting() {
             ))}
           </SelectContent>
         </Select>
-        <MetricFilters
-          value={thresholds}
+        <MetricRangeFilters
+          value={ranges}
           onChange={(next) => {
-            setThresholds(next);
+            setRanges(next);
             setPage(1);
           }}
         />

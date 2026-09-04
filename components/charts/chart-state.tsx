@@ -82,6 +82,10 @@ function StateCard({ status, detail, height }: { status: Exclude<ChartStatus, "r
  *
  * `detail` is the call site's own explanation ("Cost curve unavailable", "No cost points"); the
  * title above it comes from the status.
+ *
+ * `children` is optional because a panel whose data source does not exist at all (several of the
+ * MFT Results panels) has no chart body to wrap — it is permanently `empty` and only ever renders
+ * the state card.
  */
 export function ChartState({
   status = "ready",
@@ -92,7 +96,7 @@ export function ChartState({
   status?: ChartStatus;
   detail?: string;
   height?: number;
-  children: React.ReactNode;
+  children?: React.ReactNode;
 }) {
   if (status === "ready") return <>{children}</>;
   if (status === "loading") return <ChartSkeleton height={height} />;

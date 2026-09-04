@@ -21,6 +21,7 @@ import { useLiveRuns } from "@/hooks/api/use-live-runs";
 import { useDebounced } from "@/hooks/use-debounced";
 import { useUrlParam } from "@/hooks/use-url-param";
 import { resourceErrorMessage } from "@/lib/api-client";
+import { MetricFilters, NO_THRESHOLDS, matchesThresholds, type MetricThresholds } from "@/components/metric-filters";
 import { cn, formatPercent, idQueryNeedle, isIdQuery } from "@/lib/utils";
 import { LiveRunsTable } from "./live-runs-table";
 import { OrderbookPanel } from "./orderbook-panel";
@@ -103,6 +104,7 @@ function LiveTrade() {
   const [search, setSearch] = useState("");
   const [symbolFilter, setSymbolFilter] = useState<string>("all");
   const [onlyRunning, setOnlyRunning] = useState(false);
+  const [thresholds, setThresholds] = useState<MetricThresholds>(NO_THRESHOLDS);
 
   // Search and "Only Running" are served by `GET /api/runs` (`q`, `status`); market, symbol and
   // paging stay client-side — the API filters on neither market/symbol nor run mode.
@@ -165,9 +167,10 @@ function LiveTrade() {
         (r) =>
           (!idSearch || r.id.toLowerCase().includes(idNeedle)) &&
           (symbolFilter === "all" || r.symbols.some((s) => s.symbol === symbolFilter)) &&
-          matchesMarket(r, market),
+          matchesMarket(r, market) &&
+          matchesThresholds(r, thresholds),
       ),
-    [runs, symbolFilter, market, idSearch, idNeedle],
+    [runs, symbolFilter, market, idSearch, idNeedle, thresholds],
   );
 
   // Headline numbers describe the current market tab, not the search/status narrowing.
@@ -241,6 +244,13 @@ function LiveTrade() {
             ))}
           </SelectContent>
         </Select>
+        <MetricFilters
+          value={thresholds}
+          onChange={(next) => {
+            setThresholds(next);
+            resetPage();
+          }}
+        />
       </div>
 
       <div className="flex shrink-0 gap-4">

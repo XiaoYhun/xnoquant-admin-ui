@@ -16,6 +16,7 @@ import { idQueryNeedle, isIdQuery } from "@/lib/utils";
 import { useUrlParam } from "@/hooks/use-url-param";
 import { DEFAULT_MARKET, MarketTabs, marketOf, matchesMarket, type Market } from "@/components/market-tabs";
 import { resourceErrorMessage } from "@/lib/api-client";
+import { MetricFilters, NO_THRESHOLDS, matchesThresholds, type MetricThresholds } from "@/components/metric-filters";
 import { PaperRunsTable } from "./paper-runs-table";
 import { RunDetailPanel } from "./run-detail-panel";
 
@@ -35,6 +36,7 @@ function PaperTrading() {
   const [search, setSearch] = useState("");
   const [symbol, setSymbol] = useState("all");
   const [status, setStatus] = useState("all");
+  const [thresholds, setThresholds] = useState<MetricThresholds>(NO_THRESHOLDS);
   const [page, setPage] = useState(1);
   // The open panel is in the URL (`?run=<id>`) so the view can be linked and survives reload.
   const [selectedId, setSelectedId] = useUrlParam("run");
@@ -65,9 +67,10 @@ function PaperTrading() {
       runs.filter(
         (r) =>
           (!idSearch || r.id.toLowerCase().includes(idNeedle)) &&
-          (symbol === "all" || r.symbols.some((s) => s.symbol === symbol)) && matchesMarket(r, market),
+          (symbol === "all" || r.symbols.some((s) => s.symbol === symbol)) && matchesMarket(r, market) &&
+          matchesThresholds(r, thresholds),
       ),
-    [runs, symbol, market, idSearch, idNeedle],
+    [runs, symbol, market, idSearch, idNeedle, thresholds],
   );
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
@@ -152,6 +155,13 @@ function PaperTrading() {
             <SelectItem value="completed">Completed</SelectItem>
           </SelectContent>
         </Select>
+        <MetricFilters
+          value={thresholds}
+          onChange={(next) => {
+            setThresholds(next);
+            setPage(1);
+          }}
+        />
       </div>
 
       <section className="flex shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-background">

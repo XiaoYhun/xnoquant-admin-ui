@@ -1,10 +1,12 @@
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { AuthGuard } from "@/components/auth/auth-guard";
+import { RiskAlertWatcher } from "@/components/risk-alert-watcher";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
     <AuthGuard>
+      <RiskAlertWatcher />
       <div className="flex h-dvh overflow-hidden">
         <Sidebar />
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">

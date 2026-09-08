@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { AuthProvider } from "@/components/auth/auth-provider";
 import { retryUnlessForbidden } from "@/lib/api-client";
+import { ToastViewport } from "@/components/ui/toast-viewport";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -23,6 +24,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         {children}
+        <ToastViewport />
         {process.env.NODE_ENV === "development" && <ReactQueryDevtools initialIsOpen={false} />}
       </AuthProvider>
     </QueryClientProvider>

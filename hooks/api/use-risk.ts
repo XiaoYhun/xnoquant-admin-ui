@@ -33,6 +33,10 @@ export function useRiskStatus() {
     retry: retryUnlessForbidden,
     // Drawdown moves with the running strategies; the monitor recomputes continuously.
     refetchInterval: 5_000,
+    // React Query pauses intervals in a hidden tab. This query also feeds the risk alert toasts
+    // (components/risk-alert-watcher.tsx), whose whole point is to reach an admin who is looking
+    // at another tab — so it has to keep polling there.
+    refetchIntervalInBackground: true,
     placeholderData: EMPTY_STATUS,
   });
 }

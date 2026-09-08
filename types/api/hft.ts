@@ -681,6 +681,159 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/accounts/{id}/tcbs/otp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * POST /api/accounts/:id/tcbs/otp — redeem an `otp` + `otp_id` (from
+         * @description [`tcbs_request_otp`]) for a fresh access token and hand it straight to Redis, where
+         *     any already-running strategy for this account will pick it up. Mirrors
+         *     [`dnse_submit_otp`]'s handoff, so a daily re-auth doesn't require restarting the
+         *     strategy.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Account ID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["TcbsOtpRequest"];
+                };
+            };
+            responses: {
+                /** @description Access token refreshed */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Empty otp or otp_id */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Caller's role has no access to this resource family */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description TCBS request failed or Redis unavailable */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/accounts/{id}/tcbs/request-otp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * POST /api/accounts/:id/tcbs/request-otp — ask TCBS to generate an OTP for the account's
+         * @description API key. TCBS sends the code out-of-band (TCInvest app / registered channel); the caller
+         *     must submit it back via [`tcbs_submit_otp`] together with the `otp_id` this returns.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Account ID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OTP requested */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TcbsRequestOtpResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Caller's role has no access to this resource family */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description TCBS request failed */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/me": {
         parameters: {
             query?: never;
@@ -2414,6 +2567,82 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/runs/{id}/volatility-regime": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * GET /api/runs/:id/volatility-regime — Sharpe broken out by ATR%-labeled daily volatility
+         * @description regime (low/normal/high), to see whether the strategy's edge is regime-dependent. `null`
+         *     when the feature doesn't apply to this run — a tick-mode (HFT) run, a multi-symbol run, no
+         *     known starting capital (e.g. a live run), or no realized trades — see
+         *     `result::volatility::compute`.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Which slice of a split backtest to compute over. Admin-only — non-admins are always forced to in_sample regardless of this value. */
+                    sample?: components["schemas"]["SampleScope"] | null;
+                };
+                header?: never;
+                path: {
+                    /** @description Run ID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Volatility-regime Sharpe breakdown (same visibility as the run itself), or null when not applicable to this run */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["VolRegimeSummary"] | null;
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Caller's role has no access to this resource family */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Run hasn't finished yet — parquet results aren't available until it's terminal; poll the live stream instead */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/strategies": {
         parameters: {
             query?: never;
@@ -4035,6 +4264,15 @@ export interface components {
             avg_holding_time_secs: number;
             /**
              * Format: double
+             * @description Annualized `net_pnl` (linearly projected from the run's own trade-rate-derived
+             *     duration, i.e. `net_pnl / run_duration_years`) divided by [`max_drawdown`](Self::max_drawdown).
+             *     Unlike [`max_drawdown_pct`](Self::max_drawdown_pct) this needs no starting capital — both
+             *     halves are in raw PnL units, so it cancels out. `0.0` when undefined (fewer than 2
+             *     trades, zero-length span, or no drawdown ever occurred).
+             */
+            calmar: number;
+            /**
+             * Format: double
              * @description All-in trading cost (`total_fee`) per unit traded notional, in bps. Notional is the sum
              *     of `fill_price * fill_qty` over every fill (both legs of each round-trip). `0.0` when
              *     notional is zero.
@@ -4081,6 +4319,13 @@ export interface components {
              */
             max_consecutive_losing_days: number;
             /**
+             * Format: double
+             * @description Net PnL summed over the [`max_consecutive_losing_days`](Self::max_consecutive_losing_days)
+             *     streak, as a fraction of starting capital. `None` under the same conditions as
+             *     [`max_drawdown_pct`](Self::max_drawdown_pct).
+             */
+            max_consecutive_losing_days_pct?: number | null;
+            /**
              * Format: int32
              * @description Longest streak of consecutive round-trips (ordered by `close_ts`) with negative
              *     `net_pnl`. `0` when there are no trades or no losing round-trip.
@@ -4093,6 +4338,14 @@ export interface components {
              *     positive.
              */
             max_consecutive_winning_days: number;
+            /**
+             * Format: double
+             * @description Net PnL summed over the
+             *     [`max_consecutive_winning_days`](Self::max_consecutive_winning_days) streak, as a
+             *     fraction of starting capital. `None` under the same conditions as
+             *     [`max_drawdown_pct`](Self::max_drawdown_pct).
+             */
+            max_consecutive_winning_days_pct?: number | null;
             /**
              * Format: double
              * @description Largest peak-to-trough drop of the cumulative realized-PnL curve, in PnL units.
@@ -4127,6 +4380,15 @@ export interface components {
             oversized?: boolean;
             /**
              * Format: double
+             * @description Fraction of total net PnL concentrated in its single best close hour-of-day (UTC,
+             *     summed across all calendar days that share that hour — e.g. every `09:xx` close,
+             *     regardless of date, falls in one bucket): the largest per-hour summed `net_pnl`,
+             *     divided by `net_pnl` summed over every hour. `None` when there are no trades or the
+             *     total is exactly `0.0` (division undefined).
+             */
+            peak_hour_concentration_pct?: number | null;
+            /**
+             * Format: double
              * @description [`net_pnl`](Self::net_pnl) as a fraction of starting capital (the run's settlement-
              *     currency balance). `None` under the same conditions as [`max_drawdown_pct`](Self::max_drawdown_pct).
              */
@@ -4145,6 +4407,21 @@ export interface components {
              *     `close_ts` span). `0.0` when undefined (fewer than 2 trades, or zero duration).
              */
             sharpe_annualized: number;
+            /**
+             * Format: double
+             * @description Like [`sharpe`](Self::sharpe), but the denominator is the downside deviation (root-mean-
+             *     square of the negative `net_pnl`s only, zero-target) instead of the full population
+             *     std — so gains don't get penalized as "risk". `0.0` when there are fewer than 2 samples
+             *     or no negative sample exists (downside deviation undefined/zero).
+             */
+            sortino: number;
+            /**
+             * Format: double
+             * @description [`sortino`](Self::sortino) scaled by `sqrt(periods_per_year)`, the same
+             *     trade-rate-derived factor [`sharpe_annualized`](Self::sharpe_annualized) uses. `0.0`
+             *     when undefined.
+             */
+            sortino_annualized: number;
             /** Format: double */
             total_fee: number;
             /**
@@ -4469,8 +4746,104 @@ export interface components {
          * @enum {string}
          */
         VenueType: "binance_spot" | "binance_futures" | "tcbs" | "dnse" | "ssi";
+        /**
+         * @description One volatility bucket (low/normal/high) of a [`VolRegimeSummary`] Sharpe breakdown. See
+         *     `result::volatility` for the full algorithm.
+         */
+        VolRegimeBucket: {
+            /**
+             * Format: int32
+             * @description Calendar days in this bucket, including flat days with no trades.
+             */
+            days: number;
+            /**
+             * Format: int32
+             * @description Of `days`, how many had at least one trade (non-zero daily PnL).
+             */
+            days_traded: number;
+            /**
+             * Format: double
+             * @description `None` when the bucket is empty.
+             */
+            mean_daily_pct?: number | null;
+            /**
+             * Format: double
+             * @description Sum of this bucket's daily return %, in percent-of-starting-capital units. `None` when
+             *     the bucket is empty.
+             */
+            pnl_pct?: number | null;
+            /**
+             * Format: double
+             * @description This bucket's share of the run's total (ATR-covered) PnL, as a percentage. `None` when
+             *     total PnL is ~`0.0` (division undefined).
+             */
+            pnl_share_pct?: number | null;
+            /**
+             * Format: double
+             * @description `mean(daily_return_pct) / std(daily_return_pct) * sqrt(252)`. `None` when the bucket has
+             *     fewer than `config.min_days` days or an undefined/zero standard deviation.
+             */
+            sharpe?: number | null;
+            /**
+             * Format: double
+             * @description Sample standard deviation (`ddof=1`). `None` when the bucket has fewer than 2 days.
+             */
+            std_daily_pct?: number | null;
+        };
+        /**
+         * @description Parameters [`VolRegimeSummary`] was computed with — fixed today (no per-request overrides),
+         *     but returned so the response is self-describing.
+         */
+        VolRegimeConfig: {
+            annualized: boolean;
+            /**
+             * Format: int32
+             * @description Rolling ATR window, in trading days.
+             */
+            atr_period: number;
+            /**
+             * Format: double
+             * @description A day is "high vol" when ATR% is strictly above this (`[low_thr, high_thr]` is "normal").
+             */
+            high_thr: number;
+            /**
+             * Format: double
+             * @description A day is "low vol" when ATR% is strictly below this.
+             */
+            low_thr: number;
+            /**
+             * Format: int32
+             * @description Minimum days a bucket needs before it gets a `sharpe` value instead of `None`.
+             */
+            min_days: number;
+        };
+        /**
+         * @description Sharpe broken out by ATR%-labeled daily volatility regime (low/normal/high), to answer
+         *     "does this strategy's edge depend on the market being calm or choppy?" — a wide spread
+         *     between buckets means the edge is regime-dependent and will fade in a calm year. MFT
+         *     (bar-mode) single-symbol runs only — see `result::volatility::compute` for exactly when
+         *     this is `None` instead.
+         */
+        VolRegimeSummary: {
+            config: components["schemas"]["VolRegimeConfig"];
+            /**
+             * Format: int32
+             * @description Leading days dropped because the rolling ATR wasn't warm yet.
+             */
+            days_dropped_no_atr: number;
+            high_vol: components["schemas"]["VolRegimeBucket"];
+            low_vol: components["schemas"]["VolRegimeBucket"];
+            normal_vol: components["schemas"]["VolRegimeBucket"];
+            /**
+             * Format: double
+             * @description Sum of every bucket's `pnl_pct` (every ATR-covered day's return %).
+             */
+            total_pnl_pct: number;
+        };
         DnseBalanceResponse: Record<string, never>;
         DnseOtpRequest: Record<string, never>;
+        TcbsOtpRequest: Record<string, never>;
+        TcbsRequestOtpResponse: Record<string, never>;
         SampleScope: Record<string, never>;
         PeriodSummary: Record<string, never>;
     };

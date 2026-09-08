@@ -221,6 +221,11 @@ function toYearlyRows(months: MonthPnl[], scale: number): YearlyReturns[] {
 // maroon). α scales with magnitude at the same 10/20/30/60% steps used for both signs. `step` is
 // what one alpha band is worth: 1 (percentage point) in % mode, a third of the largest month in
 // absolute mode, so the ramp still spreads across the data either way.
+// Year + 12 months + YTD, all on equal tracks. `minmax(0,1fr)` (not bare `1fr`, whose implicit
+// `auto` minimum reintroduces the content-driven widths this replaced) lets a track hold its share
+// whatever the cell says; an over-long value clips against the cell's own `overflow-hidden`.
+const HEAT_GRID = "grid grid-cols-[repeat(14,minmax(0,1fr))]";
+
 function heatCellColor(v: number, step: number): string {
   const abs = Math.abs(v) / (step || 1);
   const alpha = abs < 1 ? 0.1 : abs < 2 ? 0.2 : abs < 3 ? 0.3 : 0.6;
@@ -261,18 +266,24 @@ function MonthlyReturnPanel({
       }
     >
 
-      {/* Full-bleed cells (flex-1, no gaps) that fill each row; rows split by a border.
-          Scrolls horizontally inside the panel when narrow rather than overflowing the page. */}
+      {/* Full-bleed cells that fill each row; rows split by a border. Scrolls horizontally inside
+          the panel when narrow rather than overflowing the page.
+
+          A GRID, not flex rows: flex items default to `min-width: auto`, so a `flex-1` cell can't
+          shrink below its own text. A month reading "-100.0%" then claimed more than its share and
+          stole it from its neighbours, leaving every row's columns at different widths and none of
+          them under the header's month labels. Equal `1fr` tracks, declared once and used by both
+          the header and every row, keep the columns registered. */}
       <div className="min-w-0 overflow-x-auto">
-        <div className="min-w-[740px]">
-          <div className="flex items-center border-b border-border">
-            <span className="flex-1 px-3 py-2 text-xs text-muted-foreground">Year</span>
+        <div className="min-w-[840px]">
+          <div className={cn(HEAT_GRID, "items-center border-b border-border")}>
+            <span className="px-3 py-2 text-xs text-muted-foreground">Year</span>
             {MONTHS.map((m) => (
-              <span key={m} className="flex-1 px-3 py-2 text-center text-xs text-muted-foreground">
+              <span key={m} className="px-1.5 py-2 text-center text-xs text-muted-foreground">
                 {m}
               </span>
             ))}
-            <span className="flex-1 px-3 py-2 text-center text-xs text-muted-foreground">YTD</span>
+            <span className="px-1.5 py-2 text-center text-xs text-muted-foreground">YTD</span>
           </div>
           {rows.length === 0 ? (
             <div className="px-3 py-6 text-center text-xs text-muted-foreground">
@@ -282,16 +293,16 @@ function MonthlyReturnPanel({
             rows.map((row) => (
               <div
                 key={row.year}
-                className="flex items-stretch border-b border-border last:border-b-0"
+                className={cn(HEAT_GRID, "items-stretch border-b border-border last:border-b-0")}
               >
-                <span className="flex flex-1 items-center px-3 py-2.5 text-sm text-white">
+                <span className="flex items-center px-3 py-2.5 text-sm text-white">
                   {row.year}
                 </span>
                 {row.months.map((v, i) => (
                   <div
                     key={i}
                     style={v === null ? undefined : { backgroundColor: heatCellColor(v, step) }}
-                    className="flex flex-1 items-center justify-center px-3 py-2.5"
+                    className="flex items-center justify-center overflow-hidden px-1.5 py-2.5"
                   >
                     <span
                       className={cn(
@@ -305,7 +316,7 @@ function MonthlyReturnPanel({
                 ))}
                 {/* YTD closes the row: the year's realised total, summing only months that
                     actually have equity points so a part-year reads as its own progress. */}
-                <div className="flex flex-1 items-center justify-center px-3 py-2.5">
+                <div className="flex items-center justify-center overflow-hidden px-1.5 py-2.5">
                   <span
                     className={cn(
                       "text-xs font-semibold",

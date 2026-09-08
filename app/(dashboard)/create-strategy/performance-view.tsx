@@ -22,7 +22,7 @@ import {
   curveSpanMs,
   equityStats,
   startingCapital,
-  padDailyPnl,
+  netDailyPnlWindow,
   toDailyPnlPoints,
   toMonthlyPnl,
   toReturnHistogram,
@@ -32,7 +32,7 @@ import {
   type DayPoint,
   type MonthPnl,
 } from "@/lib/transform/results";
-import { cn, currencyDigits, formatAmount, formatSignedAmount } from "@/lib/utils";
+import { cn, currencyDigits, formatAmount, formatCompact, formatSignedAmount } from "@/lib/utils";
 import { ChartCard, MockNote } from "./results-chart-card";
 
 // Gradient text — Figma cells/values use these clipped gradients (angles vary 143–165° per
@@ -240,8 +240,11 @@ function MonthlyReturnPanel({
   note?: string;
   state: ChartStateProps;
 }) {
-  // Heatmap cells are ~48px wide; two decimals do not fit.
-  const fmt = (v: number) => (isPct ? fmtPct(v, 1) : fmtSigned(v, 0));
+  // Heatmap cells are ~48px wide. Percent months fit as-is, but an absolute PnL month runs to
+  // millions of dong — grouped in full ("+3,343,055") it overflows the cell and pushes the last
+  // months off the panel, so it goes compact: "+3.3M", "-55.1K".
+  const fmt = (v: number) =>
+    isPct ? fmtPct(v, 1) : `${v > 0 ? "+" : ""}${formatCompact(v)}`;
   return (
     <ChartCard
       title="Monthly Return"
@@ -540,7 +543,7 @@ export function PerformanceView({
   // context rather than one lone column, and cut to the most recent 30 so a long backtest doesn't
   // squeeze months of bars into the panel.
   const daily = useMemo(
-    () => padDailyPnl(toDailyPnlPoints(equity), NET_DAILY_PNL_DAYS).slice(-NET_DAILY_PNL_DAYS),
+    () => netDailyPnlWindow(toDailyPnlPoints(equity), NET_DAILY_PNL_DAYS),
     [equity],
   );
   const monthly = useMemo(() => toMonthlyPnl(equity), [equity]);

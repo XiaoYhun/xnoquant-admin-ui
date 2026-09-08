@@ -135,6 +135,23 @@ export function padDailyPnl(
 }
 
 /**
+ * The bars the Net Daily PNL panel draws: the run's last `days` **trading** days.
+ *
+ * Padding is for runs that are too short to fill the window — an intraday HFT run is a single
+ * point, and `padDailyPnl` centres it in a week of blanks so it reads as a bar in context. A run
+ * with more trading days than the window needs the opposite: a multi-year backtest trades on ~2
+ * days a month, so widening its last `days` days back out to consecutive calendar days leaves all
+ * but a handful of columns at zero height and the panel looks empty. Those runs get their real
+ * days, gaps closed up.
+ */
+export function netDailyPnlWindow(points: DatedPnl[], days: number): DayPoint[] {
+  if (points.length >= days) {
+    return points.slice(-days).map((d) => ({ label: equityDayLabel(d.ts), value: d.value }));
+  }
+  return padDailyPnl(points, days).slice(-days);
+}
+
+/**
  * `toDailyPnl` keeping each day's timestamp — the input for monthly/histogram regrouping.
  *
  * The first day's prior close is seeded at `0`, not dropped: equity here IS cumulative realized

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   equityStats,
   startingCapital,
+  netDailyPnlWindow,
   padDailyPnl,
   toDailyPnlPoints,
   toDrawdown,
@@ -221,6 +222,45 @@ describe("toReturnHistogram", () => {
     const flat = toReturnHistogram([0, 0, 0], 4);
     expect(flat.reduce((s, b) => s + b.count, 0)).toBe(3);
     expect(toReturnHistogram([])).toEqual([]);
+  });
+});
+
+describe("netDailyPnlWindow", () => {
+  const DAY = 86_400_000;
+  const base = new Date(2026, 0, 5, 10, 0).getTime();
+  /** `count` trading days, `gapDays` apart — a sparse backtest when the gap is wide. */
+  const trading = (count: number, gapDays = 1) =>
+    Array.from({ length: count }, (_, i) => ({ ts: base + i * gapDays * DAY, value: i + 1 }));
+
+  it("shows the last `days` trading days once a run has at least that many", () => {
+    const out = netDailyPnlWindow(trading(50), 30);
+    expect(out).toHaveLength(30);
+    // The last 30 of 50, in order — values 21…50.
+    expect(out.map((d) => d.value)).toEqual(Array.from({ length: 30 }, (_, i) => i + 21));
+  });
+
+  it("closes the gaps in a sparse multi-year run instead of padding them out", () => {
+    // 40 trading days two weeks apart spans over a year of calendar days; padding would leave
+    // all but 30 columns at zero.
+    const out = netDailyPnlWindow(trading(40, 14), 30);
+    expect(out).toHaveLength(30);
+    expect(out.every((d) => d.value !== 0)).toBe(true);
+  });
+
+  it("still pads and centres a run shorter than the window", () => {
+    const out = netDailyPnlWindow(trading(1), 7);
+    expect(out).toHaveLength(7);
+    expect(out.map((d) => d.value)).toEqual([0, 0, 0, 1, 0, 0, 0]);
+  });
+
+  it("keeps a run of exactly the window width untouched", () => {
+    const out = netDailyPnlWindow(trading(30), 30);
+    expect(out).toHaveLength(30);
+    expect(out.every((d) => d.value !== 0)).toBe(true);
+  });
+
+  it("stays empty with no data, so the panel keeps its own empty state", () => {
+    expect(netDailyPnlWindow([], 30)).toEqual([]);
   });
 });
 

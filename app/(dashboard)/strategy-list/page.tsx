@@ -7,20 +7,10 @@ import {
   AltArrowRight,
   AltArrowUp,
   CloseCircle,
-  MenuDots,
   MinimalisticMagnifer,
-  SkipNext,
 } from "@solar-icons/react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useHftStrategies, type HftStrategyType } from "@/hooks/api/use-hft-strategies";
 import { useDemoteStrategy, usePromotions } from "@/hooks/api/use-promotions";
 import { Button } from "@/components/ui/button";
@@ -38,7 +28,8 @@ import { useDebounced } from "@/hooks/use-debounced";
 import { resourceErrorMessage } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
 import { cn, idQueryNeedle, isIdQuery } from "@/lib/utils";
-import { StrategyStageBadge, strategyStage, nextPromotionStage, launchMode, STAGE_ORDER, PAPER_RUN_SUCCEEDED } from "@/components/strategy-stage";
+import { strategyStage, nextPromotionStage, STAGE_ORDER, PAPER_RUN_SUCCEEDED } from "@/components/strategy-stage";
+import { DEMOTE_TARGET, RowActions, StageCell } from "./row-actions";
 import { PromoteStageDialog } from "../create-strategy/promote-stage-dialog";
 import { SimulateModal, HFT_TYPE_LABEL } from "../create-strategy/simulate-modal";
 import type { PromotionStage, Run, Strategy, StrategyPromotion } from "@/types/domain";
@@ -89,14 +80,6 @@ const FILTER_PILL =
 
 type SortKey = (typeof COLS)[number]["key"];
 type Sort = { key: SortKey; dir: "asc" | "desc" };
-
-const pad = (n: number) => String(n).padStart(2, "0");
-function formatWhen(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
 
 /**
  * The promotion this strategy still holds, if any — live first, since that's the one to unwind
@@ -401,13 +384,9 @@ export default function Page() {
               </TableHeader>
               <TableBody>
                 {pageRows.map((s) => {
-                  const stage = strategyStage(s, runsOf.get(s.id));
-                  // Whichever promotion is current is the one worth dating.
-                  const promotedAt = stage.rung === "live" ? s.live_promoted_at : stage.rung === "paper" ? s.paper_promoted_at : null;
                   const promotion = promotionOf.get(s.id);
                   const next = nextPromotionStage(s);
                   const blocked = next ? blockedReason(s, next, runsOf.get(s.id) ?? []) : undefined;
-                  const demotable = demotableStage(s);
                   const ownerName = owners.get(s.owner_id) ?? `${s.owner_id.slice(0, 8)}…`;
                   const email = emailOf.get(s.owner_id);
                   return (
@@ -427,75 +406,20 @@ export default function Page() {
                       </TableCell>
                       {/* Reuse the same labels the Simulate modal shows, rather than a CSS capitalize. */}
                       <TableCell className="px-3 py-2.5 text-xs text-white">{HFT_TYPE_LABEL[s.strategy_type] ?? s.strategy_type}</TableCell>
-                      <TableCell
-                        className="px-3 py-2.5"
-                        // The promotion's date and note lost their own columns to the Figma
-                        // layout; this is where that audit trail still reads.
-                        title={
-                          promotion
-                            ? [
-                                `Promoted ${formatWhen(promotedAt)}`,
-                                promotion.note,
-                                `by ${owners.get(promotion.promoted_by) ?? promotion.promoted_by}`,
-                              ]
-                                .filter(Boolean)
-                                .join(" — ")
-                            : undefined
-                        }
-                      >
-                        <StrategyStageBadge strategy={s} runs={runsOf.get(s.id)} showVersion={false} />
+                      {/* The promotion's date and note lost their own columns to the Figma
+                          layout; the badge's ⓘ opens them instead. */}
+                      <TableCell className="px-3 py-2.5">
+                        <StageCell strategy={s} runs={runsOf.get(s.id)} promotion={promotion} />
                       </TableCell>
                       <TableCell className="px-3 py-2.5">
-                        <span className="flex items-center gap-2">
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <button
-                                type="button"
-                                onClick={() => setRunning(s)}
-                                aria-label={`Run ${s.name}`}
-                                className="inline-flex h-8 w-[120px] shrink-0 items-center justify-center gap-1 rounded-[32px] bg-[linear-gradient(165deg,#cff8ea_0%,#67e1c1_100%)] px-3 text-xs text-black transition-opacity hover:opacity-90"
-                              >
-                                <SkipNext weight="Outline" className="size-3.5" />
-                                Run {launchMode(s)}
-                              </button>
-                            </TooltipTrigger>
-                            <TooltipContent>Launch at its current stage ({stage.label.toLowerCase()})</TooltipContent>
-                          </Tooltip>
-                          {/* Promotion is a review decision, not a per-row habit — it sits behind
-                              the menu so the row's one inline control is the launch. */}
-                          <DropdownMenu>
-                            <DropdownMenuTrigger
-                              aria-label={`Actions for ${s.name}`}
-                              className="inline-flex size-8 shrink-0 items-center justify-center rounded-[20px] text-white transition-colors hover:bg-secondary"
-                            >
-                              <MenuDots weight="Bold" className="size-5 rotate-90" />
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent>
-                              {next && (
-                                <DropdownMenuItem
-                                  disabled={!!blocked}
-                                  onSelect={() => setPromoting(s)}
-                                  // Radix drops pointer events on a disabled item, so the reason
-                                  // has to ride on the row itself rather than in a tooltip.
-                                  title={blocked}
-                                >
-                                  Promote to {next}
-                                </DropdownMenuItem>
-                              )}
-                              {demotable && (
-                                <>
-                                  {next && <DropdownMenuSeparator />}
-                                  <DropdownMenuItem className="text-destructive" onSelect={() => setDemoting(s)}>
-                                    Demote {demotable}
-                                  </DropdownMenuItem>
-                                </>
-                              )}
-                              {!next && !demotable && (
-                                <DropdownMenuItem disabled>No promotion available</DropdownMenuItem>
-                              )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </span>
+                        <RowActions
+                          strategy={s}
+                          runs={runsOf.get(s.id) ?? []}
+                          blocked={blocked}
+                          onRun={() => setRunning(s)}
+                          onPromote={() => setPromoting(s)}
+                          onDemote={() => setDemoting(s)}
+                        />
                       </TableCell>
                     </TableRow>
                   );
@@ -568,7 +492,7 @@ export default function Page() {
       <Dialog open={!!demoting} onOpenChange={(open) => { if (!open) { setDemoting(null); demote.reset(); } }}>
         <DialogContent className="max-w-[440px]">
           <DialogHeader>
-            <DialogTitle>Remove promotion</DialogTitle>
+            <DialogTitle>Demote to {demoting ? DEMOTE_TARGET[demotableStage(demoting)!] : ""}</DialogTitle>
             <DialogDescription>
               Deletes the {demoting ? demotableStage(demoting) : ""} promotion for &ldquo;
               {demoting?.name}&rdquo;. It stops being launchable at that stage until an admin
@@ -594,7 +518,7 @@ export default function Page() {
                 );
               }}
             >
-              {demote.isPending ? "Removing…" : "Remove promotion"}
+              {demote.isPending ? "Demoting…" : "Demote"}
             </Button>
           </DialogFooter>
         </DialogContent>

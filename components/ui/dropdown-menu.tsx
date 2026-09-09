@@ -5,8 +5,9 @@ import { DropdownMenu as DropdownMenuPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 
-// Only the pieces the row kebab needs. Styling mirrors SelectContent/SelectItem so a menu and a
-// dropdown opened from the same table read as the same surface.
+// Only the pieces the row kebab needs. Styled to the Figma "More" menu (15277:37042): a 12px-
+// radius panel with 4px of vertical padding and full-bleed 40px rows, so an item's hover fill
+// runs edge to edge rather than sitting in an inset pill the way SelectItem does.
 function DropdownMenu({
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
@@ -34,7 +35,7 @@ function DropdownMenuContent({
         align={align}
         sideOffset={sideOffset}
         className={cn(
-          "z-50 min-w-[8rem] origin-(--radix-dropdown-menu-content-transform-origin) overflow-hidden rounded-[12px] border bg-background p-1.5 text-foreground shadow-md data-[side=bottom]:slide-in-from-top-2 data-[side=top]:slide-in-from-bottom-2 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
+          "z-50 min-w-[8rem] origin-(--radix-dropdown-menu-content-transform-origin) overflow-hidden rounded-[12px] border bg-background py-1 text-foreground shadow-md data-[side=bottom]:slide-in-from-top-2 data-[side=top]:slide-in-from-bottom-2 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
           className
         )}
         {...props}
@@ -51,7 +52,7 @@ function DropdownMenuItem({
     <DropdownMenuPrimitive.Item
       data-slot="dropdown-menu-item"
       className={cn(
-        "relative flex w-full cursor-pointer items-center gap-2 rounded-[6px] px-1.5 py-1 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "relative flex h-10 w-full cursor-pointer items-center gap-2 px-3 text-xs whitespace-nowrap outline-hidden select-none focus:bg-secondary data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-5",
         className
       )}
       {...props}
@@ -66,7 +67,7 @@ function DropdownMenuSeparator({
   return (
     <DropdownMenuPrimitive.Separator
       data-slot="dropdown-menu-separator"
-      className={cn("-mx-1.5 my-1 h-px bg-border", className)}
+      className={cn("my-1 h-px bg-border", className)}
       {...props}
     />
   )

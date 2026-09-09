@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/table";
 import { useTradeHistory } from "@/hooks/api/use-paper-runs";
 import { useRunCostCurve, useRunCurrency, useRunEquity, useRunSummary } from "@/hooks/api/use-runs";
+import type { SampleScope } from "@/types/domain";
 import {
   mergeLiveSummary,
   mergeLiveTrades,
@@ -319,22 +320,24 @@ export function OverviewView({
   runId,
   summaryEnabled = true,
   isLive = false,
+  sample,
 }: {
   runId?: string;
   summaryEnabled?: boolean;
   isLive?: boolean;
+  sample?: SampleScope;
 }) {
   const [range, setRange] = useState<Range>("All");
   // Every persisted artifact 409s for the whole life of a running run — the parquet sidecars are
   // mid-write, so the `/live/stream` frame merged below is the only source there is until it
   // stops. Asking anyway is three requests per view that can only fail.
   const artifactId = isLive ? undefined : runId;
-  const { data: restTrades = [], isLoading, isError, error } = useTradeHistory(artifactId);
+  const { data: restTrades = [], isLoading, isError, error } = useTradeHistory(artifactId, sample);
 
-  const { data: restSummary, isLoading: summaryLoading, isError: summaryError } = useRunSummary(summaryEnabled ? runId : undefined);
-  const { data: restEquity = [], isLoading: equityLoading, isError: equityError } = useRunEquity(artifactId);
+  const { data: restSummary, isLoading: summaryLoading, isError: summaryError } = useRunSummary(summaryEnabled ? runId : undefined, sample);
+  const { data: restEquity = [], isLoading: equityLoading, isError: equityError } = useRunEquity(artifactId, sample);
   // Fees are optional: the spec notes many runs answer `[]` here even when equity has points.
-  const { data: cost = [] } = useRunCostCurve(artifactId);
+  const { data: cost = [] } = useRunCostCurve(artifactId, sample);
 
   // While the run is streaming, the live frame wins over the persisted artifacts — which 500 for
   // the whole life of a running run, so for those the frame is the only source there is.

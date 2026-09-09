@@ -23,6 +23,7 @@ import {
   type LiveSnapshot,
 } from "@/hooks/api/use-run-live-snapshot";
 import { useRunEquity } from "@/hooks/api/use-runs";
+import type { SampleScope } from "@/types/domain";
 import { equityDayLabel, toDrawdown, toRollingSharpe, type DrawdownPoint } from "@/lib/transform/results";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -58,11 +59,9 @@ interface RatioItem {
   live?: "sharpe" | "maxDrawdown";
 }
 
-// Labels are the design's own spelling (Figma 14180:15399), typos included — don't "fix" them
-// here or the card stops matching the mock. The `live` marker, not the label, drives the overlay.
 const RATIO_ROW_1: RatioItem[] = [
-  { label: "Sharp Ratio", value: "3.12", tone: "green", live: "sharpe" },
-  { label: "Sortio Ratio", value: "4.56", tone: "green" },
+  { label: "Sharpe Ratio", value: "3.12", tone: "green", live: "sharpe" },
+  { label: "Sortino Ratio", value: "4.56", tone: "green" },
   { label: "Calmar Ratio", value: "8.34", tone: "green" },
   { label: "Omega Ratio", value: "8.34", tone: "green" },
 ];
@@ -371,7 +370,15 @@ function WindowSelect({ value, onChange }: { value: string; onChange: (value: st
   );
 }
 
-export function RiskView({ runId, isLive }: { runId?: string; isLive?: boolean }) {
+export function RiskView({
+  runId,
+  isLive,
+  sample,
+}: {
+  runId?: string;
+  isLive?: boolean;
+  sample?: SampleScope;
+}) {
   const [drawdownUnit, setDrawdownUnit] = useState<DrawdownUnit>("%");
   const [rollingWindow, setRollingWindow] = useState<string>("30D");
   const [timeWindow, setTimeWindow] = useState<TimeWindow>("All");
@@ -380,6 +387,7 @@ export function RiskView({ runId, isLive }: { runId?: string; isLive?: boolean }
   // live frame's own `equity` while the run is running — `/equity-curve` 500s for its whole life.
   const { data: restEquity = [], isLoading: equityLoading, isError: equityError } = useRunEquity(
     isLive ? undefined : runId,
+    sample,
   );
   const { snapshot, sharpeSamples: liveSharpe, state: liveState } = useLiveSnapshot();
   const equity = useMemo(() => preferLiveEquity(restEquity, snapshot), [restEquity, snapshot]);

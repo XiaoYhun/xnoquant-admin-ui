@@ -289,7 +289,7 @@ export function MftResultsView({
           <CostEdgeMft strategyId={strategyId} stage={stage} period={effectivePeriod} runId={runId} />
         )}
         {view === "Regime" && (
-          <RegimeMft strategyId={strategyId} stage={stage} period={effectivePeriod} />
+          <RegimeMft strategyId={strategyId} stage={stage} period={effectivePeriod} runId={runId} />
         )}
       </div>
     </div>

@@ -20,7 +20,8 @@ import { RunHistoryPicker } from "./run-history-picker";
 import { RunMetaStrip } from "./run-meta-strip";
 import { LiveSnapshotProvider } from "@/hooks/api/use-run-live-snapshot";
 import { isPendingBacktest, symbolNamesOf, useRun } from "@/hooks/api/use-runs";
-import type { Run } from "@/types/domain";
+import { useAuth } from "@/hooks/use-auth";
+import type { Run, SampleScope } from "@/types/domain";
 
 // The Figma tab bar (14876:146506) shows five; Latency is kept on the end as a sixth — its
 // per-stage AVG/LAST/MAX cards have no home in the Execution design, which covers latency only as
@@ -35,13 +36,18 @@ const TAB_TRIGGER =
 // Figma 15235:33194 — the "Period:" row, HFT only. Same pill as the view tabs one size down:
 // 12px text, 12px gaps, active = Neutral/Black 800.
 //
-// NOT WIRED TO DATA, deliberately. In-sample / out-of-sample exists nowhere in the HFT API — no
-// query param on /summary, /equity-curve, /cost-curve or /trades, and no split marker on Run or
-// RunManifest (only `backtest_range` start→end). So the selection is held here and read by
-// nothing; All/IS/OS all describe the whole run until the backend can split it. Inventing a
-// client-side split ratio would put a number on screen that no backtest produced.
+// Wired to `?sample=` on the eight run-result endpoints (SampleScope in types/domain.ts).
+// Backtest runs only — see the gate below.
 const PERIODS = ["All", "IS", "OS"] as const;
 type Period = (typeof PERIODS)[number];
+
+// "All" has to send `all` explicitly — the API's own default is `in_sample`, so omitting the
+// param would quietly narrow the one selection that asks for the whole range.
+const SAMPLE_OF: Record<Period, SampleScope> = {
+  All: "all",
+  IS: "in_sample",
+  OS: "out_of_sample",
+};
 
 const PERIOD_TAB_LIST = "gap-3 rounded-none bg-transparent p-0";
 const PERIOD_TAB_TRIGGER =
@@ -155,6 +161,23 @@ function HftResultsTab({
     );
   }, [selectedRun, qc]);
 
+  // In-sample / out-of-sample is a backtest-only idea — the engine computes `oos_start_date` at
+  // launch and leaves it null for paper/live — so the row belongs to backtest runs and is not
+  // rendered at all for the others. Within a backtest, IS/OS still only describe different data
+  // when the split is actually readable: a run launched before the field existed carries no split,
+  // and a non-admin caller is forced to `in_sample` server-side whatever the client sends. Those
+  // two keep the row but disable IS/OS and pin the selection to All, so it never promises a split
+  // the response won't carry.
+  const { isAdmin } = useAuth();
+  const splitAvailable = isBacktest && isAdmin && selectedRun?.manifest?.oos_start_date != null;
+  const effectivePeriod: Period = splitAvailable ? period : "All";
+  const sample = splitAvailable ? SAMPLE_OF[effectivePeriod] : undefined;
+  const periodHint = splitAvailable
+    ? undefined
+    : isAdmin
+      ? "This run has no in-sample / out-of-sample split."
+      : "Out-of-sample results are admin-only.";
+
   const mftRun = isMftTypeRun(selectedRun) && !isLive;
 
   return (
@@ -187,18 +210,25 @@ function HftResultsTab({
         <RunHistoryPicker strategyId={strategyId} selectedRunId={selectedRun?.id} onSelect={setSelectedRun} />
       </div>
 
-      <div className="flex items-center gap-3">
-        <span className="text-xs leading-[18px] font-medium text-white">Period:</span>
-        <Tabs value={period} onValueChange={(v) => v && setPeriod(v as Period)}>
-          <TabsList className={PERIOD_TAB_LIST}>
-            {PERIODS.map((p) => (
-              <TabsTrigger key={p} value={p} className={PERIOD_TAB_TRIGGER}>
-                {p}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
-      </div>
+      {isBacktest && (
+        <div className="flex items-center gap-3" title={periodHint}>
+          <span className="text-xs leading-[18px] font-medium text-white">Period:</span>
+          <Tabs value={effectivePeriod} onValueChange={(v) => v && setPeriod(v as Period)}>
+            <TabsList className={PERIOD_TAB_LIST}>
+              {PERIODS.map((p) => (
+                <TabsTrigger
+                  key={p}
+                  value={p}
+                  disabled={!splitAvailable && p !== "All"}
+                  className={PERIOD_TAB_TRIGGER}
+                >
+                  {p}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+        </div>
+      )}
 
       {/* What the views below are describing: symbols, engine, account, period. Reads the
           selected run's manifest, so it costs nothing beyond what the picker already fetched. */}
@@ -219,11 +249,11 @@ function HftResultsTab({
               Keying here also resets each view's local toggles (range, period) for the new run.
               Kept off the provider so the live subscription isn't torn down on a view switch. */}
           <div key={`${selectedRun?.id ?? strategyId ?? "no-run"}:${selectedRun?.status ?? ""}`} className="min-w-0">
-            {view === "Overview" && <OverviewView runId={selectedRun?.id} summaryEnabled={isBacktest && !isLive} isLive={isLive} />}
-            {view === "Performance" && <PerformanceView runId={selectedRun?.id} summaryEnabled={isBacktest && !isLive} isLive={isLive} />}
-            {view === "Risk" && <RiskView runId={selectedRun?.id} isLive={isLive} />}
+            {view === "Overview" && <OverviewView runId={selectedRun?.id} summaryEnabled={isBacktest && !isLive} isLive={isLive} sample={sample} />}
+            {view === "Performance" && <PerformanceView runId={selectedRun?.id} summaryEnabled={isBacktest && !isLive} isLive={isLive} sample={sample} />}
+            {view === "Risk" && <RiskView runId={selectedRun?.id} isLive={isLive} sample={sample} />}
             {view === "Execution" && <ExecutionView runId={selectedRun?.id} isLive={isLive} />}
-            {view === "Cost & Capacity" && <CostCapacityView runId={selectedRun?.id} summaryEnabled={isBacktest && !isLive} isLive={isLive} />}
+            {view === "Cost & Capacity" && <CostCapacityView runId={selectedRun?.id} summaryEnabled={isBacktest && !isLive} isLive={isLive} sample={sample} />}
             {view === "Latency" && <LatencyView isLive={isLive} />}
           </div>
         </LiveSnapshotProvider>

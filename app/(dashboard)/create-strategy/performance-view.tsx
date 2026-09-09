@@ -16,6 +16,7 @@ import type { EChartsOption } from "echarts";
 import { BaseChart } from "@/components/charts/base-chart";
 import { chartStatus, type ChartStateProps } from "@/components/charts/chart-state";
 import { useRunCurrency, useRunEquity, useRunSummary } from "@/hooks/api/use-runs";
+import type { SampleScope } from "@/types/domain";
 import { mergeLiveSummary, preferLiveEquity, useLiveSnapshot } from "@/hooks/api/use-run-live-snapshot";
 import {
   annualizedReturn,
@@ -516,10 +517,12 @@ export function PerformanceView({
   runId,
   summaryEnabled = true,
   isLive = false,
+  sample,
 }: {
   runId?: string;
   summaryEnabled?: boolean;
   isLive?: boolean;
+  sample?: SampleScope;
 }) {
   // Every persisted artifact 409s for the whole life of a running run — the parquet sidecars are
   // mid-write, so the `/live/stream` frame merged below is the only source there is until it
@@ -529,12 +532,12 @@ export function PerformanceView({
     data: restSummary,
     isLoading: summaryLoading,
     isError: summaryError,
-  } = useRunSummary(summaryEnabled ? runId : undefined);
+  } = useRunSummary(summaryEnabled ? runId : undefined, sample);
   const {
     data: restEquity = [],
     isLoading: equityLoading,
     isError: equityError,
-  } = useRunEquity(artifactId);
+  } = useRunEquity(artifactId, sample);
 
   // While the run is streaming, the live frame wins over the persisted artifacts — which error out
   // for the whole life of a running run, leaving the frame as the only source.

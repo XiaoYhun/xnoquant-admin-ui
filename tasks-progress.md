@@ -4,7 +4,11 @@ Mirrors `user-tasks.md`. Status: ✅ done · 🔄 in progress · ⬜ todo
 NOTE: re-read `user-tasks.md` at the START of every task AND before stopping (user edits it live, adds tasks mid-work). Remove items the user removes.
 
 ## Tasks
-_(none queued in `user-tasks.md`)_
+All four items currently in `user-tasks.md` are DONE — see the sections below:
+- ✅ Big task: global HFT/MFT switch + HFT Create Strategy 3-tab redesign (Samples / Features / Results) → "Global HFT/MFT lab switch (2026-07-15)"
+- ✅ Features tab UI match vs Figma 14567-26137 → "Follow-ups (2026-07-15)"
+- ✅ Features: focus-aware primitive Add → "Follow-ups (2026-07-15)"
+- ✅ Symbol select → search input with dropdown → "Follow-ups (2026-07-15)"
 
 ## API-integration completion pass (2026-07-14)
 Closed the two functional gaps that were fixable without external input; both verified in Chrome against the real dev API (USE_MOCK=false), tsc + eslint clean, no console errors.
@@ -149,3 +153,19 @@ Two tasks handed over as screenshots (not in `user-tasks.md`).
 - **NOT applied to Strategy List** — its columns are Stage/Version/Promoted; it carries no Sharpe/Return/Max DD, so the filters would have nothing to read there.
 - Live trade renders the controls but the dev API currently has no live runs, so its filtering is covered by the shared unit tests rather than observed on that page.
 - ✅ **Backtesting list polls only while a pending run is loaded** (`hooks/api/use-backtest-runs.ts`) — `refetchInterval` returns 5s only when the query's own rows contain `status === "pending"`, else `false`. The gate reads the whole loaded list for that query key (server-side `q`/`status` narrowing included), not just the visible page — paging is client-side over the same data. **Verified in Chrome:** no pending row → 0 requests in 10s; one row forced pending → 4 requests at ~6s spacing; pending removed → exactly ONE more request, then silence for 18s. (`document.visibilityState` had to be spoofed for the check: React Query pauses interval refetches on a hidden tab, which is the behaviour we want in production.)
+
+## Pagination: ellipsis window + jump-to-page popup (2026-09-09) — tsc + eslint clean, 206/206 vitest, browser-verified
+Handed over as a screenshot (not in `user-tasks.md`): a 17-page list was rendering all 17 numbers.
+- ✅ **Shared `components/table-pagination.tsx`** — `pageItems(current, count)` (moved out of `strategy-list/page.tsx`, unchanged: seven slots, `1 2 3 … 8 9 10` at the ends, `1 … 4 5 6 … 10` in the middle), `PageJump` (the `…` is now a button opening a Popover with a number input + Go; Enter submits, Go is disabled until the value is an integer in `1–pageCount`, the input is held as a string and cleared on close), and `TablePagination` — the Previous / numbers / Next block that was duplicated verbatim in four pages.
+- ✅ **Four run lists collapsed to one line each** — Backtesting (`strategies/page.tsx`), Paper Trading, Live trade, Alpha pool each dropped their ~35-line `<Pagination>` block for `<TablePagination currentPage pageCount onPageChange={setPage} />`. They all listed every page before, which is what the screenshot showed.
+- ✅ **Strategy List** keeps its own bespoke markup (white active pill, `justify-between`) and now imports the shared `pageItems`; its inert `<span>…</span>` became `<PageJump>`.
+- **Verified in Chrome** against the real dev API: Backtesting (17 pages) renders `Previous 1 2 3 … 15 16 17 Next`; clicking `…` → "Go to page (1–17)" popover → typed 9 + Enter → page 9 loaded, pager became `1 … 8 9 10 … 17`, rows changed. Strategy List (8 pages) → `…` → "Go to page (1–8)" (popover flips above the pager near the viewport bottom) → typed 5 + Go button → page 5, pager `1 … 4 5 6 … 8`. No console errors.
+- NOTE (pre-existing, untouched): `PaginationEllipsis` in `components/ui/pagination.tsx` is shadcn boilerplate and is not used by any page — left in place.
+
+## HFT/MFT filter on every runs list (2026-09-09) — tsc + eslint clean, 206/206 vitest, browser-verified
+- ✅ **Shared `components/strategy-type-filter.tsx`** — `StrategyTypeFilter` is a Select with **All types / HFT / MFT** (`StrategyTypeFilterValue`), styled like the neighbouring symbol/status pills. The all-option is labelled "All types" rather than bare "All" to read with "All symbols" / "All status" beside it. No new data was needed: rows already carry `PaperRunRow.strategyType`, which is what the `StrategyTypeBadge` in each table renders.
+- ✅ **Wired into all four run lists** — Backtesting (`strategies/page.tsx`), Paper Trading, Live trade, Alpha pool. Client-side like the symbol and metric filters; `GET /api/runs` has no engine filter. Placed before `MetricRangeFilters` in each filter row; changing it resets to page 1.
+- ✅ **Alpha pool run-less members** — an explicit HFT/MFT pick is a positive claim about the engine, so a member promoted without a source run drops out of it (the metric-bounds rule), unlike the market tab which keeps such members visible everywhere.
+- **Verified in Chrome** against the real dev API: Backtesting All = 17 pages of mixed rows → MFT = 11 pages, every row MFT-badged → HFT = 7 pages, every row HFT-badged. Paper Trading MFT → "No paper strategies found." (the dev API's paper runs are all HFT — correct empty state). Alpha pool's single run-less member ("Diep Test") disappears on HFT. No console errors.
+- Live trade renders the control but the dev API still has no live runs, so its predicate (identical one-liner to the other three) is code-verified rather than observed on that page — same gap noted for the metric range filters.
+- NOTE: this is independent of the sidebar's global HFT/MFT lab toggle, which scopes Create Strategy and Strategy List only; the run lists have never read `useMode()`. If the two should agree, that's a separate decision.

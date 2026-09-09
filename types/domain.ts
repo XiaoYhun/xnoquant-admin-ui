@@ -33,8 +33,24 @@ export type Portfolio = {
 export type Run = HftComponents["schemas"]["Run"];
 export type RunPage = HftComponents["schemas"]["RunPage"];
 export type RunSummary = HftComponents["schemas"]["RunSummary"];
+export type VolRegimeSummary = HftComponents["schemas"]["VolRegimeSummary"];
+export type VolRegimeBucket = HftComponents["schemas"]["VolRegimeBucket"];
 export type RunStatus = HftComponents["schemas"]["RunStatus"];
 export type RunMode = HftComponents["schemas"]["RunMode"];
+
+/**
+ * `?sample=` on the eight run-result endpoints — which slice of a split backtest to compute over.
+ * Hand-written because the HFT spec `$ref`s `SampleScope` from all eight parameters but never
+ * defines the schema, so `gen:types` emits it as an empty `Record<string, never>` (see
+ * types/api/hft.ts). The values mirror the backend enum's `rename_all = "snake_case"` wire form.
+ *
+ * The API default is `in_sample`, NOT the full range — omitting the param on a split run silently
+ * narrows the result, so an "All" selection has to send `all` explicitly. Runs with no split
+ * (`RunManifest.oos_start_date === null` — paper/live, and backtests launched before the split
+ * existed) ignore it and always compute over the full series, and non-admin callers are forced to
+ * `in_sample` server-side regardless of what the client sends.
+ */
+export type SampleScope = "all" | "in_sample" | "out_of_sample";
 export type Strategy = HftComponents["schemas"]["Strategy"];
 export type StrategyType = HftComponents["schemas"]["StrategyType"];
 export type Instrument = HftComponents["schemas"]["Symbol"];

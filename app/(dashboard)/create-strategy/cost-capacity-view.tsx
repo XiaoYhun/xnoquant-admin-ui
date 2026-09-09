@@ -18,6 +18,7 @@ import type { EChartsOption } from "echarts";
 import { BaseChart } from "@/components/charts/base-chart";
 import { chartStatus } from "@/components/charts/chart-state";
 import { useRunCostCurve, useRunCurrency, useRunSummary, useRunTurnover } from "@/hooks/api/use-runs";
+import type { SampleScope } from "@/types/domain";
 import { mergeLiveSummary, useLiveSnapshot } from "@/hooks/api/use-run-live-snapshot";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { lastCumulative, toCostSeries } from "@/lib/cost-curve";
@@ -113,10 +114,12 @@ export function CostCapacityView({
   runId,
   summaryEnabled = true,
   isLive = false,
+  sample,
 }: {
   runId?: string;
   summaryEnabled?: boolean;
   isLive?: boolean;
+  sample?: SampleScope;
 }) {
   // Every persisted artifact 409s for the whole life of a running run — the parquet sidecars are
   // mid-write, so the `/live/stream` frame merged below is the only source there is until it
@@ -125,7 +128,7 @@ export function CostCapacityView({
   const currency = useRunCurrency(runId);
   const money = useMemo(() => moneyIn(currency), [currency]);
   const axisMoney = useMemo(() => axisMoneyIn(currency), [currency]);
-  const { data: restSummary } = useRunSummary(summaryEnabled ? runId : undefined);
+  const { data: restSummary } = useRunSummary(summaryEnabled ? runId : undefined, sample);
   // While the run is streaming, the live frame wins over the persisted `/summary` snapshot.
   const { snapshot } = useLiveSnapshot();
   const summary = useMemo(() => mergeLiveSummary(restSummary, snapshot), [restSummary, snapshot]);
@@ -133,12 +136,12 @@ export function CostCapacityView({
     data: costCurve = [],
     isLoading: costLoading,
     isError: costError,
-  } = useRunCostCurve(artifactId);
+  } = useRunCostCurve(artifactId, sample);
   const {
     data: turnover = [],
     isLoading: turnoverLoading,
     isError: turnoverError,
-  } = useRunTurnover(artifactId);
+  } = useRunTurnover(artifactId, sample);
   const [period, setPeriod] = useState<string>("Daily");
   const [capacityMetric, setCapacityMetric] = useState<string>("Sharpe");
 

@@ -3,7 +3,7 @@ import { apiGet, apiPost, retryUnlessForbidden } from "@/lib/api-client";
 import { HFT_API_URL, USE_MOCK } from "@/lib/constant";
 import { normalizeCostCurve, type CostPoint } from "@/lib/cost-curve";
 import { normalizeTurnover, type TurnoverPoint } from "@/lib/turnover-curve";
-import type { EquityPoint, Run, RunPage, RunSummary } from "@/types/domain";
+import type { EquityPoint, Run, RunPage, RunSummary, SampleScope, VolRegimeSummary } from "@/types/domain";
 import { settlementCurrencyOf } from "@/lib/transform/runs";
 import type { components } from "@/types/api/hft";
 
@@ -52,12 +52,20 @@ export async function fetchRuns(params: RunsQuery = {}): Promise<Run[]> {
   return page.runs.filter((run) => !seen.has(run.id) && (seen.add(run.id), true));
 }
 
-export function fetchRunSummary(id: string): Promise<RunSummary> {
-  return apiGet<RunSummary>(`${HFT_API_URL}/api/runs/${id}/summary`);
+// `?sample=` — which slice of a split backtest the result endpoints compute over (see
+// SampleScope in types/domain.ts). Left off entirely when undefined, which lets the API apply its
+// own default of `in_sample`; callers that expose the Period pills always send an explicit value,
+// including `all`.
+function sampleQs(sample: SampleScope | undefined): string {
+  return sample ? `?sample=${sample}` : "";
 }
 
-export function fetchRunEquity(id: string): Promise<EquityPoint[]> {
-  return apiGet<EquityPoint[]>(`${HFT_API_URL}/api/runs/${id}/equity-curve`);
+export function fetchRunSummary(id: string, sample?: SampleScope): Promise<RunSummary> {
+  return apiGet<RunSummary>(`${HFT_API_URL}/api/runs/${id}/summary${sampleQs(sample)}`);
+}
+
+export function fetchRunEquity(id: string, sample?: SampleScope): Promise<EquityPoint[]> {
+  return apiGet<EquityPoint[]>(`${HFT_API_URL}/api/runs/${id}/equity-curve${sampleQs(sample)}`);
 }
 
 // All runs, unfiltered — the Alpha pool joins each promotion to the run named by its
@@ -101,10 +109,10 @@ export function strategiesByAccount(runs: Run[]): Map<string, string[]> {
 // Exposed for future row-level/lazy loading. The current live/paper tables consume
 // fully-composed rows from useLiveRuns/usePaperRuns instead (their UI contract is frozen —
 // see hooks/api/use-live-runs.ts), so nothing calls these yet.
-export function useRunSummary(id: string | undefined) {
+export function useRunSummary(id: string | undefined, sample?: SampleScope) {
   return useQuery({
-    queryKey: ["run-summary", id],
-    queryFn: () => fetchRunSummary(id as string),
+    queryKey: ["run-summary", id, sample],
+    queryFn: () => fetchRunSummary(id as string, sample),
     enabled: !!id,
     // The dev summary/equity endpoints 500 intermittently; keep retries (they recover) but with a
     // short fixed backoff so the detail panel's "Loading results…" settles in ~1s rather than the
@@ -114,10 +122,10 @@ export function useRunSummary(id: string | undefined) {
   });
 }
 
-export function useRunEquity(id: string | undefined) {
+export function useRunEquity(id: string | undefined, sample?: SampleScope) {
   return useQuery({
-    queryKey: ["run-equity", id],
-    queryFn: () => fetchRunEquity(id as string),
+    queryKey: ["run-equity", id, sample],
+    queryFn: () => fetchRunEquity(id as string, sample),
     enabled: !!id,
     retry: retryUnlessForbidden,
     retryDelay: 400,
@@ -277,15 +285,15 @@ export function useLaunchRun() {
 // with a zero-byte parquet fails both with an identical error). Response shape is normalized
 // defensively in `lib/turnover-curve.ts` because the contract isn't in OpenAPI.
 
-export async function fetchRunTurnover(id: string): Promise<TurnoverPoint[]> {
-  const raw = await apiGet<unknown>(`${HFT_API_URL}/api/runs/${id}/turnover-curve`);
+export async function fetchRunTurnover(id: string, sample?: SampleScope): Promise<TurnoverPoint[]> {
+  const raw = await apiGet<unknown>(`${HFT_API_URL}/api/runs/${id}/turnover-curve${sampleQs(sample)}`);
   return normalizeTurnover(raw);
 }
 
-export function useRunTurnover(id: string | undefined) {
+export function useRunTurnover(id: string | undefined, sample?: SampleScope) {
   return useQuery({
-    queryKey: ["run-turnover", id],
-    queryFn: () => fetchRunTurnover(id as string),
+    queryKey: ["run-turnover", id, sample],
+    queryFn: () => fetchRunTurnover(id as string, sample),
     enabled: !!id,
     retry: retryUnlessForbidden,
     retryDelay: 400,
@@ -294,15 +302,31 @@ export function useRunTurnover(id: string | undefined) {
 
 // `GET /api/runs/{id}/cost-curve` — live OpenAPI `CostPoint { ts, fee, cumulative }`. Same parquet
 // source as equity/turnover; many runs currently answer `[]` even when equity has points.
-export async function fetchRunCostCurve(id: string): Promise<CostPoint[]> {
-  const raw = await apiGet<unknown>(`${HFT_API_URL}/api/runs/${id}/cost-curve`);
+export async function fetchRunCostCurve(id: string, sample?: SampleScope): Promise<CostPoint[]> {
+  const raw = await apiGet<unknown>(`${HFT_API_URL}/api/runs/${id}/cost-curve${sampleQs(sample)}`);
   return normalizeCostCurve(raw);
 }
 
-export function useRunCostCurve(id: string | undefined) {
+export function useRunCostCurve(id: string | undefined, sample?: SampleScope) {
   return useQuery({
-    queryKey: ["run-cost-curve", id],
-    queryFn: () => fetchRunCostCurve(id as string),
+    queryKey: ["run-cost-curve", id, sample],
+    queryFn: () => fetchRunCostCurve(id as string, sample),
+    enabled: !!id,
+    retry: retryUnlessForbidden,
+    retryDelay: 400,
+  });
+}
+
+// `GET /api/runs/{id}/volatility-regime` — ATR%-bucketed Sharpe for bar-mode single-symbol runs.
+// 200 body is `null` when the feature does not apply (tick-mode, multi-symbol, live, no trades).
+export function fetchRunVolatilityRegime(id: string, sample?: SampleScope): Promise<VolRegimeSummary | null> {
+  return apiGet<VolRegimeSummary | null>(`${HFT_API_URL}/api/runs/${id}/volatility-regime${sampleQs(sample)}`);
+}
+
+export function useRunVolatilityRegime(id: string | undefined, sample?: SampleScope) {
+  return useQuery({
+    queryKey: ["run-volatility-regime", id, sample],
+    queryFn: () => fetchRunVolatilityRegime(id as string, sample),
     enabled: !!id,
     retry: retryUnlessForbidden,
     retryDelay: 400,

@@ -29,7 +29,7 @@ import { useRunSummary, useRun, symbolNamesOf, useStopRun } from "@/hooks/api/us
 import { ApiError, resourceErrorMessage } from "@/lib/api-client";
 import { USE_MOCK } from "@/lib/constant";
 import type { PaperRunRow, TradeHistoryRow } from "@/lib/mock/paper-runs";
-import type { RunSummary } from "@/types/domain";
+import type { RunSummary, SampleScope } from "@/types/domain";
 import { RUN_STATUS_META } from "@/components/run-status-pill";
 import { downloadTradeHistoryCsv } from "@/lib/trade-history-csv";
 import { TradeHistoryExportButton } from "@/components/trade-history-export-button";
@@ -169,12 +169,18 @@ const VIEW_TAB_LIST = "gap-2 rounded-none bg-transparent p-0";
 const VIEW_TAB_TRIGGER =
   "rounded-[40px] px-3 py-2 text-sm text-[#9db2ce] data-[state=active]:bg-[#1d2939] data-[state=active]:text-white data-[state=active]:shadow-none";
 
-// The "Period:" row (Figma 15235:33194), carried over from the Results tab so both presentations
-// of the same six views offer the same controls. NOT WIRED TO DATA there or here — in-sample /
-// out-of-sample exists nowhere in the HFT API, so All/IS/OS all describe the whole run. See the
-// longer note in results-tab.tsx.
+// The "Period:" row (Figma 15235:33194), carried over from the Results tab and wired to
+// `?sample=` the same way — see the longer note in results-tab.tsx. It shows only over a backtest
+// run, which this panel reaches from the Strategy List and from the Alpha pool (whose promotions
+// point at a paper *or* backtest run); over the paper/live runs it usually opens for, it is gone.
 const PERIODS = ["All", "IS", "OS"] as const;
 type Period = (typeof PERIODS)[number];
+
+const SAMPLE_OF: Record<Period, SampleScope> = {
+  All: "all",
+  IS: "in_sample",
+  OS: "out_of_sample",
+};
 
 const PERIOD_TAB_LIST = "gap-3 rounded-none bg-transparent p-0";
 const PERIOD_TAB_TRIGGER =
@@ -190,6 +196,23 @@ function ResultsViews({ runId, isLive }: { runId: string | undefined; isLive: bo
   // The strip reads a Run, which the panel's own PaperRunRow is only a projection of. Keyed
   // ["run", id], so this shares RunDetailBody's query rather than adding a request of its own.
   const { data: runRecord } = useRun(runId);
+  // In-sample / out-of-sample is a backtest-only idea — the engine computes `oos_start_date` at
+  // launch and leaves it null for paper/live — so the row belongs to backtest runs and is not
+  // rendered at all for the others. Within a backtest, IS/OS still only describe different data
+  // when the split is actually readable: a run launched before the field existed carries no split,
+  // and a non-admin caller is forced to `in_sample` server-side whatever the client sends. Those
+  // two keep the row but disable IS/OS and pin the selection to All, so it never promises a split
+  // the response won't carry.
+  const { isAdmin } = useAuth();
+  const isBacktestRun = runRecord?.mode === "backtest";
+  const splitAvailable = isBacktestRun && isAdmin && runRecord?.manifest?.oos_start_date != null;
+  const effectivePeriod: Period = splitAvailable ? period : "All";
+  const sample = splitAvailable ? SAMPLE_OF[effectivePeriod] : undefined;
+  const periodHint = splitAvailable
+    ? undefined
+    : isAdmin
+      ? "This run has no in-sample / out-of-sample split."
+      : "Out-of-sample results are admin-only.";
   return (
     <div className="flex min-w-0 flex-col gap-4">
       <Tabs value={view} onValueChange={(v) => v && setView(v as View)}>
@@ -202,29 +225,36 @@ function ResultsViews({ runId, isLive }: { runId: string | undefined; isLive: bo
         </TabsList>
       </Tabs>
 
-      <div className="flex items-center gap-3">
-        <span className="text-xs leading-[18px] font-medium text-white">Period:</span>
-        <Tabs value={period} onValueChange={(v) => v && setPeriod(v as Period)}>
-          <TabsList className={PERIOD_TAB_LIST}>
-            {PERIODS.map((p) => (
-              <TabsTrigger key={p} value={p} className={PERIOD_TAB_TRIGGER}>
-                {p}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
-      </div>
+      {isBacktestRun && (
+        <div className="flex items-center gap-3" title={periodHint}>
+          <span className="text-xs leading-[18px] font-medium text-white">Period:</span>
+          <Tabs value={effectivePeriod} onValueChange={(v) => v && setPeriod(v as Period)}>
+            <TabsList className={PERIOD_TAB_LIST}>
+              {PERIODS.map((p) => (
+                <TabsTrigger
+                  key={p}
+                  value={p}
+                  disabled={!splitAvailable && p !== "All"}
+                  className={PERIOD_TAB_TRIGGER}
+                >
+                  {p}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+        </div>
+      )}
 
       {/* What the views below are describing: symbols, engine, account, period. */}
       <RunMetaStrip run={runRecord} />
 
       {/* Same remount-per-run guard as the Results tab — see results-tab.tsx. */}
       <div key={runId ?? "no-run"} className="min-w-0">
-        {view === "Overview" && <OverviewView runId={runId} summaryEnabled={summaryEnabled} isLive={isLive} />}
-        {view === "Performance" && <PerformanceView runId={runId} summaryEnabled={summaryEnabled} isLive={isLive} />}
-        {view === "Risk" && <RiskView runId={runId} isLive={isLive} />}
+        {view === "Overview" && <OverviewView runId={runId} summaryEnabled={summaryEnabled} isLive={isLive} sample={sample} />}
+        {view === "Performance" && <PerformanceView runId={runId} summaryEnabled={summaryEnabled} isLive={isLive} sample={sample} />}
+        {view === "Risk" && <RiskView runId={runId} isLive={isLive} sample={sample} />}
         {view === "Execution" && <ExecutionView runId={runId} isLive={isLive} />}
-        {view === "Cost & Capacity" && <CostCapacityView runId={runId} summaryEnabled={summaryEnabled} isLive={isLive} />}
+        {view === "Cost & Capacity" && <CostCapacityView runId={runId} summaryEnabled={summaryEnabled} isLive={isLive} sample={sample} />}
         {view === "Latency" && <LatencyView isLive={isLive} />}
       </div>
     </div>

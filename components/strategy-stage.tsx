@@ -1,4 +1,5 @@
 "use client";
+import { InfoCircle } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import type { PromotionStage, Strategy } from "@/types/domain";
 
@@ -93,22 +94,37 @@ export function strategyStage(
   return info(backtested ? "backtested" : "none", "backtest", false);
 }
 
-// `ring` is spelled out rather than derived from `text`: Tailwind only emits classes it can see
-// literally in the source, so a runtime `text-` -> `border-` swap produced a class that never
-// existed and the hollow dot fell back to the default border grey.
-const STAGE_STYLE: Record<StageRung, { dot: string; glow: string; ring: string; text: string }> = {
-  backtest: { dot: "bg-[#9db2ce]", glow: "", ring: "border-[#9db2ce]", text: "text-[#9db2ce]" },
-  paper: {
+// Colour per STAGE, not per rung: "Not simulated" and "Backtested" share the backtest rung but
+// Figma gives them grey and yellow. Everything but grey is a bg-clip-text gradient (the design
+// system's status treatment), which is why `text` holds a whole class string rather than a hex —
+// Tailwind only emits classes it can see literally in the source, so none of this can be built
+// at runtime from a colour value.
+const STAGE_STYLE: Record<StrategyStage, { dot: string; glow: string; text: string }> = {
+  none: { dot: "bg-[#9db2ce]", glow: "", text: "text-[#9db2ce]" },
+  backtested: {
+    dot: "bg-[#f1c617]",
+    glow: "shadow-[0_0_6px_1px_rgba(241,198,23,0.5)]",
+    text: "bg-[linear-gradient(165deg,#fffbd6_0%,#f1c617_100%)] bg-clip-text text-transparent",
+  },
+  "paper-promoted": {
     dot: "bg-[#2d84ff]",
     glow: "shadow-[0_0_6px_1px_rgba(45,132,255,0.5)]",
-    ring: "border-[#7fb2ff]",
-    text: "text-[#7fb2ff]",
+    text: "bg-[linear-gradient(167deg,#cfdbf8_0%,#2d84ff_100%)] bg-clip-text text-transparent",
   },
-  live: {
+  "paper-trading": {
+    dot: "bg-[#2d84ff]",
+    glow: "shadow-[0_0_6px_1px_rgba(45,132,255,0.5)]",
+    text: "bg-[linear-gradient(167deg,#cfdbf8_0%,#2d84ff_100%)] bg-clip-text text-transparent",
+  },
+  "live-promoted": {
     dot: "bg-[#67e1c1]",
     glow: "shadow-[0_0_6px_1px_rgba(103,225,193,0.5)]",
-    ring: "border-[#67e1c1]",
-    text: "text-[#67e1c1]",
+    text: "bg-[linear-gradient(171deg,#cff8ea_0%,#67e1c1_100%)] bg-clip-text text-transparent",
+  },
+  "live-trading": {
+    dot: "bg-[#67e1c1]",
+    glow: "shadow-[0_0_6px_1px_rgba(103,225,193,0.5)]",
+    text: "bg-[linear-gradient(171deg,#cff8ea_0%,#67e1c1_100%)] bg-clip-text text-transparent",
   },
 };
 
@@ -130,32 +146,24 @@ export function StrategyStageBadge({
   className?: string;
   showVersion?: boolean;
 }) {
-  const { rung, label, stale, active } = strategyStage(strategy, runs);
-  const style = STAGE_STYLE[rung];
+  const { stage, rung, label, stale, active } = strategyStage(strategy, runs);
+  const style = STAGE_STYLE[stage];
+  const hint = stale
+    ? "Promoted at an earlier version — editing the code revoked it. An admin must re-promote before this can run."
+    : rung === "backtest"
+      ? undefined
+      : active
+        ? `Trading on ${rung} right now.`
+        : "Cleared for this stage, but not currently trading.";
   return (
-    <span
-      className={cn("flex shrink-0 items-center gap-1.5 text-xs font-medium", className)}
-      title={
-        stale
-          ? "Promoted at an earlier version — editing the code revoked it. An admin must re-promote before this can run."
-          : active
-            ? undefined
-            : label === STAGE_LABEL["paper-promoted"] || label === STAGE_LABEL["live-promoted"]
-              ? "Cleared for this stage, but not currently trading."
-              : undefined
-      }
-    >
-      {/* Filled and pulsing while it trades; a hollow ring once it's only cleared to. */}
-      <span
-        className={cn(
-          "size-2 shrink-0 rounded-full",
-          active
-            ? cn("animate-pulse", style.dot, style.glow)
-            : cn("border-[1.5px] bg-transparent", style.ring),
-        )}
-      />
-      <span className={style.text}>{label}</span>
+    <span className={cn("flex shrink-0 items-center gap-2 text-xs", className)} title={hint}>
+      {/* Pulsing while it trades; the same solid dot, held still, once it's only cleared to. */}
+      <span className={cn("size-2 shrink-0 rounded-full", style.dot, style.glow, active && "animate-pulse")} />
+      <span className={cn("leading-[18px] whitespace-nowrap", style.text)}>{label}</span>
       {stale && <span className="text-[#f1c617]">(stale)</span>}
+      {/* Figma hangs an info circle off the promoted/trading rungs — it's the affordance for the
+          `title` above, which is the only place the "permission vs activity" nuance is written. */}
+      {hint && <InfoCircle weight="Outline" className="size-3 shrink-0 text-[#9db2ce]" />}
       {showVersion && (
         <>
           <span className="text-[#475467]">·</span>
@@ -165,16 +173,6 @@ export function StrategyStageBadge({
     </span>
   );
 }
-
-/**
- * Pill colours for a "promote to <stage>" action, keyed by the rung being ENTERED — amber for
- * paper, green for live — so the button previews where the strategy is going rather than where it
- * is. Shared by the Create Strategy toolbar and the Strategy List row action.
- */
-export const PROMOTE_PILL: Record<PromotionStage, string> = {
-  paper: "border-[#f1c617]/40 bg-[rgba(241,198,23,0.12)] text-[#f1c617]",
-  live: "border-[#67e1c1]/40 bg-[rgba(103,225,193,0.12)] text-[#67e1c1]",
-};
 
 /**
  * Run statuses that count as a paper run having succeeded, for the live rung's evidence check.

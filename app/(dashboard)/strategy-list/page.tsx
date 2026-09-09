@@ -1,9 +1,25 @@
 "use client";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AltArrowDown, AltArrowUp, CloseCircle, MinimalisticMagnifer, SkipNext } from "@solar-icons/react";
+import {
+  AltArrowDown,
+  AltArrowLeft,
+  AltArrowRight,
+  AltArrowUp,
+  CloseCircle,
+  MenuDots,
+  MinimalisticMagnifer,
+  SkipNext,
+} from "@solar-icons/react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useHftStrategies, type HftStrategyType } from "@/hooks/api/use-hft-strategies";
 import { useDemoteStrategy, usePromotions } from "@/hooks/api/use-promotions";
@@ -22,7 +38,7 @@ import { useDebounced } from "@/hooks/use-debounced";
 import { resourceErrorMessage } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
 import { cn, idQueryNeedle, isIdQuery } from "@/lib/utils";
-import { StrategyStageBadge, strategyStage, nextPromotionStage, launchMode, STAGE_ORDER, PROMOTE_PILL, PAPER_RUN_SUCCEEDED } from "@/components/strategy-stage";
+import { StrategyStageBadge, strategyStage, nextPromotionStage, launchMode, STAGE_ORDER, PAPER_RUN_SUCCEEDED } from "@/components/strategy-stage";
 import { PromoteStageDialog } from "../create-strategy/promote-stage-dialog";
 import { SimulateModal, HFT_TYPE_LABEL } from "../create-strategy/simulate-modal";
 import type { PromotionStage, Run, Strategy, StrategyPromotion } from "@/types/domain";
@@ -31,26 +47,30 @@ import type { PromotionStage, Run, Strategy, StrategyPromotion } from "@/types/d
 // stage, plus the two actions an admin needs: move it up a rung, or launch it at the stage it has
 // reached. The per-strategy editor (Create Strategy) shows the same controls but only for whatever
 // tab you happen to be on, which is no way to run a review.
+//
+// Layout follows Figma 15277:35245: a filter row over a paged table whose only inline action is
+// the gradient Run button; promote and demote live behind the row's ⋮ menu.
 const STAGE_FILTERS = [
-  { value: "all", label: "All stages" },
+  { value: "all", label: "All status" },
   { value: "backtest", label: "Backtesting" },
   { value: "paper", label: "Paper running" },
   { value: "live", label: "Live trading" },
 ];
 
-// `sortable` marks the columns whose ordering says something an admin reviews by. Promote note is
-// free text and the action column has no value at all, so both stay inert.
+// 13 rows is what the Figma frame holds between the filter row and the pager, and the table is
+// sized to show a whole page without scrolling.
+const PAGE_SIZE = 13;
+
+// Widths are the Figma column widths as percentages of the 1188px table: three flexible columns
+// at 254.67 and three fixed at 120/120/184. `sortable` marks the columns whose ordering says
+// something an admin reviews by; the action column has no value to sort at all.
 const COLS = [
-  { key: "name", label: "Strategy", w: "17%", align: "left", sortable: true },
-  { key: "owner", label: "Owner", w: "11%", align: "left", sortable: true },
-  { key: "type", label: "Type", w: "7%", align: "left", sortable: true },
-  // Stage and Version read as one fact, so Stage is only as wide as "Backtesting (stale)" needs
-  // and Version is left-aligned against it rather than pushed to the far edge of its own column.
-  { key: "stage", label: "Stage", w: "13%", align: "left", sortable: true },
-  { key: "version", label: "Version", w: "6%", align: "left", sortable: true },
-  { key: "promoted", label: "Promoted", w: "11%", align: "left", sortable: true },
-  { key: "note", label: "Promote note", w: "14%", align: "left", sortable: false },
-  { key: "actions", label: "", w: "27%", align: "right", sortable: false },
+  { key: "name", label: "Strategy", w: "21.5%", sortable: true },
+  { key: "version", label: "Version", w: "10%", sortable: true },
+  { key: "owner", label: "Owner", w: "21.5%", sortable: true },
+  { key: "type", label: "Type", w: "10%", sortable: true },
+  { key: "stage", label: "Stage", w: "21.5%", sortable: true },
+  { key: "actions", label: "Action", w: "15.5%", sortable: false },
 ] as const;
 
 // Each mode has its own list screen; `?run=` opens that run's side panel on arrival (see
@@ -62,15 +82,13 @@ const LIST_PAGE: Record<string, string> = {
   live: "/live-trading/live-trade",
 };
 
+// The filter pills, the search field and the Run button, spelled out once — every one of them is
+// a fixed 32px tall control off the same Figma row.
+const FILTER_PILL =
+  "h-8 w-auto gap-2 rounded-[40px] border-border bg-background py-0 pr-2 pl-3 text-xs font-medium text-white";
+
 type SortKey = (typeof COLS)[number]["key"];
 type Sort = { key: SortKey; dir: "asc" | "desc" };
-
-/** ISO timestamp to a comparable number; anything unparseable sorts as absent. */
-function timeValue(iso: string | null | undefined): number | null {
-  if (!iso) return null;
-  const t = Date.parse(iso);
-  return Number.isNaN(t) ? null : t;
-}
 
 const pad = (n: number) => String(n).padStart(2, "0");
 function formatWhen(iso: string | null | undefined): string {
@@ -101,46 +119,28 @@ function demotableStage(s: Strategy): PromotionStage | null {
 // `completed` alone: a paper run tails a live feed and never completes on its own — every paper
 // run on dev is `stopped` or `running` — so demanding `completed` would disable this forever.
 // `running` is excluded on purpose: stop it, review the result, then promote.
-function PromoteCell({
-  strategy,
-  runs,
-  onPromote,
-}: {
-  strategy: Strategy;
-  runs: Run[];
-  onPromote: () => void;
-}) {
-  const next = nextPromotionStage(strategy);
-  if (!next) return null;
+function blockedReason(strategy: Strategy, next: PromotionStage, runs: Run[]): string | undefined {
+  const atThisVersion = (r: Run) => r.manifest?.strategy?.version === strategy.version;
+  if (next === "paper") {
+    return runs.some((r) => r.mode === "backtest" && r.status === "completed" && atThisVersion(r))
+      ? undefined
+      : `No completed backtest at v${strategy.version}.`;
+  }
+  return runs.some((r) => r.mode === "paper" && PAPER_RUN_SUCCEEDED.has(r.status) && atThisVersion(r))
+    ? undefined
+    : `No finished paper run at v${strategy.version}.`;
+}
 
-  const atThisVersion = (r: (typeof runs)[number]) => r.manifest?.strategy?.version === strategy.version;
-  const reason =
-    next === "paper"
-      ? runs.some((r) => r.mode === "backtest" && r.status === "completed" && atThisVersion(r))
-        ? undefined
-        : `No completed backtest at v${strategy.version}.`
-      : runs.some((r) => r.mode === "paper" && PAPER_RUN_SUCCEEDED.has(r.status) && atThisVersion(r))
-        ? undefined
-        : `No finished paper run at v${strategy.version}.`;
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          onClick={onPromote}
-          disabled={!!reason}
-          className={cn(
-            "inline-flex h-7 shrink-0 cursor-pointer items-center rounded-[32px] border px-2.5 text-xs font-medium transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40",
-            PROMOTE_PILL[next],
-          )}
-        >
-          Promote to {next}
-        </button>
-      </TooltipTrigger>
-      <TooltipContent>{reason ?? `Promote to ${next}`}</TooltipContent>
-    </Tooltip>
-  );
+/**
+ * The page numbers to draw: `1 2 3 … 8 9 10` at the ends, `1 … 4 5 6 … 10` in the middle. Seven
+ * slots either way, so the pager never changes width as you page through it.
+ */
+function pageItems(current: number, count: number): (number | "…")[] {
+  if (count <= 7) return Array.from({ length: count }, (_, i) => i + 1);
+  if (current <= 3 || current >= count - 2) {
+    return [1, 2, 3, "…", count - 2, count - 1, count];
+  }
+  return [1, "…", current - 1, current, current + 1, "…", count];
 }
 
 export default function Page() {
@@ -162,6 +162,8 @@ export default function Page() {
     return m;
   }, [paperPromotions, livePromotions]);
   const owners = useMemo(() => userLabelMap(roster), [roster]);
+  // The owner cell stacks name over email, and `owners` only carries whichever of the two exists.
+  const emailOf = useMemo(() => new Map(roster.map((u) => [u.user_id, u.email?.trim() ?? ""])), [roster]);
 
   const [search, setSearch] = useState("");
   const [stageFilter, setStageFilter] = useState("all");
@@ -170,6 +172,7 @@ export default function Page() {
   // No default sort: the list arrives in the API order, and clicking a header is what departs
   // from it. Sorting by nothing is a state you can be in, not one you have to sort your way out of.
   const [sort, setSort] = useState<Sort | null>(null);
+  const [page, setPage] = useState(1);
   const debouncedSearch = useDebounced(search.trim());
 
   const [promoting, setPromoting] = useState<Strategy | null>(null);
@@ -230,21 +233,9 @@ export default function Page() {
     // uuid would order a column of names by something invisible.
     const ownerLabel = (s: Strategy) => owners.get(s.owner_id) ?? s.owner_id;
     const stageRank = (s: Strategy) => STAGE_ORDER.indexOf(strategyStage(s, runsOf.get(s.id)).stage);
-    const promotedValue = (s: Strategy) => {
-      const rung = strategyStage(s, runsOf.get(s.id)).rung;
-      return timeValue(rung === "live" ? s.live_promoted_at : rung === "paper" ? s.paper_promoted_at : null);
-    };
 
     const dir = sort.dir === "asc" ? 1 : -1;
     return [...filtered].sort((a, b) => {
-      // Never-promoted rows hold no date to order, so they sink to the bottom in BOTH directions
-      // rather than flooding the top of a descending sort with dashes.
-      if (sort.key === "promoted") {
-        const ta = promotedValue(a);
-        const tb = promotedValue(b);
-        if (ta == null || tb == null) return ta == null ? (tb == null ? 0 : 1) : -1;
-        return dir * (ta - tb);
-      }
       switch (sort.key) {
         case "owner":
           return dir * ownerLabel(a).localeCompare(ownerLabel(b));
@@ -260,6 +251,12 @@ export default function Page() {
     });
   }, [strategies, debouncedSearch, stageFilter, ownerFilter, typeFilter, sort, owners, runsOf]);
 
+  const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  // Clamped on read rather than written back: narrowing the list can strand the pager past the
+  // end, and page 6 of a two-page list should show page 2, not an empty table.
+  const currentPage = Math.min(page, pageCount);
+  const pageRows = rows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
   // The whole page is admin-only: /api/users 403s for anyone else, and promotion is the point.
   if (!isAdmin) {
     return (
@@ -272,29 +269,26 @@ export default function Page() {
   return (
     <main className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden bg-surface p-4">
       <div className="flex shrink-0 items-center gap-3">
-        <div className="flex h-8 w-64 items-center gap-2 rounded-[20px] border border-border px-3">
+        <div className="flex h-8 w-60 items-center gap-2 rounded-[20px] border border-border py-1.5 pr-3 pl-4">
           <input
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name or ID..."
-            className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            placeholder="Search strategies..."
+            className="min-w-0 flex-1 bg-transparent text-xs font-medium text-white outline-none placeholder:text-muted-foreground"
           />
           <MinimalisticMagnifer size={20} weight="Outline" className="shrink-0 text-muted-foreground" />
         </div>
-        <Select value={stageFilter} onValueChange={(v) => setStageFilter(v ?? "all")}>
-          <SelectTrigger className="h-8 w-auto gap-2 rounded-full border-border bg-background px-3 text-xs text-foreground">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {STAGE_FILTERS.map((f) => (
-              <SelectItem key={f.value} value={f.value}>
-                {f.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={ownerFilter} onValueChange={(v) => setOwnerFilter(v ?? "all")}>
-          <SelectTrigger className="h-8 w-auto gap-2 rounded-full border-border bg-background px-3 text-xs text-foreground">
+        <Select
+          value={ownerFilter}
+          onValueChange={(v) => {
+            setOwnerFilter(v ?? "all");
+            setPage(1);
+          }}
+        >
+          <SelectTrigger className={FILTER_PILL}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -306,8 +300,14 @@ export default function Page() {
             ))}
           </SelectContent>
         </Select>
-        <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v ?? "all")}>
-          <SelectTrigger className="h-8 w-auto gap-2 rounded-full border-border bg-background px-3 text-xs text-foreground">
+        <Select
+          value={typeFilter}
+          onValueChange={(v) => {
+            setTypeFilter(v ?? "all");
+            setPage(1);
+          }}
+        >
+          <SelectTrigger className={FILTER_PILL}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -319,13 +319,31 @@ export default function Page() {
             ))}
           </SelectContent>
         </Select>
+        <Select
+          value={stageFilter}
+          onValueChange={(v) => {
+            setStageFilter(v ?? "all");
+            setPage(1);
+          }}
+        >
+          <SelectTrigger className={FILTER_PILL}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {STAGE_FILTERS.map((f) => (
+              <SelectItem key={f.value} value={f.value}>
+                {f.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         {/* Only once there is something to clear: a permanently visible Reset on an unfiltered
             table is a control that does nothing, and it reads as one more filter to understand. */}
         {filtersActive && (
           <button
             type="button"
             onClick={resetFilters}
-            className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-2 text-xs text-muted-foreground transition-colors hover:text-white"
+            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-2 text-xs text-muted-foreground transition-colors hover:text-white"
           >
             <CloseCircle weight="Outline" className="size-3.5" />
             Reset filters
@@ -342,7 +360,7 @@ export default function Page() {
           ) : rows.length === 0 ? (
             <p className="p-4 text-sm text-muted-foreground">No strategies match these filters.</p>
           ) : (
-            <Table className="table-fixed min-w-[1200px]">
+            <Table className="min-w-[1000px] table-fixed">
               <TableHeader>
                 <TableRow>
                   {COLS.map((c) => {
@@ -351,25 +369,26 @@ export default function Page() {
                       <TableHead
                         key={c.key}
                         style={{ width: c.w }}
-                        className={c.align === "right" ? "text-right" : undefined}
+                        className="px-3 font-normal"
                         aria-sort={active ? (sort.dir === "asc" ? "ascending" : "descending") : undefined}
                       >
                         {c.sortable ? (
                           <button
                             type="button"
                             onClick={() => toggleSort(c.key)}
-                            className={cn(
-                              "inline-flex cursor-pointer items-center gap-1 transition-colors hover:text-white",
-                              active && "text-white",
-                            )}
+                            // The arrow is hidden until the column is sorted or hovered — Figma's
+                            // header is a plain label, and a column of permanent grey arrows reads
+                            // as chrome rather than as a control.
+                            className="group inline-flex items-center gap-1"
                           >
                             {c.label}
-                            {/* The dimmed arrow on an unsorted column is what advertises that the
-                                header is clickable at all — without it nothing on the row looks live. */}
                             {active && sort.dir === "desc" ? (
                               <AltArrowDown weight="Outline" className="size-3.5" />
                             ) : (
-                              <AltArrowUp weight="Outline" className={cn("size-3.5", !active && "opacity-30")} />
+                              <AltArrowUp
+                                weight="Outline"
+                                className={cn("size-3.5", !active && "opacity-0 transition-opacity group-hover:opacity-40")}
+                              />
                             )}
                           </button>
                         ) : (
@@ -381,66 +400,60 @@ export default function Page() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rows.map((s) => {
+                {pageRows.map((s) => {
                   const stage = strategyStage(s, runsOf.get(s.id));
                   // Whichever promotion is current is the one worth dating.
                   const promotedAt = stage.rung === "live" ? s.live_promoted_at : stage.rung === "paper" ? s.paper_promoted_at : null;
                   const promotion = promotionOf.get(s.id);
+                  const next = nextPromotionStage(s);
+                  const blocked = next ? blockedReason(s, next, runsOf.get(s.id) ?? []) : undefined;
+                  const demotable = demotableStage(s);
+                  const ownerName = owners.get(s.owner_id) ?? `${s.owner_id.slice(0, 8)}…`;
+                  const email = emailOf.get(s.owner_id);
                   return (
-                    <TableRow key={s.id}>
-                      <TableCell className="truncate text-sm font-semibold text-white" title={s.name}>
+                    <TableRow key={s.id} className="h-[52px]">
+                      <TableCell className="truncate px-3 py-2.5 text-sm text-white" title={s.name}>
                         {s.name}
                       </TableCell>
-                      <TableCell className="truncate text-xs text-white" title={s.owner_id}>
-                        {owners.get(s.owner_id) ?? <span className="text-muted-foreground">{s.owner_id.slice(0, 8)}…</span>}
+                      <TableCell className="px-3 py-2.5 text-sm text-muted-foreground">v{s.version}</TableCell>
+                      {/* Name over email, both truncating. `owners` already falls back to the
+                          email when a user has no username, so the second line is dropped rather
+                          than printing the same address twice. */}
+                      <TableCell className="px-4 py-2.5" title={s.owner_id}>
+                        <span className="block truncate text-sm text-white">{ownerName}</span>
+                        {email && email !== ownerName && (
+                          <span className="block truncate text-sm text-muted-foreground">{email}</span>
+                        )}
                       </TableCell>
                       {/* Reuse the same labels the Simulate modal shows, rather than a CSS capitalize. */}
-                      <TableCell className="text-xs text-white">{HFT_TYPE_LABEL[s.strategy_type] ?? s.strategy_type}</TableCell>
-                      <TableCell>
-                        <StrategyStageBadge strategy={s} runs={runsOf.get(s.id)} showVersion={false} />
-                      </TableCell>
-                      <TableCell className="text-xs text-white">v{s.version}</TableCell>
-                      <TableCell className={cn("text-xs", promotedAt ? "text-white" : "text-muted-foreground")}>
-                        {formatWhen(promotedAt)}
-                      </TableCell>
+                      <TableCell className="px-3 py-2.5 text-xs text-white">{HFT_TYPE_LABEL[s.strategy_type] ?? s.strategy_type}</TableCell>
                       <TableCell
-                        className={cn("truncate text-xs", promotion?.note ? "text-white" : "text-muted-foreground")}
-                        // Who approved it is the other half of the audit trail, but it's a raw
-                        // user id — keep it on hover rather than spending a column on it.
+                        className="px-3 py-2.5"
+                        // The promotion's date and note lost their own columns to the Figma
+                        // layout; this is where that audit trail still reads.
                         title={
                           promotion
-                            ? [promotion.note, `by ${owners.get(promotion.promoted_by) ?? promotion.promoted_by}`]
+                            ? [
+                                `Promoted ${formatWhen(promotedAt)}`,
+                                promotion.note,
+                                `by ${owners.get(promotion.promoted_by) ?? promotion.promoted_by}`,
+                              ]
                                 .filter(Boolean)
                                 .join(" — ")
                             : undefined
                         }
                       >
-                        {promotion?.note || "—"}
+                        <StrategyStageBadge strategy={s} runs={runsOf.get(s.id)} showVersion={false} />
                       </TableCell>
-                      <TableCell className="text-right">
-                        <span className="inline-flex items-center justify-end gap-2 whitespace-nowrap">
-                          {demotableStage(s) && (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <button
-                                  type="button"
-                                  onClick={() => setDemoting(s)}
-                                  className="inline-flex h-7 shrink-0 cursor-pointer items-center rounded-[32px] border border-destructive/40 bg-destructive/10 px-2.5 text-xs font-medium text-destructive transition-opacity hover:opacity-90"
-                                >
-                                  Demote {demotableStage(s)}
-                                </button>
-                              </TooltipTrigger>
-                              <TooltipContent>Remove the {demotableStage(s)} promotion</TooltipContent>
-                            </Tooltip>
-                          )}
-                          <PromoteCell strategy={s} runs={runsOf.get(s.id) ?? []} onPromote={() => setPromoting(s)} />
+                      <TableCell className="px-3 py-2.5">
+                        <span className="flex items-center gap-2">
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <button
                                 type="button"
                                 onClick={() => setRunning(s)}
                                 aria-label={`Run ${s.name}`}
-                                className="inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-[32px] bg-[linear-gradient(161deg,#cff8ea_0%,#67e1c1_100%)] px-2.5 text-xs font-medium text-black transition-opacity hover:opacity-90"
+                                className="inline-flex h-8 w-[120px] shrink-0 items-center justify-center gap-1 rounded-[32px] bg-[linear-gradient(165deg,#cff8ea_0%,#67e1c1_100%)] px-3 text-xs text-black transition-opacity hover:opacity-90"
                               >
                                 <SkipNext weight="Outline" className="size-3.5" />
                                 Run {launchMode(s)}
@@ -448,6 +461,40 @@ export default function Page() {
                             </TooltipTrigger>
                             <TooltipContent>Launch at its current stage ({stage.label.toLowerCase()})</TooltipContent>
                           </Tooltip>
+                          {/* Promotion is a review decision, not a per-row habit — it sits behind
+                              the menu so the row's one inline control is the launch. */}
+                          <DropdownMenu>
+                            <DropdownMenuTrigger
+                              aria-label={`Actions for ${s.name}`}
+                              className="inline-flex size-8 shrink-0 items-center justify-center rounded-[20px] text-white transition-colors hover:bg-secondary"
+                            >
+                              <MenuDots weight="Bold" className="size-5 rotate-90" />
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent>
+                              {next && (
+                                <DropdownMenuItem
+                                  disabled={!!blocked}
+                                  onSelect={() => setPromoting(s)}
+                                  // Radix drops pointer events on a disabled item, so the reason
+                                  // has to ride on the row itself rather than in a tooltip.
+                                  title={blocked}
+                                >
+                                  Promote to {next}
+                                </DropdownMenuItem>
+                              )}
+                              {demotable && (
+                                <>
+                                  {next && <DropdownMenuSeparator />}
+                                  <DropdownMenuItem className="text-destructive" onSelect={() => setDemoting(s)}>
+                                    Demote {demotable}
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+                              {!next && !demotable && (
+                                <DropdownMenuItem disabled>No promotion available</DropdownMenuItem>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </span>
                       </TableCell>
                     </TableRow>
@@ -457,6 +504,53 @@ export default function Page() {
             </Table>
           )}
         </div>
+        {pageCount > 1 && (
+          <nav
+            aria-label="pagination"
+            className="flex shrink-0 items-center justify-between border-t border-border px-4 py-5"
+          >
+            <button
+              type="button"
+              onClick={() => setPage(Math.max(1, currentPage - 1))}
+              disabled={currentPage === 1}
+              className="inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground transition-colors hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <AltArrowLeft weight="Outline" className="size-5" />
+              Previous
+            </button>
+            <div className="flex items-center gap-0.5">
+              {pageItems(currentPage, pageCount).map((item, i) =>
+                item === "…" ? (
+                  <span key={`gap-${i}`} className="flex size-10 items-center justify-center text-sm font-medium text-muted-foreground">
+                    …
+                  </span>
+                ) : (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => setPage(item)}
+                    aria-current={item === currentPage ? "page" : undefined}
+                    className={cn(
+                      "flex size-10 items-center justify-center rounded-[20px] text-sm font-medium transition-colors",
+                      item === currentPage ? "bg-[#f9fafb] text-[#1d2939]" : "text-muted-foreground hover:bg-secondary hover:text-white",
+                    )}
+                  >
+                    {item}
+                  </button>
+                ),
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setPage(Math.min(pageCount, currentPage + 1))}
+              disabled={currentPage === pageCount}
+              className="inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground transition-colors hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Next
+              <AltArrowRight weight="Outline" className="size-5" />
+            </button>
+          </nav>
+        )}
       </section>
 
       {promoting && nextPromotionStage(promoting) && (

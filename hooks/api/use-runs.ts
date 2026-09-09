@@ -22,29 +22,38 @@ export type LaunchRequest = components["schemas"]["LaunchRequest"];
 
 // `GET /api/runs` is paged: it returns `RunPage { runs, total, page, size }`, and supports
 // `q` (case-insensitive strategy-NAME search), `status` (exact), `page` (0-indexed) and
-// `size` (default 100, max 200).
-export const RUNS_MAX_PAGE_SIZE = 200;
-
+// `size` (default 100, max 200 — the upstream clamps anything larger).
 export type RunsQuery = { q?: string; status?: string; page?: number; size?: number };
 
-export async function fetchRunsPage(params: RunsQuery = {}): Promise<RunPage> {
+/**
+ * The server-side window assembled by app/hft/api/runs/aggregate/route.ts — the same
+ * `RunPage` shape, but up to 1000 runs walked 200 at a time upstream instead of one 200-row
+ * page. Temporary, and deleted along with the route once `/api/runs` can filter by `mode`.
+ */
+const RUNS_AGGREGATE_PATH = "/api/runs/aggregate";
+
+export async function fetchRunsPage(params: RunsQuery = {}, path = "/api/runs"): Promise<RunPage> {
   const search = new URLSearchParams();
   if (params.q) search.set("q", params.q);
   if (params.status) search.set("status", params.status);
   if (params.page != null) search.set("page", String(params.page));
   if (params.size != null) search.set("size", String(params.size));
   const qs = search.toString();
-  const page = await apiGet<RunPage>(`${HFT_API_URL}/api/runs${qs ? `?${qs}` : ""}`);
+  const page = await apiGet<RunPage>(`${HFT_API_URL}${path}${qs ? `?${qs}` : ""}`);
   // Guard the contract: callers map over `runs` immediately, so a malformed payload should
   // render empty rather than take the page down.
   return { runs: Array.isArray(page?.runs) ? page.runs : [], total: page?.total ?? 0, page: page?.page ?? 0, size: page?.size ?? 0 };
 }
 
-// GAP-2 (still open): `/api/runs` has no `mode` filter, so the Paper/Live screens must split
-// modes client-side and therefore can't page server-side — a server page would mix modes and
-// report a `total` for both. They request the largest page instead and paginate locally.
+// GAP-2 (still open): `/api/runs` has no `mode` filter, so the Paper/Live/Backtesting screens
+// must split modes client-side and therefore can't page server-side — a server page would mix
+// modes and report a `total` covering all three. They paginate locally over this window instead.
+//
+// `size` is not forwarded: the aggregate route drives upstream paging itself, walking 200-row
+// pages up to its own cap. Callers that want one raw upstream page can still pass `page`/`size`
+// to `fetchRunsPage` directly.
 export async function fetchRuns(params: RunsQuery = {}): Promise<Run[]> {
-  const page = await fetchRunsPage({ size: RUNS_MAX_PAGE_SIZE, ...params });
+  const page = await fetchRunsPage(params, RUNS_AGGREGATE_PATH);
   // A page can carry the same run more than once (seen on dev: one id three times). Every list
   // keys its rows on the run id, and React leaves ghost rows behind when keys collide — rows that
   // survive a filter they don't match. Keep the first copy of each id.

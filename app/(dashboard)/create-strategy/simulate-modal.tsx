@@ -402,8 +402,16 @@ export function SimulateModal({
   const [leg2AccountId, setLeg2AccountId] = useState<string>();
   const [leg2SymbolIds, setLeg2SymbolIds] = useState<string[]>([]);
 
-  const isDnseAccount = venues?.find((v) => v.id === venueIdOf(accountId))?.venue_type === "dnse";
+  const venueType = venues?.find((v) => v.id === venueIdOf(accountId))?.venue_type;
+  const isDnseAccount = venueType === "dnse";
+  // The VN brokers bracket continuous trading with ATO/ATC call auctions; the crypto venues run
+  // around the clock and have none, so the option below is meaningless for them.
+  const hasAuctionSessions = venueType === "dnse" || venueType === "ssi";
   const [otpPasscode, setOtpPasscode] = useState("");
+
+  // `avoid_auction_sessions` on POST /api/runs. Off by default, matching the API — a run trades
+  // straight through the auctions unless this is ticked.
+  const [avoidAuctionSessions, setAvoidAuctionSessions] = useState(false);
 
   const [settlementCurrency, setSettlementCurrency] = useState("USDT");
   const [balances, setBalances] = useState<BalanceRow[]>(DEFAULT_BALANCES);
@@ -592,6 +600,9 @@ export function SimulateModal({
         balances: Object.fromEntries(balances.map((b) => [b.currency, b.amount])),
       },
       ...(isDnseAccount && mode === "live" && otpPasscode.trim() ? { otp_passcode: otpPasscode.trim() } : {}),
+      // Omitted rather than sent as `false` off a VN account: the venue has no auctions to avoid,
+      // so the flag would describe a session structure that doesn't exist there.
+      ...(hasAuctionSessions ? { avoid_auction_sessions: avoidAuctionSessions } : {}),
     };
     launchRun.mutate(req, {
       onSuccess: (run) => {
@@ -891,6 +902,23 @@ export function SimulateModal({
               </div>
             </div>
           </GroupBox>
+
+          {hasAuctionSessions && (
+            <label className="flex cursor-pointer items-start gap-2.5 rounded-2xl border border-border bg-surface p-3">
+              <Checkbox
+                checked={avoidAuctionSessions}
+                onCheckedChange={(v) => setAvoidAuctionSessions(v === true)}
+                className="mt-0.5 size-[18px]"
+              />
+              <span className="flex flex-col gap-1">
+                <span className="text-sm font-semibold text-white">Auction sessions</span>
+                <span className="text-xs leading-[18px] text-[#9db2ce]">
+                  Avoid ATO/ATC — flatten before the closing auction and stay flat overnight,
+                  resuming after the next day&apos;s opening auction.
+                </span>
+              </span>
+            </label>
+          )}
 
           {/* Last thing before the footer: this acknowledges the configuration ABOVE it, so it read
               as premature when it sat at the top of the form, before an account had been picked. */}

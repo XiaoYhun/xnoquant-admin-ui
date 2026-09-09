@@ -1,5 +1,6 @@
 "use client";
 import { Suspense, useMemo, useState } from "react";
+import { PageSizeSelect } from "@/components/page-size-select";
 import { TablePagination } from "@/components/table-pagination";
 import { StrategyTypeFilter, type StrategyTypeFilterValue } from "@/components/strategy-type-filter";
 import { MinimalisticMagnifer } from "@solar-icons/react";
@@ -7,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { usePaperRuns } from "@/hooks/api/use-paper-runs";
 import { useDebounced } from "@/hooks/use-debounced";
 import { idQueryNeedle, isIdQuery } from "@/lib/utils";
+import { usePageSize } from "@/hooks/use-page-size";
 import { useUrlParam } from "@/hooks/use-url-param";
 import { DEFAULT_MARKET, MarketTabs, marketOf, matchesMarket, type Market } from "@/components/market-tabs";
 import { resourceErrorMessage } from "@/lib/api-client";
@@ -19,7 +21,6 @@ import {
 import { PaperRunsTable } from "./paper-runs-table";
 import { RunDetailPanel } from "./run-detail-panel";
 
-const PAGE_SIZE = 9;
 
 // `useSearchParams` (via useUrlParam) needs a Suspense boundary in the App Router.
 export default function Page() {
@@ -40,6 +41,7 @@ function PaperTrading() {
   // has no metric filter.
   const [ranges, setRanges] = useState<MetricRanges>(EMPTY_METRIC_RANGES);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = usePageSize();
   // The open panel is in the URL (`?run=<id>`) so the view can be linked and survives reload.
   const [selectedId, setSelectedId] = useUrlParam("run");
 
@@ -77,9 +79,9 @@ function PaperTrading() {
     [runs, symbol, market, strategyType, idSearch, idNeedle, ranges],
   );
 
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, pageCount);
-  const pageRows = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const pageRows = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   const selectedRun = runs.find((r) => r.id === selectedId) ?? null;
 
   // A deep link should land on its own tab: `?run=` alone would otherwise open the panel over
@@ -170,6 +172,14 @@ function PaperTrading() {
           value={ranges}
           onChange={(next) => {
             setRanges(next);
+            setPage(1);
+          }}
+        />
+        <PageSizeSelect
+          className="ml-auto"
+          value={pageSize}
+          onChange={(size) => {
+            setPageSize(size);
             setPage(1);
           }}
         />

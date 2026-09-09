@@ -1,5 +1,6 @@
 "use client";
 import { Suspense, useMemo, useState } from "react";
+import { PageSizeSelect } from "@/components/page-size-select";
 import { TablePagination } from "@/components/table-pagination";
 import { StrategyTypeFilter, type StrategyTypeFilterValue } from "@/components/strategy-type-filter";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -13,6 +14,7 @@ import {
 } from "@/components/ui/select";
 import { usePromotions } from "@/hooks/api/use-promotions";
 import { useRuns } from "@/hooks/api/use-runs";
+import { usePageSize } from "@/hooks/use-page-size";
 import { useUrlParam } from "@/hooks/use-url-param";
 import { toPaperRunRow } from "@/lib/transform/runs";
 import { resourceErrorMessage } from "@/lib/api-client";
@@ -34,7 +36,6 @@ import type { StrategyPromotion } from "@/types/domain";
 // which is where the row's status/account/symbol/metric columns come from.
 export type AlphaPoolRow = { member: StrategyPromotion; run: PaperRunRow | null };
 
-const PAGE_SIZE = 9;
 const STATUS_FILTERS = [
   { value: "all", label: "All status" },
   { value: "running", label: "Running" },
@@ -68,6 +69,7 @@ function AlphaPool() {
   // Sharpe / Return % / Max DD % bounds, read off the member's source run.
   const [ranges, setRanges] = useState<MetricRanges>(EMPTY_METRIC_RANGES);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = usePageSize();
   // The open panel is in the URL (`?run=<id>`) so the view can be linked and survives reload.
   const [selectedId, setSelectedId] = useUrlParam("run");
 
@@ -123,9 +125,9 @@ function AlphaPool() {
     });
   }, [rows, search, statusFilter, symbolFilter, market, strategyType, ranges]);
 
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, pageCount);
-  const pageRows = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const pageRows = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const resetPage = () => setPage(1);
 
@@ -200,6 +202,14 @@ function AlphaPool() {
           value={ranges}
           onChange={(next) => {
             setRanges(next);
+            resetPage();
+          }}
+        />
+        <PageSizeSelect
+          className="ml-auto"
+          value={pageSize}
+          onChange={(size) => {
+            setPageSize(size);
             resetPage();
           }}
         />

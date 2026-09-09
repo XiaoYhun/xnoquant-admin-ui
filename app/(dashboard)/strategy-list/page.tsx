@@ -1,5 +1,6 @@
 "use client";
 import { useMemo, useState } from "react";
+import { PageSizeSelect } from "@/components/page-size-select";
 import { PageJump, pageItems } from "@/components/table-pagination";
 import { useRouter } from "next/navigation";
 import {
@@ -26,6 +27,7 @@ import {
 import { useRunsByStrategy } from "@/hooks/api/use-strategy-runs";
 import { useUserRoster, userLabelMap } from "@/hooks/api/use-users";
 import { useDebounced } from "@/hooks/use-debounced";
+import { usePageSize } from "@/hooks/use-page-size";
 import { resourceErrorMessage } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
 import { cn, idQueryNeedle, isIdQuery } from "@/lib/utils";
@@ -48,10 +50,6 @@ const STAGE_FILTERS = [
   { value: "paper", label: "Paper running" },
   { value: "live", label: "Live trading" },
 ];
-
-// 13 rows is what the Figma frame holds between the filter row and the pager, and the table is
-// sized to show a whole page without scrolling.
-const PAGE_SIZE = 13;
 
 // Widths are the Figma column widths as percentages of the 1188px table: three flexible columns
 // at 254.67 and three fixed at 120/120/184. `sortable` marks the columns whose ordering says
@@ -145,6 +143,7 @@ export default function Page() {
   // from it. Sorting by nothing is a state you can be in, not one you have to sort your way out of.
   const [sort, setSort] = useState<Sort | null>(null);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = usePageSize();
   const debouncedSearch = useDebounced(search.trim());
 
   const [promoting, setPromoting] = useState<Strategy | null>(null);
@@ -223,11 +222,11 @@ export default function Page() {
     });
   }, [strategies, debouncedSearch, stageFilter, ownerFilter, typeFilter, sort, owners, runsOf]);
 
-  const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
   // Clamped on read rather than written back: narrowing the list can strand the pager past the
   // end, and page 6 of a two-page list should show page 2, not an empty table.
   const currentPage = Math.min(page, pageCount);
-  const pageRows = rows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const pageRows = rows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   // The whole page is admin-only: /api/users 403s for anyone else, and promotion is the point.
   if (!isAdmin) {
@@ -321,6 +320,14 @@ export default function Page() {
             Reset filters
           </button>
         )}
+        <PageSizeSelect
+          className={cn(FILTER_PILL, "ml-auto")}
+          value={pageSize}
+          onChange={(size) => {
+            setPageSize(size);
+            setPage(1);
+          }}
+        />
       </div>
 
       <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-background">

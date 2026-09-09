@@ -1,5 +1,6 @@
 "use client";
 import { Suspense, useMemo, useState } from "react";
+import { PageSizeSelect } from "@/components/page-size-select";
 import { TablePagination } from "@/components/table-pagination";
 import { StrategyTypeFilter, type StrategyTypeFilterValue } from "@/components/strategy-type-filter";
 import { useSearchParams } from "next/navigation";
@@ -13,6 +14,7 @@ import {
 } from "@/components/ui/select";
 import { useLiveRuns } from "@/hooks/api/use-live-runs";
 import { useDebounced } from "@/hooks/use-debounced";
+import { usePageSize } from "@/hooks/use-page-size";
 import { useUrlParam } from "@/hooks/use-url-param";
 import { resourceErrorMessage } from "@/lib/api-client";
 import {
@@ -28,7 +30,6 @@ import { ALL_MARKETS, MarketTabs, marketFromParam, marketOf, matchesMarket, type
 import { useOrderbookSymbols } from "@/hooks/api/use-orderbook-symbols";
 import { RunDetailInline } from "../../paper-trading/run-detail-panel";
 
-const PAGE_SIZE = 9;
 
 const compact = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 2 });
 
@@ -120,6 +121,7 @@ function LiveTrade() {
     status: onlyRunning ? "running" : undefined,
   });
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = usePageSize();
   // The open panel is in the URL (`?run=<id>`) so the view can be linked and survives reload.
   // Derived from the loaded rows rather than held separately: one source of truth, and a link to
   // a run that has since gone simply opens no panel.
@@ -192,9 +194,9 @@ function LiveTrade() {
     };
   }, [runs, market]);
 
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, pageCount);
-  const pageRows = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const pageRows = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const resetPage = () => setPage(1);
 
@@ -258,6 +260,14 @@ function LiveTrade() {
           value={ranges}
           onChange={(next) => {
             setRanges(next);
+            resetPage();
+          }}
+        />
+        <PageSizeSelect
+          className="ml-auto"
+          value={pageSize}
+          onChange={(size) => {
+            setPageSize(size);
             resetPage();
           }}
         />

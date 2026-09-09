@@ -708,8 +708,8 @@ function ResultsHeaderBar({
   const metaSegments = [symbolSegment, run.timeframe, dateRangeSegment].filter((s): s is string => !!s);
 
   return (
-    <div className="flex shrink-0 items-center gap-3 border-b border-border bg-surface py-2.5 pr-4 pl-8">
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
+    <div className="flex shrink-0 items-stretch gap-3 border-b border-border bg-surface py-2.5 pr-4 pl-8">
+      <div className="flex min-w-0 flex-1 flex-col justify-between gap-1">
         <span className="text-xs leading-[18px] text-[#9db2ce]">
           {isBacktest ? "BACKTEST RESULTS" : "PAPER TRADING RESULTS"}
         </span>
@@ -725,7 +725,15 @@ function ResultsHeaderBar({
         </div>
       </div>
 
-      <div className="flex shrink-0 flex-col items-end gap-2">
+      {/* Two rows against the same height as the left column, so the eyebrow lines up with the
+          action and the meta row with the strategy name. With no action there is one row to place,
+          and centring it is what reads level. */}
+      <div
+        className={cn(
+          "flex shrink-0 flex-col items-end gap-2",
+          isBacktest || canPromote ? "justify-between" : "justify-center",
+        )}
+      >
         {isBacktest ? (
           <button
             type="button"
@@ -760,7 +768,7 @@ function ResultsHeaderBar({
         type="button"
         onClick={onClose}
         aria-label="Close"
-        className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:text-white"
+        className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center self-center rounded-full border border-border text-muted-foreground transition-colors hover:text-white"
       >
         <CloseIcon className="size-4" />
       </button>

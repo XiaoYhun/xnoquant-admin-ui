@@ -1,15 +1,9 @@
 "use client";
 import { Suspense, useMemo, useState } from "react";
+import { TablePagination } from "@/components/table-pagination";
+import { StrategyTypeFilter, type StrategyTypeFilterValue } from "@/components/strategy-type-filter";
 import { MinimalisticMagnifer } from "@solar-icons/react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination";
 import { usePaperRuns } from "@/hooks/api/use-paper-runs";
 import { useDebounced } from "@/hooks/use-debounced";
 import { idQueryNeedle, isIdQuery } from "@/lib/utils";
@@ -41,6 +35,7 @@ function PaperTrading() {
   const [search, setSearch] = useState("");
   const [symbol, setSymbol] = useState("all");
   const [status, setStatus] = useState("all");
+  const [strategyType, setStrategyType] = useState<StrategyTypeFilterValue>("all");
   // Sharpe / Return % / Max DD % bounds — client-side, like symbol and paging: `GET /api/runs`
   // has no metric filter.
   const [ranges, setRanges] = useState<MetricRanges>(EMPTY_METRIC_RANGES);
@@ -75,10 +70,11 @@ function PaperTrading() {
         (r) =>
           (!idSearch || r.id.toLowerCase().includes(idNeedle)) &&
           (symbol === "all" || r.symbols.some((s) => s.symbol === symbol)) &&
+          (strategyType === "all" || r.strategyType === strategyType) &&
           matchesMarket(r, market) &&
           matchesMetricRanges(r, ranges),
       ),
-    [runs, symbol, market, idSearch, idNeedle, ranges],
+    [runs, symbol, market, strategyType, idSearch, idNeedle, ranges],
   );
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
@@ -163,6 +159,13 @@ function PaperTrading() {
             <SelectItem value="completed">Completed</SelectItem>
           </SelectContent>
         </Select>
+        <StrategyTypeFilter
+          value={strategyType}
+          onChange={(v) => {
+            setStrategyType(v);
+            setPage(1);
+          }}
+        />
         <MetricRangeFilters
           value={ranges}
           onChange={(next) => {
@@ -186,42 +189,7 @@ function PaperTrading() {
         </div>
         {pageCount > 1 && (
           <div className="border-t border-border px-4 py-3">
-            <Pagination>
-              <PaginationContent>
-                <PaginationItem>
-                  <PaginationPrevious
-                    href="#"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      setPage((p) => Math.max(1, p - 1));
-                    }}
-                  />
-                </PaginationItem>
-                {Array.from({ length: pageCount }, (_, i) => i + 1).map((p) => (
-                  <PaginationItem key={p}>
-                    <PaginationLink
-                      href="#"
-                      isActive={p === currentPage}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        setPage(p);
-                      }}
-                    >
-                      {p}
-                    </PaginationLink>
-                  </PaginationItem>
-                ))}
-                <PaginationItem>
-                  <PaginationNext
-                    href="#"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      setPage((p) => Math.min(pageCount, p + 1));
-                    }}
-                  />
-                </PaginationItem>
-              </PaginationContent>
-            </Pagination>
+            <TablePagination currentPage={currentPage} pageCount={pageCount} onPageChange={setPage} />
           </div>
         )}
       </section>

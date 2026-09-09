@@ -13,6 +13,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { FlashValue } from "@/components/ui/flash-value";
 import { RunStatusPill } from "@/components/run-status-pill";
 import { RunId } from "@/components/run-id";
+import { StrategyTypeBadge } from "@/components/strategy-type-badge";
 import { StartLiveTradingDialog } from "../../paper-trading/start-live-trading-dialog";
 import { isApprovalStale } from "@/hooks/api/use-promotions";
 import { cn, formatAmount, formatPercent } from "@/lib/utils";
@@ -100,6 +101,7 @@ export function AlphaPoolTable({
                   <span className="truncate" title={member.strategy_name}>
                     {member.strategy_name}
                   </span>
+                  {run && <StrategyTypeBadge type={run.strategyType} />}
                   {/* current_version has moved past the reviewed one — the strategy stays listed but
                       can't launch live runs until an admin re-promotes it. */}
                   {stale && (

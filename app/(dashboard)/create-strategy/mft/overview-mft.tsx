@@ -24,8 +24,7 @@ import {
   type PeriodSelection,
   type Point,
 } from "@/lib/transform/mft-results";
-import { useStrategyChart, useSummaryTable } from "@/hooks/api/use-strategy-results";
-import { useStrategyPerformance } from "@/hooks/api/use-strategy-performance";
+import { useMftResultsSource } from "@/hooks/api/use-mft-results-source";
 import {
   ChartCard,
   EMPTY,
@@ -269,38 +268,38 @@ export function OverviewMft({
   strategyId,
   stage,
   period,
+  runId,
 }: {
   strategyId?: string;
   stage: string;
   period: PeriodSelection;
+  runId?: string;
 }) {
   const [range, setRange] = useState<Range>("All");
 
-  const { data: perf } = useStrategyPerformance(strategyId, stage);
-  const { data: summaryRows } = useSummaryTable(strategyId, stage);
-  const pnls = useStrategyChart(strategyId, "pnls");
-  const dd = useStrategyChart(strategyId, "drawdown");
-  const sharpe = useStrategyChart(strategyId, "sharpe");
-  const returns = useStrategyChart(strategyId, "returns");
+  const src = useMftResultsSource({ strategyId, stage, runId });
+  const pnls = src.pnls;
 
   // Stage slice first (the charts endpoint returns every stage at once), then the Period row,
-  // then the chart's own trailing range.
+  // then the chart's own trailing range. A run-scoped view has no stages, so sliceStage is a no-op.
   const equity = useMemo(
     () => trailing(filterByPeriod(sliceStage(toPoints(pnls.data), pnls.data, stage), period), range),
     [pnls.data, stage, period, range],
   );
   const drawdown = useMemo(
-    () => trailing(filterByPeriod(sliceStage(toPoints(dd.data), dd.data, stage), period), range),
-    [dd.data, stage, period, range],
+    () => trailing(filterByPeriod(sliceStage(toPoints(src.drawdown.data), src.drawdown.data, stage), period), range),
+    [src.drawdown.data, stage, period, range],
   );
   const sharpePts = useMemo(
-    () => filterByPeriod(sliceStage(toPoints(sharpe.data), sharpe.data, stage), period),
-    [sharpe.data, stage, period],
+    () => filterByPeriod(sliceStage(toPoints(src.sharpe.data), src.sharpe.data, stage), period),
+    [src.sharpe.data, stage, period],
   );
   const returnPts = useMemo(
-    () => filterByPeriod(sliceStage(toPoints(returns.data), returns.data, stage), period),
-    [returns.data, stage, period],
+    () => filterByPeriod(sliceStage(toPoints(src.returns.data), src.returns.data, stage), period),
+    [src.returns.data, stage, period],
   );
+  const perf = src.perf;
+  const summaryRows = src.summaryRows;
 
   const a = perf?.analysis;
   const p = perf?.performance;

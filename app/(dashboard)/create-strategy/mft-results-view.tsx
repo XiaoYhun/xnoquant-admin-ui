@@ -1,15 +1,7 @@
 "use client";
-// MFT variant of the create-strategy "Results" tab — Figma 15204:30669 (Overview), 15205:56946
-// (Performance), 15212:59857 (Risk), 15212:62240 (Execution), 15212:62900 (Cost & Edge) and
-// 15212:65719 (Regime). Swapped in from results-tab.tsx via `variant="mft"`; the HFT variant is
-// untouched.
-//
-// The frames are drawn around an HFT run, so two pieces of their chrome have no MFT counterpart
-// and are adapted rather than copied:
-//   * "Run history: #id" — MFT results are addressed by strategy + STAGE, not by run, and stage is
-//     a required path segment on every endpoint below. The dropdown in that slot picks the stage.
-//   * The Period row is genuinely wired here (unlike the HFT tab's, which is inert): the series
-//     carry timestamps, so a year/month selection is a real client-side filter over them.
+// Six-screen Results UI from Figma 15204:30669 (HFT/Create strategy/Results) and siblings.
+// Wired to MFT-type (bar) runs — Create Strategy's HFT-lab run picker and the run-detail
+// Charts tab. MFT lab Create Strategy still uses xalpha-mft-results-view.tsx (XALPHA stages).
 import { useMemo, useState } from "react";
 import { Danger } from "@solar-icons/react";
 
@@ -22,7 +14,7 @@ import {
   yearsOf,
   type PeriodSelection,
 } from "@/lib/transform/mft-results";
-import { useStrategyChart } from "@/hooks/api/use-strategy-results";
+import { useMftResultsSource } from "@/hooks/api/use-mft-results-source";
 import { useStrategyById } from "@/hooks/api/use-strategy-run";
 import { RunningSimulateScreen } from "./running-simulate-screen";
 import { DropdownPill, PillTabs, SegmentedTabs } from "./mft/results-chrome";
@@ -167,20 +159,32 @@ function PeriodRow({
 
 // ---- view --------------------------------------------------------------------------------------
 
-export function MftResultsView({ strategyId }: { strategyId?: string }) {
+export function MftResultsView({
+  strategyId,
+  runId,
+}: {
+  strategyId?: string;
+  /** When set, results come from the HFT run artifacts instead of XALPHA strategy/stage. */
+  runId?: string;
+}) {
   const [stage, setStage] = useState<string>("train");
   const [view, setView] = useState<View>("Overview");
   const [period, setPeriod] = useState<PeriodSelection>({});
   const [granularity, setGranularity] = useState<Granularity>("Year");
+  const runScoped = !!runId;
 
-  const { data: strategy, isLoading: strategyLoading } = useStrategyById(strategyId);
+  const { data: strategy, isLoading: strategyLoading } = useStrategyById(runScoped ? undefined : strategyId);
+  const src = useMftResultsSource({
+    strategyId: runScoped ? undefined : strategyId,
+    stage,
+    runId,
+  });
 
   // The Period pills are built from whatever the series actually covers for this stage, so a
   // strategy trained over two years never offers a third empty year.
-  const returns = useStrategyChart(strategyId, "returns");
   const years = useMemo(
-    () => yearsOf(sliceStage(toPoints(returns.data), returns.data, stage)),
-    [returns.data, stage],
+    () => yearsOf(sliceStage(toPoints(src.returns.data), src.returns.data, runScoped ? undefined : stage)),
+    [src.returns.data, stage, runScoped],
   );
 
   // Only Overview draws the Year/Month toggle; the other five frames show the year pills alone.
@@ -196,7 +200,10 @@ export function MftResultsView({ strategyId }: { strategyId?: string }) {
   const liveReady = Boolean(strategy?.valid_to_show_live && (strategy?.live_remaining_days ?? 0) <= 0);
 
   const showNoResults =
-    !USE_MOCK && !strategyLoading && (!strategyId || !strategy || strategy.status === "created");
+    !runScoped &&
+    !USE_MOCK &&
+    !strategyLoading &&
+    (!strategyId || !strategy || strategy.status === "created");
 
   if (showNoResults) {
     return (
@@ -204,7 +211,7 @@ export function MftResultsView({ strategyId }: { strategyId?: string }) {
     );
   }
 
-  if (!USE_MOCK && strategy) {
+  if (!runScoped && !USE_MOCK && strategy) {
     if (strategy.status === "error") return <StatusCard title="Something went wrong!" danger />;
     if (strategy.status === "canceled") return <StatusCard title="Simulate run was canceled!" danger />;
     // Only completed/published show results (and fire the summary/chart API calls); anything still
@@ -216,7 +223,7 @@ export function MftResultsView({ strategyId }: { strategyId?: string }) {
 
 
   return (
-    <div className="flex min-w-0 flex-col gap-4 p-4">
+    <div className="flex min-w-0 flex-col gap-4">
       <PeriodRow
         years={years}
         period={period}
@@ -227,55 +234,59 @@ export function MftResultsView({ strategyId }: { strategyId?: string }) {
 
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
         <PillTabs options={VIEWS} value={view} onChange={setView} />
-        <div className="flex shrink-0 items-center gap-3">
-          <span className="text-xs leading-[18px] font-medium text-white">Stage:</span>
-          <Popover>
-            <PopoverTrigger asChild>
-              <DropdownPill label={STAGES.find((s) => s.value === stage)?.label ?? stage} />
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-36 p-1.5">
-              <div className="flex flex-col">
-                {STAGES.map((s) => {
-                  // xno-builder parity: Live only unlocks once the lock-up has elapsed.
-                  const disabled = s.value === "live" && !liveReady;
-                  return (
-                    <button
-                      key={s.value}
-                      type="button"
-                      disabled={disabled}
-                      onClick={() => setStage(s.value)}
-                      className={cn(
-                        "cursor-pointer rounded-[6px] px-2 py-2 text-left text-xs text-white hover:bg-secondary/60",
-                        disabled && "cursor-not-allowed opacity-50 hover:bg-transparent",
-                        s.value === stage && "bg-secondary/60",
-                      )}
-                    >
-                      {s.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </PopoverContent>
-          </Popover>
-        </div>
+        {!runScoped && (
+          <div className="flex shrink-0 items-center gap-3">
+            <span className="text-xs leading-[18px] font-medium text-white">Stage:</span>
+            <Popover>
+              <PopoverTrigger asChild>
+                <DropdownPill label={STAGES.find((s) => s.value === stage)?.label ?? stage} />
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-36 p-1.5">
+                <div className="flex flex-col">
+                  {STAGES.map((s) => {
+                    // xno-builder parity: Live only unlocks once the lock-up has elapsed.
+                    const disabled = s.value === "live" && !liveReady;
+                    return (
+                      <button
+                        key={s.value}
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => setStage(s.value)}
+                        className={cn(
+                          "cursor-pointer rounded-[6px] px-2 py-2 text-left text-xs text-white hover:bg-secondary/60",
+                          disabled && "cursor-not-allowed opacity-50 hover:bg-transparent",
+                          s.value === stage && "bg-secondary/60",
+                        )}
+                      >
+                        {s.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </PopoverContent>
+            </Popover>
+          </div>
+        )}
       </div>
 
-      {/* Remount on stage change: ECharts merges options by default, so a series that exists for
-          one stage and not the next survives into the following chart and draws data that isn't
-          its own. Keying here also resets each view's local range/window toggles. */}
-      <div key={stage} className="min-w-0">
+      {/* Remount on stage/run change: ECharts merges options by default, so a series that exists
+          for one stage and not the next survives into the following chart and draws data that
+          isn't its own. Keying here also resets each view's local range/window toggles. */}
+      <div key={runId ?? stage} className="min-w-0">
         {view === "Overview" && (
-          <OverviewMft strategyId={strategyId} stage={stage} period={effectivePeriod} />
+          <OverviewMft strategyId={strategyId} stage={stage} period={effectivePeriod} runId={runId} />
         )}
         {view === "Performance" && (
-          <PerformanceMft strategyId={strategyId} stage={stage} period={effectivePeriod} />
+          <PerformanceMft strategyId={strategyId} stage={stage} period={effectivePeriod} runId={runId} />
         )}
-        {view === "Risk" && <RiskMft strategyId={strategyId} stage={stage} period={effectivePeriod} />}
+        {view === "Risk" && (
+          <RiskMft strategyId={strategyId} stage={stage} period={effectivePeriod} runId={runId} />
+        )}
         {view === "Execution" && (
-          <ExecutionMft strategyId={strategyId} stage={stage} period={effectivePeriod} />
+          <ExecutionMft strategyId={strategyId} stage={stage} period={effectivePeriod} runId={runId} />
         )}
         {view === "Cost & Edge" && (
-          <CostEdgeMft strategyId={strategyId} stage={stage} period={effectivePeriod} />
+          <CostEdgeMft strategyId={strategyId} stage={stage} period={effectivePeriod} runId={runId} />
         )}
         {view === "Regime" && (
           <RegimeMft strategyId={strategyId} stage={stage} period={effectivePeriod} />

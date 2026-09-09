@@ -1,5 +1,6 @@
 "use client";
 import { useMemo, useState } from "react";
+import { PageJump, pageItems } from "@/components/table-pagination";
 import { useRouter } from "next/navigation";
 import {
   AltArrowDown,
@@ -112,18 +113,6 @@ function blockedReason(strategy: Strategy, next: PromotionStage, runs: Run[]): s
   return runs.some((r) => r.mode === "paper" && PAPER_RUN_SUCCEEDED.has(r.status) && atThisVersion(r))
     ? undefined
     : `No finished paper run at v${strategy.version}.`;
-}
-
-/**
- * The page numbers to draw: `1 2 3 … 8 9 10` at the ends, `1 … 4 5 6 … 10` in the middle. Seven
- * slots either way, so the pager never changes width as you page through it.
- */
-function pageItems(current: number, count: number): (number | "…")[] {
-  if (count <= 7) return Array.from({ length: count }, (_, i) => i + 1);
-  if (current <= 3 || current >= count - 2) {
-    return [1, 2, 3, "…", count - 2, count - 1, count];
-  }
-  return [1, "…", current - 1, current, current + 1, "…", count];
 }
 
 export default function Page() {
@@ -352,7 +341,7 @@ export default function Page() {
                       <TableHead
                         key={c.key}
                         style={{ width: c.w }}
-                        className="px-3 font-normal"
+                        className={cn("px-3 font-normal", c.key === "actions" && "text-right")}
                         aria-sort={active ? (sort.dir === "asc" ? "ascending" : "descending") : undefined}
                       >
                         {c.sortable ? (
@@ -445,9 +434,7 @@ export default function Page() {
             <div className="flex items-center gap-0.5">
               {pageItems(currentPage, pageCount).map((item, i) =>
                 item === "…" ? (
-                  <span key={`gap-${i}`} className="flex size-10 items-center justify-center text-sm font-medium text-muted-foreground">
-                    …
-                  </span>
+                  <PageJump key={`gap-${i}`} pageCount={pageCount} onJump={setPage} />
                 ) : (
                   <button
                     key={item}

@@ -8,13 +8,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Popover, PopoverAnchor, PopoverClose, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CloseIcon } from "@/components/icons/close";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { RunId } from "@/components/run-id";
 import { StrategyStageBadge, launchMode, nextPromotionStage, strategyStage } from "@/components/strategy-stage";
 import { useActiveEditorStore } from "@/store/active-editor-store";
-import { cn, formatAmount } from "@/lib/utils";
+import { formatAmount } from "@/lib/utils";
 import type { PromotionStage, Run, Strategy, StrategyPromotion } from "@/types/domain";
 
 // Everything hanging off a Strategy List row: the ⋮ menu (Figma 15277:36828 / 36912 / 37042 /
@@ -147,7 +148,7 @@ export function RowActions({
   };
 
   return (
-    <span className="flex items-center gap-2">
+    <span className="flex items-center justify-end gap-2">
       <Tooltip>
         <TooltipTrigger asChild>
           <button
@@ -163,54 +164,53 @@ export function RowActions({
         <TooltipContent>Launch at its current stage ({stage.label.toLowerCase()})</TooltipContent>
       </Tooltip>
 
-      {/* The run history opens against the kebab rather than as a dialog, so the row it belongs
-          to stays visible behind it. */}
-      <Popover open={historyOpen} onOpenChange={setHistoryOpen}>
-        <DropdownMenu>
-          {/* The anchor has to be the trigger BUTTON, not the DropdownMenu around it: Root
-              renders no DOM node, so `asChild` had nothing to clone onto and the kebab never
-              made it into the tree. */}
-          <PopoverAnchor asChild>
-            <DropdownMenuTrigger
-              aria-label={`Actions for ${strategy.name}`}
-              className="inline-flex size-8 shrink-0 items-center justify-center rounded-[20px] text-white transition-colors hover:bg-secondary"
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          aria-label={`Actions for ${strategy.name}`}
+          className="inline-flex size-8 shrink-0 items-center justify-center rounded-[20px] text-white transition-colors hover:bg-secondary"
+        >
+          <MenuDots weight="Bold" className="size-5 rotate-90" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuItem onSelect={() => setHistoryOpen(true)}>
+            <History weight="Outline" />
+            View run history
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={openInEditor}>
+            <Pen2 weight="Bold" />
+            Edit strategy (New version)
+          </DropdownMenuItem>
+          {promotable && (
+            <DropdownMenuItem
+              disabled={!!blocked}
+              onSelect={onPromote}
+              // Radix drops pointer events on a disabled item, so the reason has to ride on
+              // the row itself rather than in a tooltip.
+              title={blocked}
             >
-              <MenuDots weight="Bold" className="size-5 rotate-90" />
-            </DropdownMenuTrigger>
-          </PopoverAnchor>
-          <DropdownMenuContent>
-            {promotable && (
-              <DropdownMenuItem
-                disabled={!!blocked}
-                onSelect={onPromote}
-                // Radix drops pointer events on a disabled item, so the reason has to ride on
-                // the row itself rather than in a tooltip.
-                title={blocked}
-              >
-                <ArrowRightUp weight="Outline" className="text-[#67e1c1]" />
-                <span className={GRAD_GREEN}>Promote to {next}</span>
-              </DropdownMenuItem>
-            )}
-            {demotable && (
-              <DropdownMenuItem onSelect={onDemote}>
-                <ArrowRightDown weight="Outline" className="text-destructive" />
-                <span className={GRAD_RED}>Demote to {DEMOTE_TARGET[demotable]}</span>
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuItem onSelect={() => setHistoryOpen(true)}>
-              <History weight="Outline" />
-              View run history
+              <ArrowRightUp weight="Outline" className="text-[#67e1c1]" />
+              <span className={GRAD_GREEN}>Promote to {next}</span>
             </DropdownMenuItem>
-            <DropdownMenuItem onSelect={openInEditor}>
-              <Pen2 weight="Bold" />
-              Edit strategy (New version)
+          )}
+          {demotable && (
+            <DropdownMenuItem onSelect={onDemote}>
+              <ArrowRightDown weight="Outline" className="text-destructive" />
+              <span className={GRAD_RED}>Demote to {DEMOTE_TARGET[demotable]}</span>
             </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <PopoverContent align="end" className="w-[320px] p-0">
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      {/* A dialog rather than a popover hung off the kebab: the list is the reader's whole focus
+          while it is open, and it outgrows what fits beside a table row. */}
+      <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
+        <DialogContent className="gap-0 p-0 sm:max-w-[420px]">
+          <DialogHeader className="px-4 pt-4 pb-3">
+            <DialogTitle className="text-base">Run history “{strategy.name}”</DialogTitle>
+          </DialogHeader>
           <RunHistory runs={runs} onClose={() => setHistoryOpen(false)} />
-        </PopoverContent>
-      </Popover>
+        </DialogContent>
+      </Dialog>
     </span>
   );
 }
@@ -226,7 +226,9 @@ function RunHistory({ runs, onClose }: { runs: Run[]; onClose: () => void }) {
   }
   return (
     <div className="max-h-72 overflow-y-auto">
-      {newestFirst(runs).map((r) => (
+      {newestFirst(runs).map((r) => {
+        const badge = statusBadge(r.status);
+        return (
         <button
           key={r.id}
           type="button"
@@ -246,15 +248,16 @@ function RunHistory({ runs, onClose }: { runs: Run[]; onClose: () => void }) {
             <span className="truncate text-xs text-muted-foreground">{formatWhen(r.created_at)}</span>
           </span>
           <span className="flex shrink-0 flex-col items-end gap-1">
-            <span className={cn("text-xs", RUN_STATUS_TEXT[r.status] ?? "text-muted-foreground")}>
-              {r.status}
+            <span className="rounded-[20px] px-2 py-0.5 text-[11px]" style={{ backgroundColor: badge.bg }}>
+              <span className={badge.text}>{badge.label}</span>
             </span>
             <span className="text-xs text-muted-foreground">
               Sharpe: {r.sharpe_annualized == null ? "—" : formatAmount(r.sharpe_annualized, 2)}
             </span>
           </span>
         </button>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -266,8 +269,14 @@ const LIST_PAGE: Record<string, string> = {
   live: "/live-trading/live-trade",
 };
 
-const RUN_STATUS_TEXT: Record<string, string> = {
-  completed: "text-[#67e1c1]",
-  running: "text-[#7fb2ff]",
-  failed: "text-destructive",
-};
+// Success / Failed, badged the way the Results tab's run-history dropdown does it; anything still
+// in flight keeps its own label rather than being forced into one of the two outcomes.
+function statusBadge(status: string): { label: string; bg: string; text: string } {
+  if (status === "completed") return { label: "Success", bg: "rgba(103,225,193,0.1)", text: GRAD_GREEN };
+  if (status === "failed") return { label: "Failed", bg: "rgba(255,19,91,0.1)", text: GRAD_RED };
+  return {
+    label: status.charAt(0).toUpperCase() + status.slice(1),
+    bg: "rgba(157,178,206,0.1)",
+    text: "text-muted-foreground",
+  };
+}

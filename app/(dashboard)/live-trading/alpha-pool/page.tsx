@@ -1,5 +1,7 @@
 "use client";
 import { Suspense, useMemo, useState } from "react";
+import { TablePagination } from "@/components/table-pagination";
+import { StrategyTypeFilter, type StrategyTypeFilterValue } from "@/components/strategy-type-filter";
 import { useRouter, useSearchParams } from "next/navigation";
 import { MinimalisticMagnifer } from "@solar-icons/react";
 import {
@@ -9,14 +11,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination";
 import { usePromotions } from "@/hooks/api/use-promotions";
 import { useRuns } from "@/hooks/api/use-runs";
 import { useUrlParam } from "@/hooks/use-url-param";
@@ -70,6 +64,7 @@ function AlphaPool() {
   const [search, setSearch] = useState("");
   const [symbolFilter, setSymbolFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [strategyType, setStrategyType] = useState<StrategyTypeFilterValue>("all");
   // Sharpe / Return % / Max DD % bounds, read off the member's source run.
   const [ranges, setRanges] = useState<MetricRanges>(EMPTY_METRIC_RANGES);
   const [page, setPage] = useState(1);
@@ -121,9 +116,12 @@ function AlphaPool() {
       // A member promoted without a source run has no market to attribute it to — keep it
       // visible on every tab rather than hiding it everywhere.
       const inMarket = !run || matchesMarket(run, market);
-      return matchesSearch && matchesStatus && matchesSymbol && inMarket && matchesMetricRanges(run, ranges);
+      // Unlike the market tab, an explicit HFT/MFT pick is a positive claim about the engine, so a
+      // member with no source run drops out of it — the same rule the metric bounds follow.
+      const matchesType = strategyType === "all" || run?.strategyType === strategyType;
+      return matchesSearch && matchesStatus && matchesSymbol && inMarket && matchesType && matchesMetricRanges(run, ranges);
     });
-  }, [rows, search, statusFilter, symbolFilter, market, ranges]);
+  }, [rows, search, statusFilter, symbolFilter, market, strategyType, ranges]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount);
@@ -191,6 +189,13 @@ function AlphaPool() {
             ))}
           </SelectContent>
         </Select>
+        <StrategyTypeFilter
+          value={strategyType}
+          onChange={(v) => {
+            setStrategyType(v);
+            resetPage();
+          }}
+        />
         <MetricRangeFilters
           value={ranges}
           onChange={(next) => {
@@ -223,42 +228,7 @@ function AlphaPool() {
         </div>
         {pageCount > 1 && (
           <div className="border-t border-border px-4 py-3">
-            <Pagination>
-              <PaginationContent>
-                <PaginationItem>
-                  <PaginationPrevious
-                    href="#"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      setPage((p) => Math.max(1, p - 1));
-                    }}
-                  />
-                </PaginationItem>
-                {Array.from({ length: pageCount }, (_, i) => i + 1).map((p) => (
-                  <PaginationItem key={p}>
-                    <PaginationLink
-                      href="#"
-                      isActive={p === currentPage}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        setPage(p);
-                      }}
-                    >
-                      {p}
-                    </PaginationLink>
-                  </PaginationItem>
-                ))}
-                <PaginationItem>
-                  <PaginationNext
-                    href="#"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      setPage((p) => Math.min(pageCount, p + 1));
-                    }}
-                  />
-                </PaginationItem>
-              </PaginationContent>
-            </Pagination>
+            <TablePagination currentPage={currentPage} pageCount={pageCount} onPageChange={setPage} />
           </div>
         )}
       </section>

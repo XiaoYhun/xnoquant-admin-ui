@@ -25,8 +25,7 @@ import {
   type PeriodSelection,
   type Point,
 } from "@/lib/transform/mft-results";
-import { useStrategyChart } from "@/hooks/api/use-strategy-results";
-import { useStrategyPerformance } from "@/hooks/api/use-strategy-performance";
+import { useMftResultsSource } from "@/hooks/api/use-mft-results-source";
 import {
   ChartCard,
   DropdownPill,
@@ -167,17 +166,20 @@ export function RiskMft({
   strategyId,
   stage,
   period,
+  runId,
 }: {
   strategyId?: string;
   stage: string;
   period: PeriodSelection;
+  runId?: string;
 }) {
   const [sharpeWindow, setSharpeWindow] = useState<number>(30);
 
-  const { data: perf } = useStrategyPerformance(strategyId, stage);
-  const dd = useStrategyChart(strategyId, "drawdown");
-  const sharpe = useStrategyChart(strategyId, "sharpe");
-  const returns = useStrategyChart(strategyId, "returns");
+  const src = useMftResultsSource({ strategyId, stage, runId });
+  const perf = src.perf;
+  const dd = src.drawdown;
+  const sharpe = src.sharpe;
+  const returns = src.returns;
 
   const drawdownPts = useMemo(
     () => filterByPeriod(sliceStage(toPoints(dd.data), dd.data, stage), period),

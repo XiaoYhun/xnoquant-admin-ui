@@ -15,6 +15,7 @@ import { ExecutionView } from "./execution-view";
 import { CostCapacityView } from "./cost-capacity-view";
 import { LatencyView } from "./latency-view";
 import { MftResultsView } from "./mft-results-view";
+import { XalphaMftResultsView } from "./xalpha-mft-results-view";
 import { RunHistoryPicker } from "./run-history-picker";
 import { RunMetaStrip } from "./run-meta-strip";
 import { LiveSnapshotProvider } from "@/hooks/api/use-run-live-snapshot";
@@ -70,10 +71,11 @@ function RunFailedScreen({ reason }: { reason?: string | null }) {
 }
 
 /**
- * Which Results screen a strategy gets. The two are separate components rather than one with
- * branches: the MFT engine reports bar-level results with no orderbook, no fill latency and no
- * per-tick attribution, so its views diverge from the HFT set rather than subsetting it — and
- * HFT-only chrome (the Period row below) has no meaning on the MFT side.
+ * Which Results screen a strategy gets.
+ *
+ * MFT lab (XALPHA editors) keeps the original stage-based Results (Overview / Performance /
+ * Analysis). The six-screen Figma 15204 UI is HFT/Create strategy/Results and is shown for
+ * MFT-type *runs* (manifest `data_kind.kind === "bar"`), not for the MFT lab.
  */
 export function ResultsTab({
   variant = "hft",
@@ -85,8 +87,13 @@ export function ResultsTab({
   /** A just-launched run to select, overriding the picker's newest-run default. */
   focusRun?: Run;
 }) {
-  if (variant === "mft") return <MftResultsView strategyId={strategyId} />;
+  if (variant === "mft") return <XalphaMftResultsView strategyId={strategyId} />;
   return <HftResultsTab strategyId={strategyId} focusRun={focusRun} />;
+}
+
+/** Bar/OHLC runs are the MFT engine; missing `data_kind` stays on the HFT views (safe default). */
+function isMftTypeRun(run?: Run): boolean {
+  return run?.manifest.data_kind?.kind === "bar";
 }
 
 function HftResultsTab({
@@ -148,8 +155,25 @@ function HftResultsTab({
     );
   }, [selectedRun, qc]);
 
+  const mftRun = isMftTypeRun(selectedRun) && !isLive;
+
   return (
     <div className="flex min-w-0 flex-col gap-4 p-4">
+      {mftRun ? (
+        <>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <RunHistoryPicker strategyId={strategyId} selectedRunId={selectedRun?.id} onSelect={setSelectedRun} />
+          </div>
+          {failed ? (
+            <RunFailedScreen reason={selectedRun?.error} />
+          ) : (
+            <LiveSnapshotProvider runId={selectedRun?.id} isLive={isLive} symbolNames={symbolNames}>
+              <MftResultsView runId={selectedRun?.id} />
+            </LiveSnapshotProvider>
+          )}
+        </>
+      ) : (
+        <>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Tabs value={view} onValueChange={(v) => v && setView(v)}>
           <TabsList className={TAB_LIST}>
@@ -203,6 +227,8 @@ function HftResultsTab({
             {view === "Latency" && <LatencyView isLive={isLive} />}
           </div>
         </LiveSnapshotProvider>
+      )}
+        </>
       )}
     </div>
   );

@@ -17,8 +17,7 @@ import {
   yearOf,
   type PeriodSelection,
 } from "@/lib/transform/mft-results";
-import { useStrategyChart, useSummaryTable } from "@/hooks/api/use-strategy-results";
-import { useStrategyPerformance } from "@/hooks/api/use-strategy-performance";
+import { useMftResultsSource } from "@/hooks/api/use-mft-results-source";
 import {
   ChartCard,
   MetricPanel,
@@ -187,16 +186,19 @@ export function PerformanceMft({
   strategyId,
   stage,
   period,
+  runId,
 }: {
   strategyId?: string;
   stage: string;
   period: PeriodSelection;
+  runId?: string;
 }) {
-  const { data: perf } = useStrategyPerformance(strategyId, stage);
-  const { data: summaryRows } = useSummaryTable(strategyId, stage);
-  const returns = useStrategyChart(strategyId, "returns");
-  const pnls = useStrategyChart(strategyId, "pnls");
-  const dd = useStrategyChart(strategyId, "drawdown");
+  const src = useMftResultsSource({ strategyId, stage, runId });
+  const perf = src.perf;
+  const summaryRows = src.summaryRows;
+  const returns = src.returns;
+  const pnls = src.pnls;
+  const dd = src.drawdown;
 
   // Stage slice first (the charts endpoint returns every stage at once), then the Period row.
   const returnPts = useMemo(

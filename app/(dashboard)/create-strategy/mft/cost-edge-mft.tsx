@@ -8,7 +8,7 @@
 import { ChartState } from "@/components/charts/chart-state";
 import { cn, formatAmount } from "@/lib/utils";
 import type { PeriodSelection } from "@/lib/transform/mft-results";
-import { useStrategyPerformance } from "@/hooks/api/use-strategy-performance";
+import { useMftResultsSource } from "@/hooks/api/use-mft-results-source";
 import {
   ChartCard,
   EMPTY,
@@ -83,12 +83,14 @@ function Waterfall({ rows }: { rows: WaterfallRow[] }) {
 export function CostEdgeMft({
   strategyId,
   stage,
+  runId,
 }: {
   strategyId?: string;
   stage: string;
   period: PeriodSelection;
+  runId?: string;
 }) {
-  const { data: perf } = useStrategyPerformance(strategyId, stage);
+  const { perf } = useMftResultsSource({ strategyId, stage, runId });
   const p = perf?.performance;
   const a = perf?.analysis;
 

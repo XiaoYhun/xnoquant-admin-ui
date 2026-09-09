@@ -10,7 +10,7 @@
 import { useMemo, useState } from "react";
 import { DoubleAltArrowDown, DoubleAltArrowUp, Magnifer, AltArrowDown } from "@solar-icons/react";
 
-import { cn, formatAmount } from "@/lib/utils";
+import { cn, formatAmount, formatCompact } from "@/lib/utils";
 import {
   compound,
   monthlyReturns,
@@ -289,9 +289,9 @@ function formatValue(v: number | undefined, format: Format = "number"): string {
   if (v == null || !Number.isFinite(v)) return EMPTY;
   switch (format) {
     case "ratioPct":
-      return `${v > 0 ? "+" : ""}${formatAmount(v * 100, 2)}%`;
+      return formatPct(v * 100);
     case "percent":
-      return `${v > 0 ? "+" : ""}${formatAmount(v, 2)}%`;
+      return formatPct(v);
     case "count":
       return v.toLocaleString("en-US");
     case "periods":
@@ -299,6 +299,13 @@ function formatValue(v: number | undefined, format: Format = "number"): string {
     default:
       return formatAmount(v, 2);
   }
+}
+
+/** Compact once a percent no longer fits a 96px year column (`+748,346.70%` → `+748.3K%`). */
+function formatPct(n: number): string {
+  const abs = Math.abs(n);
+  const body = abs >= 1000 ? formatCompact(abs) : formatAmount(abs, 2);
+  return `${n > 0 ? "+" : n < 0 ? "-" : ""}${body}%`;
 }
 
 function toneClass(v: number | undefined, tone: StatMetric["tone"]): string {
@@ -417,15 +424,17 @@ export function YearlyStatistics({
       </div>
 
       <div className="min-w-0 overflow-x-auto">
-        <div className="min-w-[560px]">
+        {/* Each year column is a fixed width so long values (and many years) scroll instead of
+            painting on top of the next cell. Figma 15205:58375: equal year columns, label 172. */}
+        <div style={{ minWidth: 172 + columns.length * 96 }}>
           {/* Column header. The label column is fixed so every group's rows line up with it. */}
           <div className="flex h-9 items-center border-b border-[#1d2939]">
             <div className="w-[172px] shrink-0 px-3">
               <span className="text-xs leading-[18px] text-[#9db2ce]">Macro</span>
             </div>
             {columns.map((c) => (
-              <div key={c.key} className="flex min-w-0 flex-1 justify-end px-3">
-                <span className="text-xs leading-[18px] text-white">{c.key}</span>
+              <div key={c.key} className="flex w-24 shrink-0 justify-end overflow-hidden px-3">
+                <span className="truncate text-xs leading-[18px] text-white">{c.key}</span>
               </div>
             ))}
           </div>
@@ -458,17 +467,19 @@ export function YearlyStatistics({
                       </div>
                       {columns.map((col, i) => {
                         const v = values.get(m.label)?.[i];
+                        const text = formatValue(v, m.format);
                         return (
-                          <div key={col.key} className="flex min-w-0 flex-1 justify-end px-3">
+                          <div key={col.key} className="flex w-24 shrink-0 justify-end overflow-hidden px-3">
                             <span
+                              title={text}
                               className={cn(
-                                "text-xs leading-[18px] whitespace-nowrap",
+                                "truncate text-xs leading-[18px] tabular-nums",
                                 toneClass(v, m.tone),
                                 // The All column is the summary line, so it carries more weight.
                                 col.key === "All" && "font-medium",
                               )}
                             >
-                              {formatValue(v, m.format)}
+                              {text}
                             </span>
                           </div>
                         );

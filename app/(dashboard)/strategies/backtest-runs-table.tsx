@@ -28,6 +28,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { canMutate, isShared } from "@/lib/rbac";
 import { RunStatusPill } from "@/components/run-status-pill";
 import { RunId } from "@/components/run-id";
+import { StrategyTypeBadge } from "@/components/strategy-type-badge";
 import { useStopRun, useDeleteRun } from "@/hooks/api/use-backtest-runs";
 import { useConsoleLog } from "@/store/console-log-store";
 import type { PaperRunRow } from "@/lib/mock/paper-runs";
@@ -126,6 +127,7 @@ export function BacktestRunsTable({
                 <TableCell className="text-sm font-semibold text-white">
                   <span className="flex min-w-0 items-center">
                     <span className="truncate" title={r.strategyName}>{r.strategyName}</span>
+                    <StrategyTypeBadge type={r.strategyType} />
                     {isShared(r, userId) && (
                       <span className="ml-2 inline-flex shrink-0 items-center rounded-[20px] border border-[#1d2939] bg-[#151a24] px-2 py-0.5 text-[10px] font-normal text-[#9db2ce]">
                         Shared

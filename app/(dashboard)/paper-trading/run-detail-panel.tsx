@@ -2,7 +2,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { format, isValid, parseISO } from "date-fns";
-import { AltArrowDown, Maximize, MenuDots, Pause, Plain, Rocket } from "@solar-icons/react";
+import { AltArrowDown, Maximize, Pause, Plain, Rocket } from "@solar-icons/react";
 import {
   Dialog,
   DialogClose,
@@ -13,7 +13,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { OverviewView } from "../create-strategy/overview-view";
@@ -22,7 +21,6 @@ import { RiskView } from "../create-strategy/risk-view";
 import { ExecutionView } from "../create-strategy/execution-view";
 import { CostCapacityView } from "../create-strategy/cost-capacity-view";
 import { LatencyView } from "../create-strategy/latency-view";
-import { ReorderDotsVerticalIcon } from "@/components/icons/reorder-dots-vertical";
 import { CloseIcon } from "@/components/icons/close";
 import { cn } from "@/lib/utils";
 import { canMutate } from "@/lib/rbac";
@@ -43,6 +41,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { useConsoleLog } from "@/store/console-log-store";
 import { marketOf } from "@/components/market-tabs";
 import { CodeEditor } from "../create-strategy/code-editor";
+import { RunMetaStrip } from "../create-strategy/run-meta-strip";
+import { MftResultsView } from "../create-strategy/mft-results-view";
 import { TradeCycles } from "./trade-cycles";
 import { useRunOpenPositions } from "@/hooks/api/use-run-live";
 import {
@@ -104,6 +104,7 @@ function ChartsTab({
   summaryLoading,
   failed,
   failureReason,
+  strategyType,
 }: {
   runId: string | undefined;
   isLive: boolean;
@@ -111,6 +112,7 @@ function ChartsTab({
   summaryLoading: boolean;
   failed: boolean;
   failureReason?: string | null;
+  strategyType?: "MFT" | "HFT";
 }) {
   // The engine died before finalizing any artifact, so `/summary`, `/equity-curve`, `/cost-curve`
   // and `/trades` can only 404/500 for this run. The notice is the whole tab: rendering the views
@@ -137,6 +139,13 @@ function ChartsTab({
   if (summaryLoading && !isLive) {
     return <div className="p-4 text-sm text-[#9db2ce]">Loading results…</div>;
   }
+  if (strategyType === "MFT" && !isLive) {
+    return (
+      <div className="p-4">
+        <MftResultsView runId={runId} />
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col gap-3 p-4">
       <ResultsViews runId={runId} isLive={isLive} />
@@ -160,12 +169,27 @@ const VIEW_TAB_LIST = "gap-2 rounded-none bg-transparent p-0";
 const VIEW_TAB_TRIGGER =
   "rounded-[40px] px-3 py-2 text-sm text-[#9db2ce] data-[state=active]:bg-[#1d2939] data-[state=active]:text-white data-[state=active]:shadow-none";
 
+// The "Period:" row (Figma 15235:33194), carried over from the Results tab so both presentations
+// of the same six views offer the same controls. NOT WIRED TO DATA there or here — in-sample /
+// out-of-sample exists nowhere in the HFT API, so All/IS/OS all describe the whole run. See the
+// longer note in results-tab.tsx.
+const PERIODS = ["All", "IS", "OS"] as const;
+type Period = (typeof PERIODS)[number];
+
+const PERIOD_TAB_LIST = "gap-3 rounded-none bg-transparent p-0";
+const PERIOD_TAB_TRIGGER =
+  "rounded-[40px] px-3 py-1 text-xs font-normal leading-[18px] text-[#9db2ce] data-[state=active]:bg-[#1d2939] data-[state=active]:text-white data-[state=active]:shadow-none";
+
 function ResultsViews({ runId, isLive }: { runId: string | undefined; isLive: boolean }) {
   // A running run has no persisted artifact to read — /summary, /equity-curve, /cost-curve and
   // /trades all refuse until it stops (see the `useRunSummary` call in RunDetailBody). The views
   // merge the live frame instead, so they are told not to ask.
   const summaryEnabled = !isLive;
   const [view, setView] = useState<View>("Overview");
+  const [period, setPeriod] = useState<Period>("All");
+  // The strip reads a Run, which the panel's own PaperRunRow is only a projection of. Keyed
+  // ["run", id], so this shares RunDetailBody's query rather than adding a request of its own.
+  const { data: runRecord } = useRun(runId);
   return (
     <div className="flex min-w-0 flex-col gap-4">
       <Tabs value={view} onValueChange={(v) => v && setView(v as View)}>
@@ -177,6 +201,23 @@ function ResultsViews({ runId, isLive }: { runId: string | undefined; isLive: bo
           ))}
         </TabsList>
       </Tabs>
+
+      <div className="flex items-center gap-3">
+        <span className="text-xs leading-[18px] font-medium text-white">Period:</span>
+        <Tabs value={period} onValueChange={(v) => v && setPeriod(v as Period)}>
+          <TabsList className={PERIOD_TAB_LIST}>
+            {PERIODS.map((p) => (
+              <TabsTrigger key={p} value={p} className={PERIOD_TAB_TRIGGER}>
+                {p}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+      </div>
+
+      {/* What the views below are describing: symbols, engine, account, period. */}
+      <RunMetaStrip run={runRecord} />
+
       {/* Same remount-per-run guard as the Results tab — see results-tab.tsx. */}
       <div key={runId ?? "no-run"} className="min-w-0">
         {view === "Overview" && <OverviewView runId={runId} summaryEnabled={summaryEnabled} isLive={isLive} />}
@@ -198,6 +239,7 @@ function LiveChartsTab({
   error,
   failed,
   failureReason,
+  strategyType,
 }: {
   runId: string | undefined;
   /** Whether the run is RUNNING — not whether its mode is live. See the call site. */
@@ -207,6 +249,7 @@ function LiveChartsTab({
   error: unknown;
   failed: boolean;
   failureReason?: string | null;
+  strategyType?: "MFT" | "HFT";
 }) {
   // The REST /summary 500s for the whole life of a running run (parquet sidecar still being
   // written) — the live/stream frame is the only source until it stops, so the KPIs read the
@@ -232,6 +275,14 @@ function LiveChartsTab({
   }
   if (summaryLoading && !liveSummary) {
     return <div className="p-4 text-sm text-[#9db2ce]">Loading results…</div>;
+  }
+
+  if (strategyType === "MFT" && !isLive) {
+    return (
+      <div className="p-4">
+        <MftResultsView runId={runId} />
+      </div>
+    );
   }
 
   return (
@@ -272,10 +323,12 @@ function TradeRowView({ t }: { t: TradeHistoryRow }) {
 // because it's the "right now" state, whereas the history below is what already happened.
 function OpenPositions({ run }: { run: PaperRunRow }) {
   const isLive = run.status === "running";
-  // Always rendered so the section is visibly present; /live 404s harmlessly for runs that never
-  // published a snapshot (backtests, finished runs) and the empty state says so.
+  // A backtest replays history against a simulated book — it never publishes a live snapshot, so
+  // `/live` is a guaranteed 404 for one and simply isn't asked. Other non-streaming runs still
+  // fall back to the one-shot read, and the empty state covers a run that published nothing.
+  const isBacktest = run.mode === "backtest";
   const { snapshot, state } = useLiveSnapshot();
-  const { data: polled = [], isLoading: pollLoading } = useRunOpenPositions(run.id, !isLive);
+  const { data: polled = [], isLoading: pollLoading } = useRunOpenPositions(run.id, !isLive && !isBacktest);
   const positions = isLive ? (snapshot?.positions ?? []) : polled;
   const isLoading = isLive ? state === "connecting" : pollLoading;
 
@@ -703,26 +756,14 @@ function ResultsHeaderBar({
         </div>
       </div>
 
-      <Popover>
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            aria-label="More"
-            className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:text-white"
-          >
-            <MenuDots weight="Bold" className="size-4" />
-          </button>
-        </PopoverTrigger>
-        <PopoverContent align="end" className="w-40 p-1">
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex w-full cursor-pointer items-center rounded-md px-2 py-1.5 text-left text-sm text-white transition-colors hover:bg-secondary"
-          >
-            Close panel
-          </button>
-        </PopoverContent>
-      </Popover>
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Close"
+        className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:text-white"
+      >
+        <CloseIcon className="size-4" />
+      </button>
     </div>
   );
 }
@@ -735,13 +776,13 @@ function LiveTabBar({
   active,
   onChange,
   onClose,
-  showMenu = true,
+  showClose = true,
 }: {
   tabs: readonly Tab[];
   active: Tab;
   onChange: (tab: Tab) => void;
   onClose: () => void;
-  showMenu?: boolean;
+  showClose?: boolean;
 }) {
   return (
     <div className="flex h-12 shrink-0 items-center gap-1 border-b border-[#1d2939] bg-surface pr-4">
@@ -767,29 +808,17 @@ function LiveTabBar({
           </button>
         );
       })}
-      {/* In-table presentation supplies its own absolutely-positioned X, so the ⋮ menu — whose
-          only entry is "Close panel" — would be redundant there. */}
-      {showMenu && (
-        <Popover>
-          <PopoverTrigger asChild>
-            <button
-              type="button"
-              aria-label="More"
-              className="ml-auto inline-flex cursor-pointer items-center justify-center text-muted-foreground transition-colors hover:text-white"
-            >
-              <ReorderDotsVerticalIcon className="size-5" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent align="end" className="w-40 p-1">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex w-full cursor-pointer items-center rounded-md px-2 py-1.5 text-left text-sm text-white transition-colors hover:bg-secondary"
-            >
-              Close panel
-            </button>
-          </PopoverContent>
-        </Popover>
+      {/* In-table presentation supplies its own absolutely-positioned X, so this one would be
+          redundant there. */}
+      {showClose && (
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="ml-auto inline-flex cursor-pointer items-center justify-center text-muted-foreground transition-colors hover:text-white"
+        >
+          <CloseIcon className="size-5" />
+        </button>
       )}
     </div>
   );
@@ -861,7 +890,7 @@ function RunDetailBody({
         )}
 
         {run.mode === "live" ? (
-          <LiveTabBar tabs={visibleTabs} active={activeTab} onChange={setTab} onClose={onClose} showMenu={!inline} />
+          <LiveTabBar tabs={visibleTabs} active={activeTab} onChange={setTab} onClose={onClose} showClose={!inline} />
         ) : (
               <div className="flex h-14 shrink-0 items-stretch border-b border-border bg-surface">
                 {visibleTabs.map((t) => {
@@ -899,6 +928,7 @@ function RunDetailBody({
                 error={summaryError}
                 failed={failed}
                 failureReason={run.error}
+                strategyType={run.strategyType}
               />
             ) : (
               <ChartsTab
@@ -908,6 +938,7 @@ function RunDetailBody({
                 summaryLoading={summaryLoading}
                 failed={failed}
                 failureReason={run.error}
+                strategyType={run.strategyType}
               />
             ))}
           {activeTab === "Trades" && <TradesTab run={run} />}
@@ -969,8 +1000,8 @@ export function RunDetailPanel({
 
 // In-table presentation — Live trade renders this in place of the runs table rather than over
 // the whole viewport, so the orderbook rail beside it stays visible. The X is pinned to the
-// panel's top-right corner, outside the header/tab-bar flow, and replaces the slide-in's ⋮ menu
-// (whose only entry was "Close panel").
+// panel's top-right corner, outside the header/tab-bar flow, rather than sitting inside it as the
+// slide-in's close button does.
 export function RunDetailInline({ run, onClose }: { run: PaperRunRow; onClose: () => void }) {
   return (
     // No overflow-hidden here: the close button straddles the top-right corner and must not clip.

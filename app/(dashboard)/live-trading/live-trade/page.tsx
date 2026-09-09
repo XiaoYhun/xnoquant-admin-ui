@@ -1,5 +1,7 @@
 "use client";
 import { Suspense, useMemo, useState } from "react";
+import { TablePagination } from "@/components/table-pagination";
+import { StrategyTypeFilter, type StrategyTypeFilterValue } from "@/components/strategy-type-filter";
 import { useSearchParams } from "next/navigation";
 import { MinimalisticMagnifer } from "@solar-icons/react";
 import {
@@ -9,14 +11,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination";
 import { useLiveRuns } from "@/hooks/api/use-live-runs";
 import { useDebounced } from "@/hooks/use-debounced";
 import { useUrlParam } from "@/hooks/use-url-param";
@@ -108,6 +102,7 @@ function LiveTrade() {
   const [market, setMarket] = useState<Market>(() => marketFromParam(searchParams.get("market")));
   const [search, setSearch] = useState("");
   const [symbolFilter, setSymbolFilter] = useState<string>("all");
+  const [strategyType, setStrategyType] = useState<StrategyTypeFilterValue>("all");
   const [onlyRunning, setOnlyRunning] = useState(false);
   // Sharpe / Return % / Max DD % bounds — client-side, like symbol and paging: `GET /api/runs`
   // has no metric filter.
@@ -174,10 +169,11 @@ function LiveTrade() {
         (r) =>
           (!idSearch || r.id.toLowerCase().includes(idNeedle)) &&
           (symbolFilter === "all" || r.symbols.some((s) => s.symbol === symbolFilter)) &&
+          (strategyType === "all" || r.strategyType === strategyType) &&
           matchesMarket(r, market) &&
           matchesMetricRanges(r, ranges),
       ),
-    [runs, symbolFilter, market, idSearch, idNeedle, ranges],
+    [runs, symbolFilter, market, strategyType, idSearch, idNeedle, ranges],
   );
 
   // Headline numbers describe the current market tab, not the search/status narrowing.
@@ -251,6 +247,13 @@ function LiveTrade() {
             ))}
           </SelectContent>
         </Select>
+        <StrategyTypeFilter
+          value={strategyType}
+          onChange={(v) => {
+            setStrategyType(v);
+            resetPage();
+          }}
+        />
         <MetricRangeFilters
           value={ranges}
           onChange={(next) => {
@@ -315,42 +318,7 @@ function LiveTrade() {
           </div>
           {pageCount > 1 && (
             <div className="border-t border-border px-4 py-3">
-              <Pagination>
-                <PaginationContent>
-                  <PaginationItem>
-                    <PaginationPrevious
-                      href="#"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        setPage((p) => Math.max(1, p - 1));
-                      }}
-                    />
-                  </PaginationItem>
-                  {Array.from({ length: pageCount }, (_, i) => i + 1).map((p) => (
-                    <PaginationItem key={p}>
-                      <PaginationLink
-                        href="#"
-                        isActive={p === currentPage}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          setPage(p);
-                        }}
-                      >
-                        {p}
-                      </PaginationLink>
-                    </PaginationItem>
-                  ))}
-                  <PaginationItem>
-                    <PaginationNext
-                      href="#"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        setPage((p) => Math.min(pageCount, p + 1));
-                      }}
-                    />
-                  </PaginationItem>
-                </PaginationContent>
-              </Pagination>
+              <TablePagination currentPage={currentPage} pageCount={pageCount} onPageChange={setPage} />
             </div>
           )}
             </>

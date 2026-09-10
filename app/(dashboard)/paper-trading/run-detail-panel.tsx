@@ -253,7 +253,7 @@ function ResultsViews({ runId, isLive }: { runId: string | undefined; isLive: bo
         {view === "Overview" && <OverviewView runId={runId} summaryEnabled={summaryEnabled} isLive={isLive} sample={sample} />}
         {view === "Performance" && <PerformanceView runId={runId} summaryEnabled={summaryEnabled} isLive={isLive} sample={sample} />}
         {view === "Risk" && <RiskView runId={runId} isLive={isLive} sample={sample} />}
-        {view === "Execution" && <ExecutionView runId={runId} isLive={isLive} />}
+        {view === "Execution" && <ExecutionView runId={runId} isLive={isLive} sample={sample} />}
         {view === "Cost & Capacity" && <CostCapacityView runId={runId} summaryEnabled={summaryEnabled} isLive={isLive} sample={sample} />}
         {view === "Latency" && <LatencyView isLive={isLive} />}
       </div>

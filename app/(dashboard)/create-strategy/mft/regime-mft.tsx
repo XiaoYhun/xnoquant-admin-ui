@@ -29,6 +29,7 @@ import {
   count,
   num,
   pctFromPercent,
+  shareFromRatio,
   toneBySign,
   type Metric,
 } from "./results-chrome";
@@ -95,7 +96,10 @@ function bucketRow(label: string, bucket: VolRegimeBucket | undefined) {
   return {
     label,
     sharpe: bucket?.sharpe,
-    daysTraded: bucket?.days_traded,
+    // Round-trips closed on a day in this bucket. Both this and `win_rate` are `#[serde(default)]`
+    // upstream, so a bucket cached before they existed deserializes as 0 / null rather than failing.
+    trades: bucket?.trades,
+    winRate: bucket?.win_rate,
     pnlShare: bucket?.pnl_share_pct,
   };
 }
@@ -210,10 +214,11 @@ export function RegimeMft({
               <TableRow key={r.label}>
                 <TableCell className="py-2 text-xs text-white">{r.label}</TableCell>
                 <TableCell className="py-2 text-right text-xs text-white">{num(r.sharpe)}</TableCell>
-                <TableCell className="py-2 text-right text-xs text-[#9db2ce]">{EMPTY}</TableCell>
-                {/* API has days-with-trades, not a fill count — closest figure for this column. */}
                 <TableCell className="py-2 text-right text-xs text-[#9db2ce]">
-                  {volStatus === "ready" ? count(r.daysTraded) : EMPTY}
+                  {shareFromRatio(r.winRate)}
+                </TableCell>
+                <TableCell className="py-2 text-right text-xs text-[#9db2ce]">
+                  {volStatus === "ready" ? count(r.trades) : EMPTY}
                 </TableCell>
                 <TableCell className={`py-2 text-right text-xs ${toneBySign(r.pnlShare)}`}>
                   {pctFromPercent(r.pnlShare)}

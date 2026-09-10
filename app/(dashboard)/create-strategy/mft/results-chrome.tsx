@@ -5,7 +5,7 @@
 import type { ReactNode } from "react";
 import { AltArrowDown } from "@solar-icons/react";
 
-import { cn, formatAmount } from "@/lib/utils";
+import { cn, formatAmount, formatDurationDays } from "@/lib/utils";
 
 // Gradient text, clipped to the glyphs. The design uses these for every signed or graded number;
 // a flat colour is only correct for a neutral one. Angles are the Figma values rounded to a
@@ -39,9 +39,35 @@ export function pctFromPercent(v: number | null | undefined, digits = 2): string
   return `${v > 0 ? "+" : ""}${formatAmount(v, digits)}%`;
 }
 
+/**
+ * Percent from a ratio WITHOUT a sign — for shares of a whole (fill rate, % of trades under 6h),
+ * where `pctFromRatio`'s leading "+" would read as a gain rather than a proportion.
+ */
+export function shareFromRatio(v: number | null | undefined, digits = 1): string {
+  if (v == null || !Number.isFinite(v)) return EMPTY;
+  return `${formatAmount(v * 100, digits)}%`;
+}
+
 export function num(v: number | null | undefined, digits = 2): string {
   if (v == null || !Number.isFinite(v)) return EMPTY;
   return formatAmount(v, digits);
+}
+
+/**
+ * Seconds as the coarsest unit that still reads precisely — "45s", "12m", "3.5h", "2.1d".
+ * `RunSummary.avg_holding_time_secs` spans a scalp and a multi-day swing on the same screen.
+ */
+export function duration(secs: number | null | undefined): string {
+  if (secs == null || !Number.isFinite(secs) || secs < 0) return EMPTY;
+  if (secs < 60) return `${formatAmount(secs, 0)}s`;
+  if (secs < 3600) return `${formatAmount(secs / 60, 0)}m`;
+  if (secs < 86_400) return `${formatAmount(secs / 3600, 1)}h`;
+  return `${formatAmount(secs / 86_400, 1)}d`;
+}
+
+/** Days as the design writes a duration — `2.75` → `2d18h`. */
+export function durationDays(days: number | null | undefined): string {
+  return formatDurationDays(days) ?? EMPTY;
 }
 
 export function count(v: number | null | undefined): string {

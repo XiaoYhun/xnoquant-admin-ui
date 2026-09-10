@@ -169,3 +169,169 @@ Handed over as a screenshot (not in `user-tasks.md`): a 17-page list was renderi
 - **Verified in Chrome** against the real dev API: Backtesting All = 17 pages of mixed rows → MFT = 11 pages, every row MFT-badged → HFT = 7 pages, every row HFT-badged. Paper Trading MFT → "No paper strategies found." (the dev API's paper runs are all HFT — correct empty state). Alpha pool's single run-less member ("Diep Test") disappears on HFT. No console errors.
 - Live trade renders the control but the dev API still has no live runs, so its predicate (identical one-liner to the other three) is code-verified rather than observed on that page — same gap noted for the metric range filters.
 - NOTE: this is independent of the sidebar's global HFT/MFT lab toggle, which scopes Create Strategy and Strategy List only; the run lists have never read `useMode()`. If the two should agree, that's a separate decision.
+
+## Server-side filtering + pagination on the run lists (2026-09-10) — tsc + eslint clean, 218/218 vitest, browser-verified
+Handed over in chat: `/api/runs` grew a `mode` filter; move paging to the backend and stop pulling one
+wide window into the browser. Confirmed against the live spec and `hft-platform@origin/develop`
+(`4ad5858 add filter mode`): `GET /api/runs` now takes `page`/`size`/`status`/`q`/`asset_kind`/**`mode`**/
+`symbol`/`sort_by`/`sort_dir` and inclusive `min|max_sharpe`, `min|max_return_pct`, `min|max_drawdown_pct`.
+- ✅ **`gen:types` re-run** — the checked-in spec predated `mode`.
+- ✅ **`RunsQuery` is now the API's own parameter set** (`hooks/api/use-runs.ts`) and `fetchRunsPage`
+  serializes it without a mapping table. New `fetchRunRowPage` returns `{ rows, total }` — `total` is
+  the filtered COUNT(*), which is what each pager measures itself against.
+- ✅ **All three run lists page server-side** — Backtesting (`strategies/page.tsx`), Paper Trading, Live
+  trade. Every toolbar control now goes to the server: search → `q`, status / Only Running → `status`,
+  market tab → `asset_kind` (`assetKindOf` in `components/market-tabs.tsx`), symbol → `symbol`, the three
+  metric bounds → `min|max_*`, page/rows-per-page → `page`/`size`. Nothing is narrowed in the browser.
+  The search box and the metric boxes are debounced so a keystroke isn't a request.
+- ✅ **Percent → fraction conversion** (`metricRangeParams`, `components/metric-range-filters.tsx` + 5 new
+  tests) — the server stores `return_pct` and `max_drawdown_pct` as FRACTIONS (`net_pnl / starting_capital`)
+  and `max_drawdown_pct` as a positive magnitude, so the percent boxes are divided by 100 and Max DD is
+  taken by magnitude and reordered. Sharpe is a bare ratio and passes through.
+- ✅ **Id search moved to the server** — `q` now matches strategy name OR run id, so the `isIdQuery`
+  client-side split is gone from the run lists; `runSearchQuery` (`lib/utils.ts` + 3 tests) only strips the
+  leading `#` the tables print. `isIdQuery` stays for Strategy List, which still filters in the browser.
+- ✅ **Deep links survive paging** — `useSelectedRunRow` fetches `?run=<id>` by id when that row isn't on the
+  loaded page (it used to be found by scanning the whole window). No fetch while the row is on screen.
+- ✅ **Live trade KPIs counted by the server** (`useLiveRunCounts`) — three `size=1` calls read `total` for
+  all/running/paused in the current market tab. Cumulative PnL joins Daily PnL and Net Exposure as an
+  explicit "—": summing PnL needs every live run and `/api/runs` totals none of them.
+- ✅ **HFT/MFT filter dropped from the three run lists** (user's call) — the API has no engine/data_kind
+  parameter, so applying it after a server page would give short pages and a wrong total. The HFT/MFT badge
+  stays on every row, and Alpha pool keeps the control (it pages over promotions, not runs).
+- ✅ **Symbol filter is now catalog-backed** (`components/symbol-filter.tsx`) — a searchable popover over the
+  instrument catalog, scoped to the market tab, capped at 100 rendered matches. Options derived from the
+  loaded rows would only ever describe the current page.
+- ✅ **The aggregate route survives, narrowed in purpose** — `app/hft/api/runs/aggregate/route.ts` is no
+  longer on any list's path; it serves the two readers that consume runs as a SET (Alpha pool's
+  promotion→run join, the Risk screen's running-run lookup), which would otherwise miss anything past row 200.
+- **Verified in Chrome against the real dev API:** Backtesting went from 17 client-side pages to **120**
+  server pages (`total` 1200 vs the ~170 the 1000-row window could reach — most of the list was invisible
+  before). Crypto tab → `asset_kind=crypto`, 16 rows, every row BTCUSDT/Crypto. Symbol popover filters the
+  catalog live (`BTCUSD` → BTCUSD/BTCUSD1/BTCUSDC/…) and picking BTCUSDT narrows the table to 2 pages.
+  `#01a08980-7a66` in the search box returns exactly that one run. Sharpe ≥ 1 → 30 pages, all ≥ 1.00.
+  Return % ≥ 10 → 31 pages, all ≥ +10.01% (proves the /100). Max DD % ≤ 8 → 24 pages, all |MDD| ≤ 8 and no
+  "—" rows. Paper Trading 7 pages. Live trade: 8 live runs on dev now, Active Strategies reads 0/8 from the
+  count queries and Only Running correctly empties the table while the card keeps describing the tab.
+  Alpha pool unchanged. No console errors, no duplicate-key warnings.
+
+### ⚠️ UPSTREAM BUG found while verifying — `GET /api/runs` fans out per sample_scope
+The long-known "duplicate run rows" (one id three times) now has a root cause, and server-side paging is
+what makes it visible. `crates/api/src/routes/runs/crud.rs:96` joins
+`LEFT JOIN run_summary rs ON rs.run_id = sr.id` with no scope predicate, but migration
+`0034_run_result_sample_scope.sql` changed `run_summary`'s primary key from `(run_id)` to
+`(run_id, sample_scope)` — up to three rows per run (`in_sample` / `out_of_sample` / `all`). So a run whose
+split backtest has been materialized is emitted up to 3× in both the page and its paired `COUNT(*)`.
+The doc comment above the function still calls it a "cheap PK-indexed join", which was true before 0034.
+Observed: Backtesting page 1 renders 7 of 10 rows after our id-dedupe, and `01a0892c-2871` is both the last
+row of page 1 and the first row of page 2. Live trade reports 8 live runs and renders 5.
+Three consequences: short pages, an inflated `total` (so page counts and Live trade's "0/8" denominator
+overstate), and metric filters that can match on a scope other than the one displayed —
+`attach_summary_metrics` fills the row's Sharpe/Return/MaxDD from `SampleScope::InSample`, while the filter
+compares against every scope's row.
+Fix is one predicate on the join, in the HFT repo: `AND rs.sample_scope = 'in_sample'` (matching what the
+list displays). NOT applied here — different repo, not asked for.
+Our client-side dedupe-by-id stays either way: React needs unique row keys.
+
+### Not carried over
+- **`sort_by`/`sort_dir` are unused.** The API sorts by `created_at desc` by default, which is what the
+  tables showed before; no column header on these lists is clickable, so nothing asked for it.
+- **Strategy List** still filters and pages in the browser — it lists XALPHA strategies, not runs.
+
+## Mock chart data removed + /summary and /volatility-regime wired everywhere (2026-09-10) — tsc + eslint clean, 230/230 vitest, browser-verified
+Two asks in one pass: stop drawing invented data on the unwired charts, then re-audit
+`GET /api/runs/{id}/summary` and `GET /api/runs/{id}/volatility-regime` field by field and wire
+everything they actually serve. Audit method: enumerate the schema fields from `types/api/hft.ts`
+and grep the whole app for each one — 23 of RunSummary's 44 fields were unread, and 6 of the
+volatility-regime fields.
+
+### Invented data removed
+- ✅ **Capacity Curve** (`cost-capacity-view.tsx`) — a hand-written Sharpe-decay formula
+  (`3.5 - 2.9x³ + sin`) over fake `1M…60M` capital buckets. Now an explained empty state; the
+  inert metric pill that "controlled" it went with it.
+- ✅ **Slippage Distribution + Latency Distribution** (`execution-view.tsx`) — a fabricated bell
+  curve and a fabricated right-skewed one. Both are empty states now, and their inert All/Maker/
+  Taker pills are gone.
+- ✅ **Four invented Execution metrics** — `Avg Latency 1.82 ms`, `Slippage (Avg) -0.38 bp`,
+  `Slippage (Std) 0.72 bp`, `Market Impact -0.64 bp` were hardcoded constants sitting beside the
+  real trace-derived fill-rate figures and reading exactly like them.
+- ✅ **Six invented Risk ratios** — `Sortino 4.56`, `Calmar 8.34`, `Omega 8.34`,
+  `Max DD Duration 2d18h`, `VaR -6,530`, `CVaR -9,350`. Worse than recorded: `Sharpe 3.12` and
+  `Max Drawdown -4.10%` were ALSO constants, overwritten only when a live snapshot existed — so a
+  finished run showed eight invented numbers, not six.
+- A metric with no source now renders muted with the reason on hover (`unavailable`), rather than a
+  bare dash that looks like a loading state.
+
+### Newly wired from `/summary`
+- ✅ **HFT Risk ratio card** — Sharpe, Sortino, Calmar, Max Drawdown, Max DD Duration, VaR, CVaR all
+  read the summary (`sortino_annualized ?? sortino`, `calmar`, `max_drawdown_duration_days`,
+  `var_95`, `cvar_95`), merged with the live frame for the two fields it publishes. **Omega is the
+  one ratio the API does not compute** and is the only dash left. VaR/CVaR also picked up the run's
+  own settlement currency — the card had `USDT` hardcoded and was printing it against VND runs.
+- ✅ **HFT Overview strip** — `MDD Duration` (was permanently dashed).
+- ✅ **HFT Execution** — `Slippage (Avg)` from `slippage_bps`; `Fill Rate` falls back to
+  `summary.fill_rate` when the run journaled no trace (every backtest).
+- ✅ **MFT Overview strip** — `MDD Duration`, `Fill Rate`.
+- ✅ **MFT Execution** — `Avg Holding Time` (`avg_holding_time_secs`), `Trades < 6h`,
+  `Overnight Trades`, `Fill Rate`, `Slippage (Avg)`. NOTE both `*_trades*_pct` fields are FRACTIONS
+  in [0,1] despite the `_pct` suffix.
+- ✅ **MFT Risk** — `Max DD Duration`, `Max Consecutive Days` (+ the streak's PnL as its sub-label).
+- ✅ **`useMftResultsSource` now returns the raw `summary`** — `StrategyPerformanceDetail` (the XALPHA
+  shape both feeds converge on) has no slot for these run-only fields, so the panels read them
+  directly. Undefined on the XALPHA path, where they genuinely do not exist.
+
+### Newly wired from `/volatility-regime`
+- ✅ **Regime breakdown table** — the `Win rate` column was hardcoded `EMPTY` and `Trades` was
+  showing `days_traded` under a comment saying no trade count existed. Both `win_rate` and `trades`
+  are on `VolRegimeBucket` now (added upstream with `#[serde(default)]`), and both are wired.
+  **Verified:** 82 + 665 = 747 trades against the summary's `total_trades` 753 — the 6 missing fall
+  on ATR-warmup days the endpoint drops (`days_dropped_no_atr`).
+
+### `oversized` — the API's own placeholder flag, now honoured
+- ✅ `RunSummary.oversized` marks a run whose parquet artifacts were too large for the result
+  service to load. The API still answers **200**, but every other field on the body is a
+  zeroed/`None` PLACEHOLDER, not a computed value — so rendering it prints a confident `0.00`
+  Sharpe and `0` drawdown for a run that may have done anything. `realSummary()`
+  (`hooks/api/use-runs.ts`, 4 unit tests) drops such a summary, and every panel falls back to its
+  ordinary "no data" state. Applied in HFT Risk, HFT Execution and the whole MFT feed.
+
+### ⚠️ UPSTREAM BUG — `longest_recovery_days` returns an epoch-day, not a span
+Found while wiring MFT Risk. On run `01a08924-c639` (spans Jan 2020 → Aug 2026, ~2,420 days),
+`/summary` returns `longest_recovery_days: 18291.17`. That is 50 years inside a 6.6-year run, and
+18,291 days after the unix epoch lands in Jan 2020 — the run's own start date. The field carries an
+absolute epoch-day rather than a difference. Wiring it rendered "18291d4h", so **Longest Recovery
+was left on its local derivation** with a comment; wire it once upstream returns a span.
+`max_drawdown_duration_days` from the same payload IS a real difference (1685.88d inside that run,
+6.13d on the HFT run) and is wired.
+
+### Still unsourced — stated in the UI, not invented
+Omega Ratio · Avg Latency (engine telemetry, live-only, on the Latency tab) · Slippage (Std) ·
+Market Impact · Max Capacity · Return/Turnover · Top-3 Hours · Profit/Tick Ratio · After-Fee Buffer ·
+Slippage + Latency + Holding-time + Exit-reason distributions (all per-fill; no endpoint returns
+individual fills) · PnL by session hour. `days_dropped_no_atr` / `total_pnl_pct` /
+`mean_daily_pct` / `std_daily_pct` / `pnl_pct` on the regime payload have no slot in the design.
+
+### Verified in Chrome against the real dev API
+- HFT run `#01a08980-7a66` (VND, 9,272 trades) → Risk reads **Sharpe 56.43 · Sortino 119.74 ·
+  Calmar 424.58 · Omega — · Max DD -42.82% · Max DD Duration 6d3h · VaR 101,100 ₫ · CVaR 129,009 ₫**,
+  all previously invented constants. Overview strip MDD Duration 6d3h agrees with the Risk tab.
+  Cost & Capacity draws its three real panels and states the Capacity Curve.
+- HFT run `#01a0892c-2871` → Execution shows Slippage (Avg) 0.00 bp, Avg Latency/Slippage (Std)/
+  Market Impact muted dashes, and both distributions as explained empty states.
+- MFT run `#01a08924-c639` → Execution: Avg Holding Time 35m (2073.7s), Fill Rate 100.0%,
+  Slippage 0.00 bp, Trades<6h and Overnight dashed (the API returns null for both on this run).
+  Risk: Max DD Duration 1685d21h, Max Consecutive Days 20 (-2.16% total). Regime: Win rate
+  25.6%/28.3%, Trades 82/665. No console errors on any of them.
+- Payload cross-checked directly by intercepting `/summary` in the page, so every figure above was
+  matched against the raw JSON rather than eyeballed.
+
+### Notes
+- `pctFromRatio` signs its output (`+100.0%`), which is wrong for a share of a whole. Added
+  `shareFromRatio` for fill rate / win rate / trade-share, and used it in all four places.
+- `formatDurationDays` lives in `lib/utils.ts` — three screens needed the same `2.75 → 2d18h`.
+- `ChartCard.children` is now optional: a panel whose source does not exist has only a state.
+- `execution-mft`'s standing "nothing here has a source" note is now conditional — it contradicted
+  the panel once four of its metrics started rendering.
+- PRE-EXISTING, not investigated: opening **Execution** on the 9,272-trade HFT run froze the
+  renderer (the `/trace/history` fetch + render). Reproduced twice; unrelated to these changes,
+  which only REMOVED two charts from that view. Verified Execution on a smaller run instead.

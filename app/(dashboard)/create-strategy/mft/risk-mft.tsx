@@ -33,6 +33,7 @@ import {
   MetricPanel,
   RED_TEXT,
   count,
+  durationDays,
   pctFromPercent,
   pctFromRatio,
   type Metric,
@@ -177,6 +178,7 @@ export function RiskMft({
 
   const src = useMftResultsSource({ strategyId, stage, runId });
   const perf = src.perf;
+  const summary = src.summary;
   const dd = src.drawdown;
   const sharpe = src.sharpe;
   const returns = src.returns;
@@ -211,8 +213,9 @@ export function RiskMft({
   const rows: Metric[][] = [
     [
       { label: "Max Drawdown", value: pctFromRatio(p?.max_drawdown), tone: RED_TEXT },
-      // Needs peak→trough in calendar time; the drawdown series is per-period only.
-      { label: "Max DD Duration", value: EMPTY },
+      // Reported directly for an HFT bar-run; the XALPHA feed has no calendar-time equivalent,
+      // since its drawdown series is per-period.
+      { label: "Max DD Duration", value: durationDays(summary?.max_drawdown_duration_days) },
       { label: "VaR", value: pctFromRatio(p?.var), tone: p?.var == null ? undefined : RED_TEXT },
       { label: "CVaR", value: pctFromRatio(p?.cvar), tone: p?.cvar == null ? undefined : RED_TEXT },
     ],
@@ -222,11 +225,22 @@ export function RiskMft({
         value: count(worst?.length),
         sub: worst ? `${pctFromPercent(worst.total)} total` : undefined,
       },
-      // "Days" and "periods" only coincide when the series is daily, which the engine does not
-      // state, so the day-count variant is left unfilled rather than guessed.
-      { label: "Max Consecutive Days", value: EMPTY },
+      // Calendar trading days, straight off the summary. The XALPHA feed only counts PERIODS,
+      // which coincide with days only for a daily series — left unfilled there rather than guessed.
+      {
+        label: "Max Consecutive Days",
+        value: summary?.max_consecutive_losing_days == null ? EMPTY : count(summary.max_consecutive_losing_days),
+        sub:
+          summary?.max_consecutive_losing_days_pct == null
+            ? undefined
+            : `${pctFromRatio(summary.max_consecutive_losing_days_pct)} total`,
+      },
       {
         label: "Longest Recovery",
+        // Derived locally on purpose. `RunSummary.longest_recovery_days` is documented as a span
+        // but returns an absolute epoch-day: run 01a08924-c639 (Jan 2020 - Aug 2026) reports
+        // 18291.17, and 18291 days after the epoch is that run's own start. Wire it once the
+        // upstream field returns a difference.
         value: longestRecovery == null ? EMPTY : `${longestRecovery}d`,
       },
       { label: "Kelly Criterion", value: pctFromRatio(p?.kelly_criterion) },

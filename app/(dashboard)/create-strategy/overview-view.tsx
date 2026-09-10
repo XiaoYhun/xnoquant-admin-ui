@@ -12,13 +12,13 @@
 // there is no account-balance series on the API. Gross = Net + cumulative fees, matching the
 // backend's own `edge_gross_bps = (net_pnl + total_fee) / notional` definition.
 //
-// Metrics with no backend source (Max Capacity, MDD Duration, Avg Latency, Fill Rate) render as
+// Metrics with no backend source (Max Capacity, Avg Latency) render as
 // "—" rather than carrying the old placeholder numbers.
 import { useMemo, useState } from "react";
 import type { EChartsOption } from "echarts";
 import { MaximizeSquareMinimalistic } from "@solar-icons/react";
 
-import { cn, currencyDigits, formatAmount } from "@/lib/utils";
+import { cn, currencyDigits, formatAmount, formatDurationDays } from "@/lib/utils";
 import { BaseChart } from "@/components/charts/base-chart";
 import { ChartState, chartStatus } from "@/components/charts/chart-state";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -108,8 +108,8 @@ function buildStats(
       value: summary?.max_drawdown_pct == null ? DASH : fmtPct(-Math.abs(summary.max_drawdown_pct) * 100),
       className: "text-[#ff135b]",
     },
-    // Derivable from the drawdown series, but not wired — no consumer asked for it yet.
-    { label: "MDD Duration", value: DASH },
+    // `max_drawdown_duration_days` is a fractional day count; the strip writes it as `6d3h`.
+    { label: "MDD Duration", value: formatDurationDays(summary?.max_drawdown_duration_days) ?? DASH },
     {
       label: "Profit Days",
       value: stats ? `${formatAmount(stats.profitDayPct, 0)}%` : DASH,

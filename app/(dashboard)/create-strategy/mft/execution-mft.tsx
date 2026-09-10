@@ -3,10 +3,14 @@
 // histogram and the exit-reason strip.
 //
 // Every figure on this screen describes an individual FILL — when it happened, how long the
-// position was held, how far the price slipped, whether the order filled at all. The MFT engine
-// reports aggregates over closed trades and never the trades themselves, so the screen is built to
-// the design and left unfilled rather than approximated from returns.
+// position was held, how far the price slipped, whether the order filled at all.
+//
+// A RUN-scoped view gets four of them as run-level aggregates on `GET /api/runs/{id}/summary`:
+// `avg_holding_time_secs`, `trades_under_6h_pct`, `overnight_trades_pct`, `fill_rate` and
+// `slippage_bps`. The XALPHA strategy/stage feed has none of them, and neither feed returns the
+// trades themselves, so the two distributions below stay unfilled rather than being approximated.
 import { ChartState } from "@/components/charts/chart-state";
+import { formatAmount } from "@/lib/utils";
 import type { PeriodSelection } from "@/lib/transform/mft-results";
 import { useMftResultsSource } from "@/hooks/api/use-mft-results-source";
 import {
@@ -15,7 +19,9 @@ import {
   MetricPanel,
   NoSourceNote,
   count,
+  duration,
   emptyMetrics,
+  shareFromRatio,
   type Metric,
 } from "./results-chrome";
 
@@ -29,21 +35,23 @@ export function ExecutionMft({
   period: PeriodSelection;
   runId?: string;
 }) {
-  const { perf } = useMftResultsSource({ strategyId, stage, runId });
+  const { perf, summary } = useMftResultsSource({ strategyId, stage, runId });
   const a = perf?.analysis;
 
+  // An HFT bar-run carries these four on `/api/runs/{id}/summary`; the XALPHA strategy/stage feed
+  // does not, and `avg_win_trade_duration` / `avg_loss_trade_duration` on that payload are
+  // documented with no unit (bars? seconds? days?), so that path still reads blank.
   const rows: Metric[][] = [
     [
-      // `avg_win_trade_duration` / `avg_loss_trade_duration` DO exist on the payload, but the API
-      // documents no unit for them (bars? seconds? days?), and a duration rendered in the wrong
-      // unit is worse than one left blank.
-      { label: "Avg Holding Time", value: EMPTY },
-      { label: "Trades < 6h", value: EMPTY },
-      { label: "Overnight Trades", value: EMPTY },
-      { label: "Fill Rate", value: EMPTY },
+      { label: "Avg Holding Time", value: duration(summary?.avg_holding_time_secs) },
+      // `_pct` names a FRACTION in [0, 1] on this payload, not a percentage.
+      { label: "Trades < 6h", value: shareFromRatio(summary?.trades_under_6h_pct) },
+      { label: "Overnight Trades", value: shareFromRatio(summary?.overnight_trades_pct) },
+      { label: "Fill Rate", value: shareFromRatio(summary?.fill_rate) },
     ],
     [
-      ...emptyMetrics(["Slippage (Avg)", "Slippage (Std)", "Daily Turnover"]),
+      { label: "Slippage (Avg)", value: summary?.slippage_bps == null ? EMPTY : `${formatAmount(summary.slippage_bps, 2)} bp` },
+      ...emptyMetrics(["Slippage (Std)", "Daily Turnover"]),
       // The one honest neighbour of "avg trade size": how many trades the run actually closed.
       { label: "Closed Trades", value: count(a?.total_closed_trades ?? a?.total_trades) },
     ],
@@ -53,9 +61,9 @@ export function ExecutionMft({
     <div className="flex min-w-0 flex-col gap-4">
       <MetricPanel rows={rows} />
       <NoSourceNote>
-        Execution quality is measured per fill. The MFT results API returns aggregates over closed
-        trades only — no fill timestamps, holding times, slippage or fill ratios — so these figures
-        stay blank until the engine reports trade-level records.
+        {summary
+          ? "Holding time, fill rate and mean slippage are run-level figures from the results API. The rest of this screen is measured per fill — the engine returns no fill timestamps, slippage dispersion or turnover, so those stay blank."
+          : "Execution quality is measured per fill. The MFT results API returns aggregates over closed trades only — no fill timestamps, holding times, slippage or fill ratios — so these figures stay blank until the engine reports trade-level records."}
       </NoSourceNote>
 
       <ChartCard title="Holding time distribution">

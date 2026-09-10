@@ -8,8 +8,11 @@
 // (fallback: sharpe), read off the shared `LiveSnapshotProvider` rather than its own connection.
 // Otherwise derived from the equity curve (mean/pop-stddev of PnL deltas, not annualized — same
 // as backend `rollingSharpeSeries`).
-// Ratio card: Sharpe and Max Drawdown come off the live snapshot while the run is running; the
-// remaining ratios (Sortino/Calmar/Omega/MDD-Duration/VaR/CVaR) have no API source and stay mock.
+// Ratio card: every figure reads `GET /api/runs/{id}/summary` — Sharpe/Sortino/Calmar,
+// Max Drawdown, Max DD Duration, VaR and CVaR. While a run is RUNNING that endpoint 409s (its
+// parquet sidecars are mid-write), so Sharpe and Max Drawdown fall back to the `/live/stream`
+// frame, which publishes those two and nothing else; the rest read "—" until the run stops.
+// Omega is the one ratio the API does not compute at all.
 import { useMemo, useState } from "react";
 import { MaximizeSquareMinimalistic } from "@solar-icons/react";
 import type { EChartsOption } from "echarts";
@@ -17,13 +20,13 @@ import type { EChartsOption } from "echarts";
 import { BaseChart } from "@/components/charts/base-chart";
 import { ChartState, chartStatus, type ChartStatus } from "@/components/charts/chart-state";
 import {
+  mergeLiveSummary,
   preferLiveEquity,
   useLiveSnapshot,
   type LiveSharpeSample,
-  type LiveSnapshot,
 } from "@/hooks/api/use-run-live-snapshot";
-import { useRunEquity } from "@/hooks/api/use-runs";
-import type { SampleScope } from "@/types/domain";
+import { realSummary, useRunCurrency, useRunEquity, useRunSummary } from "@/hooks/api/use-runs";
+import type { RunSummary, SampleScope } from "@/types/domain";
 import { equityDayLabel, toDrawdown, toRollingSharpe, type DrawdownPoint } from "@/lib/transform/results";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -33,7 +36,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { cn, formatAmount, formatCompact } from "@/lib/utils";
+import { cn, currencyDigits, formatAmount, formatCompact, formatDurationDays } from "@/lib/utils";
+import { currencySymbol } from "@/lib/transform/runs";
 import { MockNote } from "./results-chart-card";
 
 const GRAD_GREEN =
@@ -55,46 +59,66 @@ interface RatioItem {
   value: string;
   tone: RatioTone;
   suffix?: string;
-  /** Which live-snapshot field replaces this item's value while a run is streaming, if any. */
-  live?: "sharpe" | "maxDrawdown";
+  /** Why there is no number. Set only where the API has no such field; shown on hover. */
+  unavailable?: string;
 }
 
-const RATIO_ROW_1: RatioItem[] = [
-  { label: "Sharpe Ratio", value: "3.12", tone: "green", live: "sharpe" },
-  { label: "Sortino Ratio", value: "4.56", tone: "green" },
-  { label: "Calmar Ratio", value: "8.34", tone: "green" },
-  { label: "Omega Ratio", value: "8.34", tone: "green" },
-];
+const DASH = "—";
 
-const RATIO_ROW_2: RatioItem[] = [
-  { label: "Max Drawdown", value: "-4.10%", tone: "red", live: "maxDrawdown" },
-  { label: "Max DD Duration", value: "2d18h", tone: "white" },
-  { label: "VaR", value: "-6,530", tone: "red", suffix: "USDT" },
-  { label: "CVaR", value: "-9,350", tone: "red", suffix: "USDT" },
-];
+/** Signed ratio, green above zero and red below — the card's convention for Sharpe-likes. */
+function ratio(value: number | null | undefined): { value: string; tone: RatioTone } {
+  if (value == null || !Number.isFinite(value)) return { value: DASH, tone: "white" };
+  return { value: formatAmount(value, 2), tone: value >= 0 ? "green" : "red" };
+}
+
+/** A fraction (0.0032) as the negative percentage the drawdown row prints ("-0.32%"). */
+function drawdownPct(fraction: number | null | undefined): string {
+  if (fraction == null || !Number.isFinite(fraction)) return DASH;
+  return `${formatAmount(-Math.abs(fraction) * 100, 2)}%`;
+}
+
+/** `2.75` → `2d18h`, or a dash when the run reports no drawdown duration. */
+function durationDays(days: number | null | undefined): string {
+  return formatDurationDays(days) ?? DASH;
+}
+
+/** Money in the run's own settlement currency, matching every other figure in Results. */
+function money(value: number | null | undefined, currency: string): string {
+  if (value == null || !Number.isFinite(value)) return DASH;
+  return formatAmount(value, currencyDigits(currency));
+}
 
 /**
- * Overlay the two ratios the live snapshot actually publishes onto the mock rows. Sortino/Calmar/
- * Omega/MDD-Duration/VaR/CVaR have no source on the snapshot or in the REST results API, so they
- * keep their placeholder values rather than being blanked.
+ * The eight ratios, off the summary (merged with the live frame for the two fields it carries).
+ *
+ * Everything here is a read — no value is invented. A run with no summary yet renders eight
+ * dashes, which is the honest answer while the artifacts are still being written.
  */
-function withLiveRatios(snapshot: LiveSnapshot | undefined): { row1: RatioItem[]; row2: RatioItem[] } {
-  if (!snapshot) return { row1: RATIO_ROW_1, row2: RATIO_ROW_2 };
-  const sharpe = snapshot.sharpeAnnualized ?? snapshot.sharpe;
-  const mddPct = snapshot.maxDrawdownPct;
-  const overlay = (item: RatioItem): RatioItem => {
-    if (item.live === "sharpe" && sharpe !== undefined) {
-      return { ...item, value: formatAmount(sharpe, 2), tone: sharpe >= 0 ? "green" : "red" };
-    }
-    // `max_drawdown_pct` is a fraction (0.0032 = 0.32%), matching `RunSummary.max_drawdown_pct`.
-    if (item.live === "maxDrawdown" && mddPct !== undefined) {
-      return { ...item, value: `${formatAmount(-Math.abs(mddPct) * 100, 2)}%`, tone: "red" };
-    }
-    return item;
+function ratioRows(summary: RunSummary | undefined, currency: string): { row1: RatioItem[]; row2: RatioItem[] } {
+  const sharpe = ratio(summary?.sharpe_annualized ?? summary?.sharpe);
+  const sortino = ratio(summary?.sortino_annualized ?? summary?.sortino);
+  const calmar = ratio(summary?.calmar);
+  const maxDd = drawdownPct(summary?.max_drawdown_pct);
+  return {
+    row1: [
+      { label: "Sharpe Ratio", ...sharpe },
+      { label: "Sortino Ratio", ...sortino },
+      { label: "Calmar Ratio", ...calmar },
+      {
+        label: "Omega Ratio",
+        value: DASH,
+        tone: "white",
+        unavailable: "Omega is not computed by the results API.",
+      },
+    ],
+    row2: [
+      { label: "Max Drawdown", value: maxDd, tone: maxDd === DASH ? "white" : "red" },
+      { label: "Max DD Duration", value: durationDays(summary?.max_drawdown_duration_days), tone: "white" },
+      { label: "VaR", value: money(summary?.var_95, currency), tone: "red", suffix: currencySymbol(currency) },
+      { label: "CVaR", value: money(summary?.cvar_95, currency), tone: "red", suffix: currencySymbol(currency) },
+    ],
   };
-  return { row1: RATIO_ROW_1.map(overlay), row2: RATIO_ROW_2.map(overlay) };
 }
-
 const RATIO_TONE_CLASS: Record<RatioTone, string> = {
   green: GRAD_GREEN,
   red: GRAD_RED,
@@ -108,7 +132,13 @@ function RatioRow({ items }: { items: RatioItem[] }) {
         <div key={item.label} className="flex min-w-0 flex-col gap-1">
           <span className="truncate text-xs text-muted-foreground">{item.label}</span>
           <span className="flex flex-wrap items-end gap-1">
-            <span className={cn("text-base leading-5 font-semibold", RATIO_TONE_CLASS[item.tone])}>
+            <span
+              title={item.unavailable}
+              className={cn(
+                "text-base leading-5 font-semibold",
+                item.unavailable ? "text-muted-foreground" : RATIO_TONE_CLASS[item.tone],
+              )}
+            >
               {item.value}
             </span>
             {item.suffix && <span className="text-[10px] text-muted-foreground">{item.suffix}</span>}
@@ -119,8 +149,8 @@ function RatioRow({ items }: { items: RatioItem[] }) {
   );
 }
 
-function RatioCard({ snapshot }: { snapshot?: LiveSnapshot }) {
-  const { row1, row2 } = withLiveRatios(snapshot);
+function RatioCard({ summary, currency }: { summary?: RunSummary; currency: string }) {
+  const { row1, row2 } = ratioRows(summary, currency);
   return (
     <div className="flex min-w-0 flex-col gap-2 rounded-xl border border-border bg-[rgba(29,33,38,0.2)] px-3 py-2">
       <RatioRow items={row1} />
@@ -390,6 +420,15 @@ export function RiskView({
     sample,
   );
   const { snapshot, sharpeSamples: liveSharpe, state: liveState } = useLiveSnapshot();
+  // The ratio card's source. `/summary` 409s for the whole life of a running run, so it is not
+  // even asked for there; `mergeLiveSummary` then supplies the two fields the frame does carry
+  // (Sharpe, Max Drawdown) and the rest of the card reads "—" until the run stops.
+  const { data: restSummary } = useRunSummary(isLive ? undefined : runId, sample);
+  const summary = useMemo(
+    () => mergeLiveSummary(realSummary(restSummary), snapshot),
+    [restSummary, snapshot],
+  );
+  const currency = useRunCurrency(runId);
   const equity = useMemo(() => preferLiveEquity(restEquity, snapshot), [restEquity, snapshot]);
   const drawdownPoints = useMemo(() => {
     const all = toDrawdown(equity);
@@ -456,7 +495,7 @@ export function RiskView({
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
-      <RatioCard snapshot={snapshot} />
+      <RatioCard summary={summary} currency={currency} />
 
       <ChartCard
         title="Drawdown"

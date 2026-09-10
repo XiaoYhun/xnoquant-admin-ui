@@ -19,7 +19,8 @@ export function ChartCard({
   title: string;
   /** Right-aligned control (period select, unit toggle…), shown before the expand button. */
   controls?: React.ReactNode;
-  children: React.ReactNode;
+  /** Optional: a panel whose data source does not exist has no body to wrap, only a state. */
+  children?: React.ReactNode;
   className?: string;
   /** Figma omits the expand affordance on some panels (15039:42982 / 15039:43339). */
   expandable?: boolean;

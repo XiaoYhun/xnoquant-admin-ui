@@ -32,6 +32,8 @@ import {
   PillTabs,
   RED_TEXT,
   count,
+  durationDays,
+  shareFromRatio,
   num,
   pctFromRatio,
   toneBySign,
@@ -279,6 +281,9 @@ export function OverviewMft({
 
   const src = useMftResultsSource({ strategyId, stage, runId });
   const pnls = src.pnls;
+  // Run-only figures, with no counterpart on the XALPHA strategy/stage payload the same strip
+  // renders for a stage-scoped view.
+  const summary = src.summary;
 
   // Stage slice first (the charts endpoint returns every stage at once), then the Period row,
   // then the chart's own trailing range. A run-scoped view has no stages, so sliceStage is a no-op.
@@ -382,8 +387,7 @@ export function OverviewMft({
               tone={toneBySign(p?.annual_return)}
             />
             <StripMetric label="Max Drawdown" value={pctFromRatio(p?.max_drawdown)} tone={RED_TEXT} />
-            {/* Drawdown DURATION needs the peak-to-recovery span the engine never returns. */}
-            <StripMetric label="MDD Duration" value={EMPTY} />
+            <StripMetric label="MDD Duration" value={durationDays(summary?.max_drawdown_duration_days)} />
             <StripMetric
               label="Profit Days"
               value={profitDays == null ? EMPTY : `${formatAmount(profitDays * 100, 0)}%`}
@@ -391,8 +395,10 @@ export function OverviewMft({
             />
             <StripMetric label="Trading Days" value={count(tradingDays)} />
             <StripMetric label="Total Trades" value={count(a?.total_trades)} />
+            {/* Per-order latency is engine telemetry, published only on a running run's
+                `/live/stream`; a finished backtest has none. */}
             <StripMetric label="Avg Latency" value={EMPTY} />
-            <StripMetric label="Fill Rate" value={EMPTY} />
+            <StripMetric label="Fill Rate" value={shareFromRatio(summary?.fill_rate)} />
           </div>
 
           <ChartState status={equityStatus} detail="No equity points for this stage and period.">

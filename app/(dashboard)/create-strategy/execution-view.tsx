@@ -6,7 +6,9 @@
 // Fill Rate / Order-to-trade / Cancel Rate and the "Fill Rate over time" series are derived from
 // the run's trade-cycle console log: `GET /api/runs/{id}/trace/history` (terminal) plus
 // `/trace/stream` (SSE while the run is live). Backtests never journal a trace — those stay empty.
-// Latency / slippage / market impact have no fields on the trace events, so they stay mocked.
+// Slippage (Avg) comes off `GET /api/runs/{id}/summary` (`slippage_bps`). Avg Latency, Slippage
+// (Std) and Market Impact have no field on either the trace events or the summary, and neither
+// distribution chart has a per-fill source, so all four state that rather than showing a number.
 //
 // Two axes deliberately depart from the Figma frame, where these charts were duplicated from other
 // panels and kept their source data: "Fill Rate over time" is plotted as a percentage (the frame
@@ -19,7 +21,9 @@ import type { EChartsOption } from "echarts";
 import { BaseChart } from "@/components/charts/base-chart";
 import { chartStatus } from "@/components/charts/chart-state";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { realSummary, useRunSummary } from "@/hooks/api/use-runs";
 import { useRunTraceHistory, useRunTraceStream } from "@/hooks/api/use-run-trace";
+import type { SampleScope } from "@/types/domain";
 import {
   deriveFillRateSeries,
   deriveTraceExecutionMetrics,
@@ -30,7 +34,6 @@ import { ChartCard, MockNote } from "./results-chart-card";
 
 // Stroke/Linear yellow — the colour every chart on this tab is drawn in.
 const YELLOW = "#f1c617";
-const YELLOW_LIGHT = "#fffbd6";
 const GRAD_GREEN = "bg-[linear-gradient(158deg,#cff8ea_0%,#67e1c1_100%)] bg-clip-text text-transparent";
 const DASH = "—";
 
@@ -38,16 +41,32 @@ const DASH = "—";
 // Metric card (Figma 14180:16732) — two rows of four, divider between.
 // ---------------------------------------------------------------------------
 
-type Metric = { label: string; value: string; tone?: "green" };
+type Metric = {
+  label: string;
+  value: string;
+  tone?: "green";
+  /** Why there is no number. Set only on a metric the API cannot source; shown on hover. */
+  unavailable?: string;
+};
+
+/** Basis points off the summary, or a dash when the run has no summary yet. */
+function bp(value: number | null | undefined): string {
+  return value == null || !Number.isFinite(value) ? DASH : `${formatAmount(value, 2)} bp`;
+}
 
 function MetricCell({ metric }: { metric: Metric }) {
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <span className="truncate text-xs leading-[18px] text-muted-foreground">{metric.label}</span>
       <span
+        title={metric.unavailable}
         className={cn(
           "truncate text-base leading-5 font-semibold",
-          metric.tone === "green" ? GRAD_GREEN : "text-white",
+          metric.unavailable
+            ? "text-muted-foreground"
+            : metric.tone === "green"
+              ? GRAD_GREEN
+              : "text-white",
         )}
       >
         {metric.value}
@@ -75,47 +94,6 @@ function MetricCard({ top, bottom }: { top: Metric[]; bottom: Metric[] }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Distributions still mocked — trace events carry neither slippage nor latency.
-// ---------------------------------------------------------------------------
-
-const SLIPPAGE_BUCKETS = Array.from({ length: 25 }, (_, i) => `${formatAmount(-3 + i * 0.25, 2)}%`);
-/** Bell-shaped bucket counts, peaked at `centre`. */
-const SLIPPAGE_COUNTS = Array.from({ length: 25 }, (_, i) =>
-  Math.round(100 * Math.exp(-((i - 12) ** 2) / (2 * 4.2 ** 2))),
-);
-
-const LATENCY_BUCKETS = Array.from({ length: 25 }, (_, i) => `${formatAmount(0.4 + i * 0.2, 1)}ms`);
-// Latency is right-skewed — a tight mode plus a long tail, not a symmetric bell.
-const LATENCY_COUNTS = LATENCY_BUCKETS.map((_, i) =>
-  Math.round(100 * Math.exp(-((i - 4) ** 2) / 18) + 34 * Math.exp(-((i - 13) ** 2) / 26)),
-);
-
-const BAR_FILL = {
-  type: "linear" as const,
-  x: 0,
-  y: 0,
-  x2: 0,
-  y2: 1,
-  colorStops: [
-    { offset: 0, color: YELLOW_LIGHT },
-    { offset: 1, color: YELLOW },
-  ],
-};
-
-function distributionOption(labels: string[], counts: number[]): EChartsOption {
-  return {
-    grid: { left: 8, right: 8, top: 16, bottom: 24, containLabel: true },
-    tooltip: { trigger: "axis" },
-    // hideOverlap rather than a fixed stride: these cards sit at roughly half the 793px width the
-    // design assumes, where a fixed interval collides.
-    xAxis: { type: "category", data: labels, axisTick: { show: false }, axisLabel: { hideOverlap: true } },
-    yAxis: { type: "value" },
-    series: [
-      { type: "bar", data: counts, barMaxWidth: 14, itemStyle: { color: BAR_FILL, borderRadius: [2, 2, 0, 0] } },
-    ],
-  };
-}
 
 function fillRateOption(labels: string[], values: number[]): EChartsOption {
   const lo = values.length ? Math.min(...values) : 90;
@@ -159,7 +137,6 @@ function fillRateOption(labels: string[], values: number[]): EChartsOption {
 }
 
 const PERIOD_OPTIONS = ["Daily", "Weekly", "Monthly"] as const;
-const SCOPE_OPTIONS = ["All", "Maker", "Taker"] as const;
 
 function PillSelect({
   value,
@@ -192,10 +169,20 @@ function PillSelect({
 const pct = (n: number | null) => (n == null ? DASH : `${formatAmount(n, 2)}%`);
 const ratio = (n: number | null) => (n == null ? DASH : formatAmount(n, 2));
 
-export function ExecutionView({ runId, isLive }: { runId?: string; isLive?: boolean }) {
+export function ExecutionView({
+  runId,
+  isLive,
+  sample,
+}: {
+  runId?: string;
+  isLive?: boolean;
+  sample?: SampleScope;
+}) {
   const [period, setPeriod] = useState<string>("Daily");
-  const [slippageScope, setSlippageScope] = useState<string>("All");
-  const [latencyScope, setLatencyScope] = useState<string>("All");
+  // `/summary` 409s for the whole life of a running run (its parquet sidecars are mid-write),
+  // and the live frame carries no slippage, so the metric simply stays unavailable there.
+  const { data: rawSummary } = useRunSummary(isLive ? undefined : runId, sample);
+  const summary = realSummary(rawSummary);
 
   const { data, isLoading, isError, error } = useRunTraceHistory(runId);
   const { events: streamed, state: streamState } = useRunTraceStream(runId, !!isLive);
@@ -215,21 +202,33 @@ export function ExecutionView({ runId, isLive }: { runId?: string; isLive?: bool
     [fillSeries],
   );
 
+  // `fill_rate` is a fraction on the summary; the row prints percent.
+  const summaryFillRatePct =
+    summary?.fill_rate == null || !Number.isFinite(summary.fill_rate) ? null : summary.fill_rate * 100;
+
   const topRow: Metric[] = [
-    { label: "Fill Rate", value: pct(metrics.fillRatePct), tone: "green" },
+    {
+      label: "Fill Rate",
+      // The trace is authoritative when there is one (it is per-order, and live). Backtests
+      // journal no trace at all, so the summary's run-level figure stands in.
+      value: pct(metrics.fillRatePct ?? summaryFillRatePct),
+      tone: "green",
+    },
     { label: "Order to trade Ratio", value: ratio(metrics.orderToTrade) },
     { label: "Cancel Rate", value: pct(metrics.cancelRatePct) },
   ];
-  // Still mocked — no latency / slippage on TraceEvent.
+  // Only the average has a source. The other three used to carry invented constants that sat
+  // beside the real fill-rate figures and read exactly like them.
   const bottomRow: Metric[] = [
-    { label: "Avg Latency", value: "1.82 ms" },
-    { label: "Slippage (Avg)", value: "-0.38 bp" },
-    { label: "Slippage (Std)", value: "0.72 bp" },
-    { label: "Market Impact", value: "-0.64 bp" },
+    {
+      label: "Avg Latency",
+      value: DASH,
+      unavailable: "Per-order latency is not journaled. The Latency tab shows engine timings while a run is live.",
+    },
+    { label: "Slippage (Avg)", value: bp(summary?.slippage_bps) },
+    { label: "Slippage (Std)", value: DASH, unavailable: "The summary reports mean slippage only, with no dispersion." },
+    { label: "Market Impact", value: DASH, unavailable: "Market impact is not computed by the results API." },
   ];
-
-  const slippage = useMemo(() => distributionOption(SLIPPAGE_BUCKETS, SLIPPAGE_COUNTS), []);
-  const latency = useMemo(() => distributionOption(LATENCY_BUCKETS, LATENCY_COUNTS), []);
 
   const fillStatus = chartStatus({
     idle: !runId,
@@ -278,16 +277,16 @@ export function ExecutionView({ runId, isLive }: { runId?: string; isLive?: bool
       <div className="grid min-w-0 gap-4 lg:grid-cols-2">
         <ChartCard
           title="Slippage Distribution"
-          controls={<PillSelect value={slippageScope} onChange={setSlippageScope} options={SCOPE_OPTIONS} />}
-        >
-          <BaseChart option={slippage} style={{ height: 260 }} />
-        </ChartCard>
+          status="empty"
+          detail="Per-fill slippage is not on the trades or trace endpoints, so there is nothing to bucket."
+          bodyHeight={260}
+        />
         <ChartCard
           title="Latency Distribution"
-          controls={<PillSelect value={latencyScope} onChange={setLatencyScope} options={SCOPE_OPTIONS} />}
-        >
-          <BaseChart option={latency} style={{ height: 260 }} />
-        </ChartCard>
+          status="empty"
+          detail="Per-order latency is not journaled. Engine-stage timings are on the Latency tab, live only."
+          bodyHeight={260}
+        />
       </div>
     </div>
   );

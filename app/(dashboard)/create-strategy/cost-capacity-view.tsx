@@ -11,7 +11,9 @@
 //   over-time chart is one cumulative series (not the Figma five-way stack).
 // - Turn over time from `/turnover-curve`.
 //
-// Still mocked: Capacity Curve.
+// No source: Capacity Curve. Sharpe-vs-deployed-capital needs the run re-simulated at several
+// capital levels; nothing on the results API reports it, so the panel states that instead of
+// drawing the decay curve the design sketches.
 import { useMemo, useState } from "react";
 import type { EChartsOption } from "echarts";
 
@@ -26,14 +28,13 @@ import { aggregateTurnover, type TurnoverPeriod } from "@/lib/turnover-curve";
 import { costDragPct } from "@/lib/transform/results";
 import { cn, currencyDigits, formatAmount, formatCompact } from "@/lib/utils";
 import { currencySymbol } from "@/lib/transform/runs";
-import { ChartCard, MockNote } from "./results-chart-card";
+import { ChartCard } from "./results-chart-card";
 
 // Figma 14180:39849 "Total Fee" swatch — the only component the cost-curve can populate.
 const FEE_FROM = "#cfdbf8";
 const FEE_TO = "#2d84ff";
 
 const YELLOW = "#f1c617";
-const GREEN = "#67e1c1";
 const GRAD_GREEN = "bg-[linear-gradient(158deg,#cff8ea_0%,#67e1c1_100%)] bg-clip-text text-transparent";
 const DASH = "—";
 
@@ -71,16 +72,7 @@ function MetricCell({ label, value, tone }: { label: string; value: string; tone
   );
 }
 
-const CAPACITY_LABELS = ["1M", "5M", "10M", "20M", "30M", "40M", "50M", "60M"];
-// Sharpe decays as deployed capital grows — flat, then a knee, then a steep fall.
-const CAPACITY_SERIES = Array.from({ length: 64 }, (_, i) => {
-  const x = i / 63;
-  // Numeric rounding for the mock series, not a label — grouping here would yield NaN.
-  return Number((3.5 - 2.9 * x ** 3 + Math.sin(i * 0.9) * 0.09).toFixed(3));
-});
-
 const PERIOD_OPTIONS = ["Daily", "Weekly", "Monthly"] as const;
-const CAPACITY_METRICS = ["Sharpe", "Return", "Net PnL"] as const;
 
 function PillSelect({
   value,
@@ -143,7 +135,6 @@ export function CostCapacityView({
     isError: turnoverError,
   } = useRunTurnover(artifactId, sample);
   const [period, setPeriod] = useState<string>("Daily");
-  const [capacityMetric, setCapacityMetric] = useState<string>("Sharpe");
 
   const curveTotal = lastCumulative(costCurve);
   // Prefer the curve's closing cumulative when present; summary.total_fee is the same aggregate.
@@ -263,45 +254,6 @@ export function CostCapacityView({
     ? "Turnover for this run could not be loaded."
     : "No turnover has been recorded for this run yet.";
 
-  const capacityOption = useMemo<EChartsOption>(
-    () => ({
-      grid: { left: 8, right: 8, top: 16, bottom: 8, containLabel: true },
-      tooltip: { trigger: "axis" },
-      xAxis: {
-        type: "category",
-        boundaryGap: false,
-        data: CAPACITY_SERIES.map((_, i) => CAPACITY_LABELS[Math.floor((i / CAPACITY_SERIES.length) * CAPACITY_LABELS.length)]),
-        axisLabel: { hideOverlap: true },
-      },
-      yAxis: { type: "value", min: 0, max: 4, interval: 1 },
-      series: [
-        {
-          type: "line",
-          data: CAPACITY_SERIES,
-          smooth: false,
-          showSymbol: false,
-          symbol: "none",
-          lineStyle: { width: 1.5, color: GREEN },
-          itemStyle: { color: GREEN },
-          areaStyle: {
-            color: {
-              type: "linear",
-              x: 0,
-              y: 0,
-              x2: 0,
-              y2: 1,
-              colorStops: [
-                { offset: 0, color: "rgba(103,225,193,0.45)" },
-                { offset: 1, color: "rgba(103,225,193,0)" },
-              ],
-            },
-          },
-        },
-      ],
-    }),
-    [],
-  );
-
   return (
     <div className="flex min-w-0 flex-col gap-4">
       <div className="grid min-w-0 grid-cols-2 gap-4 rounded-xl border border-border bg-[rgba(29,33,38,0.2)] px-3 py-3 sm:grid-cols-4">
@@ -388,15 +340,10 @@ export function CostCapacityView({
 
         <ChartCard
           title="Capacity Curve"
-          controls={
-            <>
-              <MockNote>Placeholder series</MockNote>
-              <PillSelect value={capacityMetric} onChange={setCapacityMetric} options={CAPACITY_METRICS} />
-            </>
-          }
-        >
-          <BaseChart option={capacityOption} style={{ height: 244 }} />
-        </ChartCard>
+          status="empty"
+          detail="Sharpe against deployed capital is not on the results API — it needs the run re-simulated at several capital levels."
+          bodyHeight={244}
+        />
       </div>
     </div>
   );

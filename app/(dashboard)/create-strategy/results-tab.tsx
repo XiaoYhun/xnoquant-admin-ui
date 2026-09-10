@@ -252,7 +252,7 @@ function HftResultsTab({
             {view === "Overview" && <OverviewView runId={selectedRun?.id} summaryEnabled={isBacktest && !isLive} isLive={isLive} sample={sample} />}
             {view === "Performance" && <PerformanceView runId={selectedRun?.id} summaryEnabled={isBacktest && !isLive} isLive={isLive} sample={sample} />}
             {view === "Risk" && <RiskView runId={selectedRun?.id} isLive={isLive} sample={sample} />}
-            {view === "Execution" && <ExecutionView runId={selectedRun?.id} isLive={isLive} />}
+            {view === "Execution" && <ExecutionView runId={selectedRun?.id} isLive={isLive} sample={sample} />}
             {view === "Cost & Capacity" && <CostCapacityView runId={selectedRun?.id} summaryEnabled={isBacktest && !isLive} isLive={isLive} sample={sample} />}
             {view === "Latency" && <LatencyView isLive={isLive} />}
           </div>

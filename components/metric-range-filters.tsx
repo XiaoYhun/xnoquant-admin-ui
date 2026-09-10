@@ -3,6 +3,10 @@
 // Max DD %. Shared by Backtesting, Paper Trading, Live trade and Alpha pool, which all render
 // rows of the same `PaperRunRow` shape.
 //
+// The three run lists send these to `GET /api/runs` as `min_*`/`max_*` (see `metricRangeParams`);
+// Alpha pool pages over promotions rather than runs, so it still narrows in the browser with
+// `matchesMetricRanges`.
+//
 // Bounds are held as strings, not numbers, so a half-typed "-" or a cleared box doesn't collapse
 // into 0 and silently filter the table.
 
@@ -66,6 +70,59 @@ export function matchesMetricRanges(row: MetricRow | null | undefined, ranges: M
     inRange(row.returnPct, ranges.returnPct) &&
     inRange(row.maxDrawdownPct, ranges.maxDd, true)
   );
+}
+
+/**
+ * The `GET /api/runs` bounds these ranges translate to. Named exactly as the API's query
+ * parameters so the query object can be spread straight into `RunsQuery`.
+ */
+export type MetricBounds = {
+  min_sharpe?: number;
+  max_sharpe?: number;
+  min_return_pct?: number;
+  max_return_pct?: number;
+  min_drawdown_pct?: number;
+  max_drawdown_pct?: number;
+};
+
+/**
+ * Ranges -> server bounds.
+ *
+ * Two conversions, both forced by what the API stores. `return_pct` and `max_drawdown_pct` are
+ * FRACTIONS on the server (`net_pnl / starting_capital`), while these boxes are typed in percent,
+ * so those four bounds are divided by 100 — Sharpe is a bare ratio and passes through. And
+ * `max_drawdown_pct` is a positive magnitude server-side, which is what the Max DD boxes already
+ * mean (`0 – 5` = drew down at most 5%), so those two are taken by magnitude and reordered.
+ *
+ * A run with no cached summary has NULL in all three columns, so any bound drops it — the same
+ * rule `matchesMetricRanges` applies to a row whose metric is still null.
+ */
+export function metricRangeParams(ranges: MetricRanges): MetricBounds {
+  const [minDd, maxDd] = magnitudeBounds(ranges.maxDd);
+  return {
+    min_sharpe: parse(ranges.sharpe.min) ?? undefined,
+    max_sharpe: parse(ranges.sharpe.max) ?? undefined,
+    min_return_pct: pct(ranges.returnPct.min),
+    max_return_pct: pct(ranges.returnPct.max),
+    min_drawdown_pct: minDd,
+    max_drawdown_pct: maxDd,
+  };
+}
+
+/** A percent box as the fraction the API compares against. */
+function pct(bound: string): number | undefined {
+  const value = parse(bound);
+  return value == null ? undefined : value / 100;
+}
+
+/** Max DD's pair, by magnitude and in ascending order — `-5 – 0` and `0 – 5` mean the same thing. */
+function magnitudeBounds(range: MetricRange): [number | undefined, number | undefined] {
+  let lo = pct(range.min);
+  let hi = pct(range.max);
+  if (lo != null) lo = Math.abs(lo);
+  if (hi != null) hi = Math.abs(hi);
+  if (lo != null && hi != null && lo > hi) [lo, hi] = [hi, lo];
+  return [lo, hi];
 }
 
 const BOUND_INPUT =

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatCurrency, formatPercent, formatCompact, formatAmount, formatSignedAmount, currencyDigits, isIdQuery, idQueryNeedle } from "./utils";
+import { formatCurrency, formatPercent, formatCompact, formatAmount, formatSignedAmount, currencyDigits, isIdQuery, idQueryNeedle, runSearchQuery } from "./utils";
 
 describe("formatters", () => {
   it("formats VND currency without decimals", () => {
@@ -64,5 +64,20 @@ describe("isIdQuery", () => {
   });
   it("normalises the needle for comparison", () => {
     expect(idQueryNeedle("#019FF517-5293")).toBe("019ff517-5293");
+  });
+});
+
+describe("runSearchQuery", () => {
+  it("drops the # the run tables print, which the id column does not carry", () => {
+    expect(runSearchQuery("#019ff517-5293")).toBe("019ff517-5293");
+  });
+
+  it("passes a name through untouched, trimmed", () => {
+    expect(runSearchQuery("  dochian-BO ")).toBe("dochian-BO");
+  });
+
+  it("sends no q at all for an empty box", () => {
+    expect(runSearchQuery("")).toBeUndefined();
+    expect(runSearchQuery("   ")).toBeUndefined();
   });
 });

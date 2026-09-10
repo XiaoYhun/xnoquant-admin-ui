@@ -26,6 +26,24 @@ export const DEFAULT_MARKET: Market = ALL_MARKETS;
 
 const TABS: { value: Market; label: string }[] = [{ value: ALL_MARKETS, label: "All" }, ...MARKETS];
 
+/**
+ * The server's counterpart to a market tab: `GET /api/runs?asset_kind=`. The API derives it from
+ * the same venue rule `marketForVenue` uses (binance_* -> crypto; a VN broker with any non-spot
+ * symbol -> futures, else stock), so a tab and its asset kind select the same runs.
+ */
+export type AssetKind = "stock" | "futures" | "crypto";
+
+const ASSET_KINDS: Record<MarketValue, AssetKind> = {
+  Vietnam: "stock",
+  VNFuture: "futures",
+  Crypto: "crypto",
+};
+
+/** `undefined` for the All tab — i.e. send no `asset_kind` and let every kind through. */
+export function assetKindOf(market: Market): AssetKind | undefined {
+  return market === ALL_MARKETS ? undefined : ASSET_KINDS[market];
+}
+
 export function MarketTabs({ value, onChange }: { value: Market; onChange: (market: Market) => void }) {
   return (
     <Tabs value={value} onValueChange={(v) => v && onChange(v as Market)}>

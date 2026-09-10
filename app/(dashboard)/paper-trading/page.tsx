@@ -1,21 +1,29 @@
 "use client";
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useState } from "react";
 import { PageSizeSelect } from "@/components/page-size-select";
 import { TablePagination } from "@/components/table-pagination";
-import { StrategyTypeFilter, type StrategyTypeFilterValue } from "@/components/strategy-type-filter";
 import { MinimalisticMagnifer } from "@solar-icons/react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { usePaperRuns } from "@/hooks/api/use-paper-runs";
+import { useSelectedRunRow } from "@/hooks/api/use-runs";
 import { useDebounced } from "@/hooks/use-debounced";
-import { idQueryNeedle, isIdQuery } from "@/lib/utils";
+import { runSearchQuery } from "@/lib/utils";
 import { usePageSize } from "@/hooks/use-page-size";
 import { useUrlParam } from "@/hooks/use-url-param";
-import { DEFAULT_MARKET, MarketTabs, marketOf, matchesMarket, type Market } from "@/components/market-tabs";
+import {
+  DEFAULT_MARKET,
+  MarketTabs,
+  assetKindOf,
+  marketOf,
+  matchesMarket,
+  type Market,
+} from "@/components/market-tabs";
+import { ALL_SYMBOLS, SymbolFilter } from "@/components/symbol-filter";
 import { resourceErrorMessage } from "@/lib/api-client";
 import {
   EMPTY_METRIC_RANGES,
   MetricRangeFilters,
-  matchesMetricRanges,
+  metricRangeParams,
   type MetricRanges,
 } from "@/components/metric-range-filters";
 import { PaperRunsTable } from "./paper-runs-table";
@@ -34,55 +42,38 @@ export default function Page() {
 function PaperTrading() {
   const [market, setMarket] = useState<Market>(DEFAULT_MARKET);
   const [search, setSearch] = useState("");
-  const [symbol, setSymbol] = useState("all");
+  const [symbol, setSymbol] = useState(ALL_SYMBOLS);
   const [status, setStatus] = useState("all");
-  const [strategyType, setStrategyType] = useState<StrategyTypeFilterValue>("all");
-  // Sharpe / Return % / Max DD % bounds — client-side, like symbol and paging: `GET /api/runs`
-  // has no metric filter.
   const [ranges, setRanges] = useState<MetricRanges>(EMPTY_METRIC_RANGES);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = usePageSize();
   // The open panel is in the URL (`?run=<id>`) so the view can be linked and survives reload.
   const [selectedId, setSelectedId] = useUrlParam("run");
 
-  // Search and status are served by `GET /api/runs` (`q`, `status`); symbol and paging stay
-  // client-side — the API offers no symbol filter, and no `mode` filter to page paper runs by.
-  const debouncedSearch = useDebounced(search.trim());
-  const idSearch = isIdQuery(debouncedSearch);
-  const idNeedle = idQueryNeedle(debouncedSearch);
-  const { data: runs = [], isLoading, isError, error } = usePaperRuns({
-    // `q` is a strategy-NAME search server-side, so an id would return nothing — it is
-    // withheld here and matched against run ids client-side below.
-    q: idSearch ? undefined : debouncedSearch || undefined,
+  // Every control on this toolbar is served by `GET /api/runs` — search, status, market tab,
+  // symbol, the three metric bounds and the page itself. Nothing is narrowed in the browser, so
+  // the row count below is the real one and page 2 holds the rows page 1 didn't.
+  // The two free-typed groups are debounced: otherwise each keystroke is a request.
+  const debouncedSearch = useDebounced(search);
+  const debouncedRanges = useDebounced(ranges);
+  const { data, isLoading, isError, error } = usePaperRuns({
+    q: runSearchQuery(debouncedSearch),
     status: status === "all" ? undefined : status,
+    asset_kind: assetKindOf(market),
+    symbol: symbol === ALL_SYMBOLS ? undefined : symbol,
+    ...metricRangeParams(debouncedRanges),
+    page: page - 1, // the API counts pages from 0
+    size: pageSize,
   });
 
-  // Symbol options follow the selected market tab, like Alpha pool.
-  const symbolOptions = useMemo(
-    () =>
-      Array.from(
-        new Set(runs.filter((r) => matchesMarket(r, market)).flatMap((r) => r.symbols.map((s) => s.symbol))),
-      ).sort(),
-    [runs, market],
-  );
-
-  const filtered = useMemo(
-    () =>
-      runs.filter(
-        (r) =>
-          (!idSearch || r.id.toLowerCase().includes(idNeedle)) &&
-          (symbol === "all" || r.symbols.some((s) => s.symbol === symbol)) &&
-          (strategyType === "all" || r.strategyType === strategyType) &&
-          matchesMarket(r, market) &&
-          matchesMetricRanges(r, ranges),
-      ),
-    [runs, symbol, market, strategyType, idSearch, idNeedle, ranges],
-  );
-
-  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const currentPage = Math.min(page, pageCount);
-  const pageRows = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-  const selectedRun = runs.find((r) => r.id === selectedId) ?? null;
+  const rows = data?.rows ?? [];
+  const total = data?.total ?? 0;
+  const selectedRun = useSelectedRunRow(rows, selectedId);
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  // A refetch can shrink the result set under a reader who is already past its new end — a run
+  // stopped or removed elsewhere. Corrected during render rather than in an effect, same as the
+  // `alignedRunId` sync below.
+  if (page > pageCount) setPage(pageCount);
 
   // A deep link should land on its own tab: `?run=` alone would otherwise open the panel over
   // whichever market happens to be default, with the row invisible in the table behind it.
@@ -123,25 +114,14 @@ function PaperTrading() {
           />
           <MinimalisticMagnifer size={20} weight="Outline" className="shrink-0 text-muted-foreground" />
         </div>
-        <Select
+        <SymbolFilter
+          market={market}
           value={symbol}
-          onValueChange={(v) => {
-            setSymbol(v ?? "all");
+          onChange={(v) => {
+            setSymbol(v);
             setPage(1);
           }}
-        >
-          <SelectTrigger className="h-8 w-auto gap-2 rounded-full border-border bg-background px-3 text-xs text-foreground">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All symbols</SelectItem>
-            {symbolOptions.map((s) => (
-              <SelectItem key={s} value={s}>
-                {s}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        />
         <Select
           value={status}
           onValueChange={(v) => {
@@ -161,13 +141,6 @@ function PaperTrading() {
             <SelectItem value="completed">Completed</SelectItem>
           </SelectContent>
         </Select>
-        <StrategyTypeFilter
-          value={strategyType}
-          onChange={(v) => {
-            setStrategyType(v);
-            setPage(1);
-          }}
-        />
         <MetricRangeFilters
           value={ranges}
           onChange={(next) => {
@@ -191,15 +164,15 @@ function PaperTrading() {
             <p className="p-4 text-sm text-destructive">{resourceErrorMessage(error)}</p>
           ) : isLoading ? (
             <p className="p-4 text-sm text-muted-foreground">Loading&hellip;</p>
-          ) : pageRows.length === 0 ? (
+          ) : rows.length === 0 ? (
             <p className="p-4 text-sm text-muted-foreground">No paper strategies found.</p>
           ) : (
-            <PaperRunsTable rows={pageRows} selectedId={selectedId ?? undefined} onSelect={setSelectedId} />
+            <PaperRunsTable rows={rows} selectedId={selectedId ?? undefined} onSelect={setSelectedId} />
           )}
         </div>
         {pageCount > 1 && (
           <div className="border-t border-border px-4 py-3">
-            <TablePagination currentPage={currentPage} pageCount={pageCount} onPageChange={setPage} />
+            <TablePagination currentPage={page} pageCount={pageCount} onPageChange={setPage} />
           </div>
         )}
       </section>

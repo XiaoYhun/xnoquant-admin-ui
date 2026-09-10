@@ -3,8 +3,11 @@ import { apiGet, apiPost, retryUnlessForbidden } from "@/lib/api-client";
 import { HFT_API_URL, USE_MOCK } from "@/lib/constant";
 import { normalizeCostCurve, type CostPoint } from "@/lib/cost-curve";
 import { normalizeTurnover, type TurnoverPoint } from "@/lib/turnover-curve";
-import type { EquityPoint, Run, RunPage, RunSummary, SampleScope, VolRegimeSummary } from "@/types/domain";
-import { settlementCurrencyOf } from "@/lib/transform/runs";
+import type { EquityPoint, Run, RunMode, RunPage, RunSummary, SampleScope, VolRegimeSummary } from "@/types/domain";
+import { settlementCurrencyOf, toPaperRunRow } from "@/lib/transform/runs";
+import type { PaperRunRow } from "@/lib/mock/paper-runs";
+import type { AssetKind } from "@/components/market-tabs";
+import type { MetricBounds } from "@/components/metric-range-filters";
 import type { components } from "@/types/api/hft";
 
 export type { TurnoverPoint, CostPoint };
@@ -20,24 +23,44 @@ export type LaunchRequest = components["schemas"]["LaunchRequest"];
 // EquityPoint[] → LiveRunRow/PaperRunRow via lib/transform/runs.ts — see
 // docs/plans/api-integration.md §4.C). Raw HFT payloads — no envelope, use apiGet/apiPost.
 
-// `GET /api/runs` is paged: it returns `RunPage { runs, total, page, size }`, and supports
-// `q` (case-insensitive strategy-NAME search), `status` (exact), `page` (0-indexed) and
-// `size` (default 100, max 200 — the upstream clamps anything larger).
-export type RunsQuery = { q?: string; status?: string; page?: number; size?: number };
+// `GET /api/runs` is paged AND filtered server-side. It answers `RunPage { runs, total, page,
+// size }` and narrows on `q` (case-insensitive substring over strategy name OR run id),
+// `status` (exact), `mode` (exact — this is what lets each list page itself), `asset_kind`
+// (`stock`/`futures`/`crypto` — the market tabs), `symbol` (substring over the run's traded
+// symbols) and inclusive bounds on the three headline metrics. `page` is 0-indexed and `size`
+// defaults to 100, max 200 (the upstream clamps anything larger).
+//
+// The field names are the API's own, so a query object serializes without a mapping table.
+// `metricRangeParams` (components/metric-range-filters.tsx) supplies the `MetricBounds` half in
+// the units the server stores — see its doc comment for the percent/fraction conversion.
+export type RunsQuery = {
+  q?: string;
+  status?: string;
+  mode?: RunMode;
+  asset_kind?: AssetKind;
+  symbol?: string;
+  /** 0-indexed, as the API counts. The lists' pagers are 1-based and subtract before calling. */
+  page?: number;
+  size?: number;
+} & MetricBounds;
 
 /**
- * The server-side window assembled by app/hft/api/runs/aggregate/route.ts — the same
- * `RunPage` shape, but up to 1000 runs walked 200 at a time upstream instead of one 200-row
- * page. Temporary, and deleted along with the route once `/api/runs` can filter by `mode`.
+ * The server-side window assembled by app/hft/api/runs/aggregate/route.ts — the same `RunPage`
+ * shape, but up to 1000 runs walked 200 at a time upstream instead of one 200-row page.
+ *
+ * The three run lists no longer need it: they page server-side now that `/api/runs` filters by
+ * `mode`. It survives for the two readers that consume runs as a SET rather than a page — Alpha
+ * pool, which joins each promotion to the run it was promoted from, and the Risk screen's
+ * running-run lookup. Both would otherwise silently miss anything past row 200.
  */
 const RUNS_AGGREGATE_PATH = "/api/runs/aggregate";
 
 export async function fetchRunsPage(params: RunsQuery = {}, path = "/api/runs"): Promise<RunPage> {
   const search = new URLSearchParams();
-  if (params.q) search.set("q", params.q);
-  if (params.status) search.set("status", params.status);
-  if (params.page != null) search.set("page", String(params.page));
-  if (params.size != null) search.set("size", String(params.size));
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === "") continue;
+    search.set(key, String(value));
+  }
   const qs = search.toString();
   const page = await apiGet<RunPage>(`${HFT_API_URL}${path}${qs ? `?${qs}` : ""}`);
   // Guard the contract: callers map over `runs` immediately, so a malformed payload should
@@ -45,20 +68,30 @@ export async function fetchRunsPage(params: RunsQuery = {}, path = "/api/runs"):
   return { runs: Array.isArray(page?.runs) ? page.runs : [], total: page?.total ?? 0, page: page?.page ?? 0, size: page?.size ?? 0 };
 }
 
-// GAP-2 (still open): `/api/runs` has no `mode` filter, so the Paper/Live/Backtesting screens
-// must split modes client-side and therefore can't page server-side — a server page would mix
-// modes and report a `total` covering all three. They paginate locally over this window instead.
-//
-// `size` is not forwarded: the aggregate route drives upstream paging itself, walking 200-row
-// pages up to its own cap. Callers that want one raw upstream page can still pass `page`/`size`
-// to `fetchRunsPage` directly.
+// A page can carry the same run more than once (seen on dev: one id three times). Every list keys
+// its rows on the run id, and React leaves ghost rows behind when keys collide — rows that survive
+// a filter they don't match. Keep the first copy of each id.
+function dedupeById(runs: Run[]): Run[] {
+  const seen = new Set<string>();
+  return runs.filter((run) => !seen.has(run.id) && (seen.add(run.id), true));
+}
+
+/** The whole aggregate window as one list — for the two set-shaped readers described above. */
 export async function fetchRuns(params: RunsQuery = {}): Promise<Run[]> {
   const page = await fetchRunsPage(params, RUNS_AGGREGATE_PATH);
-  // A page can carry the same run more than once (seen on dev: one id three times). Every list
-  // keys its rows on the run id, and React leaves ghost rows behind when keys collide — rows that
-  // survive a filter they don't match. Keep the first copy of each id.
-  const seen = new Set<string>();
-  return page.runs.filter((run) => !seen.has(run.id) && (seen.add(run.id), true));
+  return dedupeById(page.runs);
+}
+
+/** One server page, already mapped to the row shape all four run tables render. */
+export type RunRowPage = { rows: PaperRunRow[]; total: number };
+
+/**
+ * The list hooks' fetcher. `total` is the filtered COUNT(*) across every page, so it — not the
+ * length of `rows` — is what the pager measures itself against.
+ */
+export async function fetchRunRowPage(query: RunsQuery): Promise<RunRowPage> {
+  const page = await fetchRunsPage(query);
+  return { rows: dedupeById(page.runs).map(toPaperRunRow), total: page.total };
 }
 
 // `?sample=` — which slice of a split backtest the result endpoints compute over (see
@@ -78,7 +111,8 @@ export function fetchRunEquity(id: string, sample?: SampleScope): Promise<Equity
 }
 
 // All runs, unfiltered — the Alpha pool joins each promotion to the run named by its
-// `based_on_run_id` (a paper *or* backtest run), so it can't use the mode-filtered hooks.
+// `based_on_run_id` (a paper *or* backtest run), so it looks runs up by id rather than paging
+// them. Reads the aggregate window for that reason; see RUNS_AGGREGATE_PATH.
 export function useRuns() {
   return useQuery({
     queryKey: ["runs"],
@@ -169,6 +203,20 @@ export function isPendingBacktest(run: Run | undefined): boolean {
 }
 
 /**
+ * The row behind `?run=<id>` on a server-paged list.
+ *
+ * It is normally one of the rows already on screen, but a deep link (or a page change with the
+ * panel open) can name a run that lives on another page — that one is fetched by id rather than
+ * leaving the panel shut. The fetch is skipped entirely while the row is on the page, so the
+ * common case still costs nothing.
+ */
+export function useSelectedRunRow(rows: PaperRunRow[], selectedId: string | null | undefined): PaperRunRow | null {
+  const onPage = rows.find((row) => row.id === selectedId) ?? null;
+  const { data } = useRun(onPage || !selectedId ? undefined : selectedId);
+  return onPage ?? (data ? toPaperRunRow(data) : null);
+}
+
+/**
  * The currency a run accounts in, for the Results views — they receive only a `runId`, so the
  * manifest has to be fetched. Rides the shared ["run", id] query, so the six views (and anything
  * else already reading that key) cost one request between them.
@@ -179,6 +227,19 @@ export function isPendingBacktest(run: Run | undefined): boolean {
 export function useRunCurrency(runId: string | undefined): string {
   const { data } = useRun(runId);
   return data?.manifest ? settlementCurrencyOf(data.manifest) : "USDT";
+}
+
+/**
+ * A summary whose numbers are real, or nothing.
+ *
+ * `RunSummary.oversized` marks a run whose parquet artifacts were too large for the result
+ * service to load: the API still answers 200, but every field on the body is a zeroed/None
+ * PLACEHOLDER rather than a computed value. Rendering it would print a confident 0.00 Sharpe and
+ * a 0 max drawdown for a run that may have done anything, so it is dropped here and the panels
+ * fall back to the same "no data" state they show before a summary lands.
+ */
+export function realSummary(summary: RunSummary | undefined): RunSummary | undefined {
+  return summary?.oversized ? undefined : summary;
 }
 
 /** `symbol_id` → ticker, off a run's manifest. Empty until the run record resolves. */

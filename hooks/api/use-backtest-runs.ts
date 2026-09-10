@@ -2,30 +2,27 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiDelete, apiPost } from "@/lib/api-client";
 import { USE_MOCK, HFT_API_URL } from "@/lib/constant";
 import type { Run } from "@/types/domain";
-import type { PaperRunRow } from "@/lib/mock/paper-runs";
-import { PENDING_RUN_POLL_MS, fetchRuns, type RunsQuery } from "./use-runs";
-import { toPaperRunRow } from "@/lib/transform/runs";
+import { PENDING_RUN_POLL_MS, fetchRunRowPage, type RunRowPage, type RunsQuery } from "./use-runs";
 
-// GAP-2: `GET /api/runs` has no `mode` filter — fetch a page, keep `mode==="backtest"`. Same shape
-// as the paper list (toPaperRunRow), so the Strategy List reuses the paper-trading row contract.
-// Per-run summary + equity stay deferred to the detail panel.
-async function fetchBacktestRunRows(query: RunsQuery): Promise<PaperRunRow[]> {
-  return (await fetchRuns(query)).filter((r) => r.mode === "backtest").map(toPaperRunRow);
-}
-
-// `query` goes to the server (`q` = strategy-name search, `status` = exact match). Paging stays
-// client-side — see the GAP-2 note in use-runs.ts.
+// Backtesting is `GET /api/runs?mode=backtest` — one server page, already narrowed, sorted and
+// counted upstream. Rows share the paper row contract (toPaperRunRow), so the Strategy List and
+// the paper detail panel read them unchanged. Per-run summary + equity stay deferred to the
+// detail panel.
+//
+// `query` is the page's whole filter state; every field of it is served by the API. Paging is the
+// caller's to drive: it passes `page` (0-indexed) and `size`, and measures the pager against the
+// returned `total`.
 export function useBacktestRuns(query: RunsQuery = {}) {
   return useQuery({
-    queryKey: ["backtest-runs", query.q ?? "", query.status ?? ""],
-    queryFn: () => (USE_MOCK ? Promise.resolve<PaperRunRow[]>([]) : fetchBacktestRunRows(query)),
-    placeholderData: (prev) => prev, // keep rows on screen while a new search resolves
+    queryKey: ["backtest-runs", query],
+    queryFn: () =>
+      USE_MOCK ? Promise.resolve<RunRowPage>({ rows: [], total: 0 }) : fetchRunRowPage({ ...query, mode: "backtest" }),
+    placeholderData: (prev) => prev, // keep rows on screen while a new page or search resolves
     // A queued backtest is the only row on this screen that changes without the user doing
-    // anything, so the list re-reads itself every 5s while one is loaded — and only then. With no
-    // pending row the list is static and a poll would be pure traffic. Same cadence as the run
-    // record's own poll (see useRun).
-    refetchInterval: (query) =>
-      query.state.data?.some((row) => row.status === "pending") ? PENDING_RUN_POLL_MS : false,
+    // anything, so the list re-reads itself every 5s while one is on the loaded page — and only
+    // then. Same cadence as the run record's own poll (see useRun).
+    refetchInterval: (q) =>
+      q.state.data?.rows.some((row) => row.status === "pending") ? PENDING_RUN_POLL_MS : false,
   });
 }
 

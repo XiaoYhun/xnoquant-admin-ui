@@ -1553,8 +1553,9 @@ export interface paths {
         /**
          * GET /api/runs — page through the caller's runs, newest first by default, optionally filtered
          * @description by exact `status`, a case-insensitive substring search over strategy name or run ID, an
-         *     `asset_kind` (`stock`/`futures`/`crypto`), a `symbol` substring match, and/or bounds on
-         *     Sharpe/return%/drawdown%; sortable by any of those three performance fields as well.
+         *     `asset_kind` (`stock`/`futures`/`crypto`), an exact `mode` (`backtest`/`paper`/`live`), a
+         *     `symbol` substring match, and/or bounds on Sharpe/return%/drawdown%; sortable by any of those
+         *     three performance fields as well.
          */
         get: {
             parameters: {
@@ -1569,6 +1570,8 @@ export interface paths {
                     q?: string | null;
                     /** @description Exact asset-kind filter: `stock`, `futures` (VN30F1M), or `crypto` */
                     asset_kind?: string | null;
+                    /** @description Exact run-mode filter: `backtest`, `paper`, or `live` */
+                    mode?: string | null;
                     /** @description Case-insensitive substring match against one of the run's traded symbols */
                     symbol?: string | null;
                     /** @description Sort field: `created_at` (default), `sharpe`, `return_pct`, or `max_drawdown_pct` */
@@ -2046,6 +2049,81 @@ export interface paths {
                     };
                     content: {
                         "application/json": components["schemas"]["PeriodSummary"][];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Caller's role has no access to this resource family */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Run hasn't finished yet — parquet results aren't available until it's terminal; poll the live stream instead */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/runs/{id}/risk-detail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * GET /api/runs/:id/risk-detail — every drawdown episode (not just the single worst one
+         * @description `RunSummary.max_drawdown` sizes), a consecutive-loss-streak-length histogram, and net PnL by
+         *     UTC hour-of-day, bundled into one response since all three come from the same `pnl.parquet`
+         *     read (see `result::compute_risk_detail`).
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Which slice of a split backtest to compute over. Admin-only — non-admins are always forced to in_sample regardless of this value. */
+                    sample?: components["schemas"]["SampleScope"] | null;
+                };
+                header?: never;
+                path: {
+                    /** @description Run ID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Drawdown episodes, loss-streak histogram, and hourly PnL (same visibility as the run itself) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["RiskDetail"];
                     };
                 };
                 /** @description Unauthorized */
@@ -3667,6 +3745,15 @@ export interface components {
         EquityPoint: {
             /** Format: double */
             equity: number;
+            /**
+             * Format: double
+             * @description Cumulative realized PnL **before fees** (`equity` + cumulative `total_fee`) — the same
+             *     curve `equity` traces, minus what fees cost along the way. `#[serde(default)]` so
+             *     Redis-cached JSON from before this field existed still deserializes (as `0.0`, which
+             *     would render a flat line rather than error — callers comparing against `equity` should
+             *     treat `0.0` as "unknown" if that distinction matters).
+             */
+            gross_equity?: number;
             /** Format: double */
             pnl: number;
             /** Format: int64 */
@@ -4264,6 +4351,28 @@ export interface components {
             avg_holding_time_secs: number;
             /**
              * Format: double
+             * @description Mean `net_pnl` of round-trips with negative PnL (a negative number, or `0.0`). `0.0`
+             *     when there are no losers.
+             */
+            avg_loss: number;
+            /**
+             * Format: double
+             * @description Mean `net_pnl` of round-trips with positive PnL. `0.0` when there are no winners.
+             */
+            avg_win: number;
+            /**
+             * Format: double
+             * @description Compound annual growth rate: `(1 + return_pct)^(1/run_duration_years) - 1`, where
+             *     `run_duration_years` is the same trade-rate-derived span [`calmar`](Self::calmar) uses.
+             *     Unlike [`return_pct`](Self::return_pct)'s linear fraction, this compounds to an
+             *     annualized rate, so runs of different lengths are comparable. `None` when
+             *     [`return_pct`](Self::return_pct) is `None`, when `run_duration_years` is undefined
+             *     (fewer than 2 trades or a zero-length span), or when the run lost more than 100% of
+             *     starting capital (a fractional power of a non-positive base is undefined).
+             */
+            cagr?: number | null;
+            /**
+             * Format: double
              * @description Annualized `net_pnl` (linearly projected from the run's own trade-rate-derived
              *     duration, i.e. `net_pnl / run_duration_years`) divided by [`max_drawdown`](Self::max_drawdown).
              *     Unlike [`max_drawdown_pct`](Self::max_drawdown_pct) this needs no starting capital — both
@@ -4273,11 +4382,34 @@ export interface components {
             calmar: number;
             /**
              * Format: double
+             * @description Sum of every round-trip's commission component of `total_fee`. `None` for runs recorded
+             *     before the commission/tax split existed (an older `pnl.parquet` schema).
+             *     `#[serde(default)]` so Redis-cached JSON from before this field existed still
+             *     deserializes (as `None`).
+             */
+            commission_total?: number | null;
+            /**
+             * Format: double
              * @description All-in trading cost (`total_fee`) per unit traded notional, in bps. Notional is the sum
              *     of `fill_price * fill_qty` over every fill (both legs of each round-trip). `0.0` when
              *     notional is zero.
              */
             cost_bps: number;
+            /**
+             * Format: double
+             * @description Conditional Value at Risk (Expected Shortfall) at the 95% confidence level: the mean
+             *     `net_pnl` of the round-trips in the tail at/beyond [`var_95`](Self::var_95)'s rank, i.e.
+             *     the expected loss *given* it exceeds VaR. Always `>=` [`var_95`](Self::var_95) in
+             *     magnitude. A positive PnL-unit magnitude; `0.0` under the same conditions as
+             *     [`var_95`](Self::var_95).
+             */
+            cvar_95: number;
+            /**
+             * Format: double
+             * @description [`cvar_95`](Self::cvar_95) as a fraction of starting capital. `None` under the same
+             *     conditions as [`max_drawdown_pct`](Self::max_drawdown_pct).
+             */
+            cvar_95_pct?: number | null;
             /**
              * Format: double
              * @description Gross edge (`net_pnl + total_fee`) per unit traded notional, in bps. Satisfies
@@ -4353,6 +4485,17 @@ export interface components {
             max_drawdown: number;
             /**
              * Format: double
+             * @description Duration, in days, of the drawdown episode containing the run's single largest
+             *     peak-to-trough drop (the same episode [`max_drawdown`](Self::max_drawdown) sizes): from
+             *     the peak that preceded it to the point the cumulative realized-PnL curve recovers back
+             *     to that peak, or to the last round-trip's `close_ts` if the episode is still open at the
+             *     end of the run (unlike [`longest_recovery_days`](Self::longest_recovery_days), which only
+             *     counts completed recoveries). `None` when there are no trades or no drawdown ever
+             *     occurred (`max_drawdown == 0.0`).
+             */
+            max_drawdown_duration_days?: number | null;
+            /**
+             * Format: double
              * @description [`max_drawdown`](Self::max_drawdown) as a fraction of starting capital (the run's
              *     settlement-currency balance). `None` when no starting capital is known — currently
              *     always the case for live runs (`ManifestAccount.balances` is empty until the live
@@ -4372,6 +4515,12 @@ export interface components {
              */
             net_pnl: number;
             /**
+             * Format: double
+             * @description Fraction of round-trips whose `open_ts` and `close_ts` fall on different UTC calendar
+             *     days, in `[0, 1]`. `None` when there are no trades.
+             */
+            overnight_trades_pct?: number | null;
+            /**
              * @description `true` when this run's parquet artifacts exceeded the size `result::store` will safely
              *     load into memory — every other field is then a zeroed/`None` placeholder, not a real
              *     computed value. See docs/run-result-service.md's "Known issue" section. `#[serde(default)]`
@@ -4387,6 +4536,12 @@ export interface components {
              *     total is exactly `0.0` (division undefined).
              */
             peak_hour_concentration_pct?: number | null;
+            /**
+             * Format: double
+             * @description Sum of winning round-trips' `net_pnl` divided by the absolute sum of losing round-trips'
+             *     `net_pnl`. `None` when there are no losing round-trips (division undefined).
+             */
+            profit_factor?: number | null;
             /**
              * Format: double
              * @description [`net_pnl`](Self::net_pnl) as a fraction of starting capital (the run's settlement-
@@ -4409,6 +4564,21 @@ export interface components {
             sharpe_annualized: number;
             /**
              * Format: double
+             * @description [`slippage_total`](Self::slippage_total) per unit traded notional, in bps — same
+             *     `x / volume * 1e4` convention as [`cost_bps`](Self::cost_bps). `0.0` when notional
+             *     volume is zero.
+             */
+            slippage_bps: number;
+            /**
+             * Format: double
+             * @description Unsigned execution-cost estimate from crossing the spread — sum of
+             *     `|spread_pnl_open| + |spread_pnl_close|` over every round-trip, in PnL units. Distinct
+             *     from `spread_capture` on [`SymbolPnlSummary`], which is signed alpha attribution (can be
+             *     a gain when acting as maker); this is always a cost. `0.0` when there are no trades.
+             */
+            slippage_total: number;
+            /**
+             * Format: double
              * @description Like [`sharpe`](Self::sharpe), but the denominator is the downside deviation (root-mean-
              *     square of the negative `net_pnl`s only, zero-target) instead of the full population
              *     std — so gains don't get penalized as "risk". `0.0` when there are fewer than 2 samples
@@ -4422,6 +4592,12 @@ export interface components {
              *     when undefined.
              */
             sortino_annualized: number;
+            /**
+             * Format: double
+             * @description Sum of every round-trip's tax component of `total_fee`. `None` under the same condition
+             *     as [`commission_total`](Self::commission_total).
+             */
+            tax_total?: number | null;
             /** Format: double */
             total_fee: number;
             /**
@@ -4431,6 +4607,12 @@ export interface components {
             total_trades: number;
             /**
              * Format: double
+             * @description Fraction of round-trips held under 6 hours (`close_ts - open_ts < 6h`), in `[0, 1]`.
+             *     `None` when there are no trades.
+             */
+            trades_under_6h_pct?: number | null;
+            /**
+             * Format: double
              * @description Mark-to-market PnL of whatever position was still open when the run stopped (e.g. a
              *     buy-and-hold strategy that never closes), from `<run_dir>/unrealized_pnl.json`. `0.0` when
              *     the run ended flat, or for runs recorded before this sidecar existed. **Not**
@@ -4438,6 +4620,29 @@ export interface components {
              *     per row to split on.
              */
             unrealized_pnl: number;
+            /**
+             * Format: double
+             * @description Historical (empirical) Value at Risk at the 95% confidence level over the realized-trade
+             *     `net_pnl` distribution: the loss magnitude such that 95% of round-trips lost no more,
+             *     found via the nearest-rank method on the ascending-sorted series (no distributional
+             *     assumption). A positive PnL-unit magnitude; `0.0` when the tail quantile is itself
+             *     non-negative (no loss at that confidence level) or there are no trades.
+             */
+            var_95: number;
+            /**
+             * Format: double
+             * @description [`var_95`](Self::var_95) as a fraction of starting capital. `None` under the same
+             *     conditions as [`max_drawdown_pct`](Self::max_drawdown_pct).
+             */
+            var_95_pct?: number | null;
+            /**
+             * Format: double
+             * @description Annualized standard deviation of daily realized-PnL returns (sample std of each trading
+             *     day's `net_pnl` as a fraction of starting capital, scaled by `sqrt(252)`), e.g. `0.36`
+             *     meaning 36%. `None` when there are fewer than 2 trading days or no starting capital is
+             *     known.
+             */
+            volatility_annualized?: number | null;
             /**
              * Format: double
              * @description Fraction of closing (round-trip-reducing) trades with positive realized PnL, in `[0, 1]`.
@@ -4789,6 +4994,19 @@ export interface components {
              * @description Sample standard deviation (`ddof=1`). `None` when the bucket has fewer than 2 days.
              */
             std_daily_pct?: number | null;
+            /**
+             * Format: int32
+             * @description Number of round-trips (`pnl.parquet` rows) whose `close_ts` falls on a day labeled into
+             *     this bucket. `#[serde(default)]` so Redis-cached JSON from before this field existed
+             *     still deserializes (as `0`).
+             */
+            trades?: number;
+            /**
+             * Format: double
+             * @description Fraction of [`trades`](Self::trades) with positive `net_pnl`. `None` when the bucket has
+             *     no round-trips. `#[serde(default)]`, same reasoning as [`trades`](Self::trades).
+             */
+            win_rate?: number | null;
         };
         /**
          * @description Parameters [`VolRegimeSummary`] was computed with — fixed today (no per-request overrides),
@@ -4846,6 +5064,7 @@ export interface components {
         TcbsRequestOtpResponse: Record<string, never>;
         SampleScope: Record<string, never>;
         PeriodSummary: Record<string, never>;
+        RiskDetail: Record<string, never>;
     };
     responses: never;
     parameters: never;

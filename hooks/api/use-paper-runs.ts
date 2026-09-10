@@ -2,26 +2,30 @@ import { useQuery } from "@tanstack/react-query";
 import { mockApi } from "@/lib/mock";
 import { apiGet } from "@/lib/api-client";
 import { USE_MOCK, HFT_API_URL } from "@/lib/constant";
-import type { PaperRunRow, TradeHistoryRow } from "@/lib/mock/paper-runs";
+import type { TradeHistoryRow } from "@/lib/mock/paper-runs";
 import type { SampleScope, TradePage } from "@/types/domain";
-import { fetchRuns, type RunsQuery } from "./use-runs";
-import { toPaperRunRow, toTradeHistoryRow } from "@/lib/transform/runs";
+import { fetchRunRowPage, type RunRowPage, type RunsQuery } from "./use-runs";
+import { toTradeHistoryRow } from "@/lib/transform/runs";
 
-// GAP-2: `GET /api/runs` has no `mode` filter — fetch all, keep `mode==="paper"`. Per-run summary
-// + equity are NOT fetched here; they're deferred to the detail panel (useRunSummary/useRunEquity
-// on open), so the list is a single call and the table's metric columns show "—" until a run is
-// opened.
-async function fetchPaperRunRows(query: RunsQuery): Promise<PaperRunRow[]> {
-  return (await fetchRuns(query)).filter((r) => r.mode === "paper").map(toPaperRunRow);
-}
-
-// `query` goes to the server (`q` = strategy-name search, `status` = exact match). Paging stays
-// client-side — see the GAP-2 note in use-runs.ts.
+// Paper Trading is `GET /api/runs?mode=paper` — one server page, narrowed and counted upstream.
+// Per-run summary + equity are NOT fetched here; they're deferred to the detail panel
+// (useRunSummary/useRunEquity on open), so the list is a single call and the table's metric
+// columns show "—" until a run is opened.
+//
+// `query` is the page's whole filter state, including `page`/`size` — see useBacktestRuns.
 export function usePaperRuns(query: RunsQuery = {}) {
   return useQuery({
-    queryKey: ["paper-runs", query.q ?? "", query.status ?? ""],
-    queryFn: () => (USE_MOCK ? mockApi.listPaperRuns() : fetchPaperRunRows(query)),
-    placeholderData: (prev) => prev, // keep rows on screen while a new search resolves
+    queryKey: ["paper-runs", query],
+    queryFn: async (): Promise<RunRowPage> => {
+      // Mock ignores `query` — every filter is served by the API, and there is no mock run store
+      // to narrow. The whole mock list comes back as a single page.
+      if (USE_MOCK) {
+        const rows = await mockApi.listPaperRuns();
+        return { rows, total: rows.length };
+      }
+      return fetchRunRowPage({ ...query, mode: "paper" });
+    },
+    placeholderData: (prev) => prev, // keep rows on screen while a new page or search resolves
   });
 }
 

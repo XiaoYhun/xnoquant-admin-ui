@@ -66,15 +66,44 @@ export function formatSignedAmount(n: number, digits = 2): string {
 }
 
 /**
- * Does this search entry look like an id rather than a name?
+ * A span of fractional days as the Results screens write it — `2.75` → `2d18h`, `0.5` → `12h`.
  *
- * The run tables show ids as `#019ff517-5293` (the first two uuid groups), and users paste either
- * that or a full uuid. It matters because `GET /api/runs?q=` searches the strategy NAME only —
- * sending an id there returns nothing — so callers must keep the term off the server and match it
- * against ids client-side instead.
+ * `null` when there is nothing to format, so each call site can supply its own dash. Rounding
+ * can carry the hours to 24, which would read as `2d24h`, so it rolls into the day instead.
+ */
+export function formatDurationDays(days: number | null | undefined): string | null {
+  if (days == null || !Number.isFinite(days) || days < 0) return null;
+  let whole = Math.floor(days);
+  let hours = Math.round((days - whole) * 24);
+  if (hours === 24) {
+    whole += 1;
+    hours = 0;
+  }
+  return whole > 0 ? `${whole}d${hours}h` : `${hours}h`;
+}
+
+/**
+ * The `q` a run list sends to `GET /api/runs`, or `undefined` for an empty box.
+ *
+ * The server searches the strategy NAME and the run ID with one case-insensitive substring
+ * match, so the box needs no client-side split. The only shaping is dropping a leading `#`: the
+ * tables print ids as `#019ff517-5293` and users paste that back, but the id column it matches
+ * against carries no `#`.
+ */
+export function runSearchQuery(search: string): string | undefined {
+  return search.trim().replace(/^#/, "") || undefined;
+}
+
+/**
+ * Does this search term look like an id rather than a name?
+ *
+ * The tables show ids as `#019ff517-5293` (the first two uuid groups), and users paste either
+ * that or a full uuid. It matters on the Strategy List, which filters its rows in the browser and
+ * so has to decide for itself which column the term belongs to. (The run lists don't need it:
+ * `GET /api/runs?q=` searches name and id together.)
  *
  * Four hex characters is the shortest fragment worth treating as an id; below that a name like
- * "abc" would be misread and its server-side search silently skipped.
+ * "abc" would be misread.
  */
 export function isIdQuery(query: string): boolean {
   const s = query.trim().replace(/^#/, "");

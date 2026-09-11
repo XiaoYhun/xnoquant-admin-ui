@@ -1,7 +1,7 @@
 import type { EquityPoint, RunSummary } from "@/types/domain";
 import type { StrategyChartData, SummaryTableItem } from "@/hooks/api/use-strategy-results";
 import type { StrategyPerformanceDetail } from "@/hooks/api/use-strategy-performance";
-import { toDrawdown, toRollingSharpe } from "./results";
+import { startingCapital, toDrawdown, toRollingSharpe } from "./results";
 import { toPeriodChanges, yearOf, type Point } from "./mft-results";
 
 // HFT `/api/runs/{id}` equity + summary → the shapes the six Figma-15204 Results screens already
@@ -30,20 +30,30 @@ function toChart(points: Point[]): StrategyChartData {
 }
 
 /**
- * Cumulative PnL → the four series the MFT screens slice. `returns` is percent of the curve's
- * first |equity| sample (or 1), matching the MFT mock's "+1.5 / -0.8" percent units so
- * `monthlyReturns` can compound them.
+ * Cumulative PnL → the four series the MFT screens slice. `returns` is percent of the capital the
+ * run actually deployed, in the "+1.5 / -0.8" units `monthlyReturns` compounds.
+ *
+ * That base has to be real. This used to divide by the curve's first |equity| sample and fall
+ * back to `1` when the curve started at zero — which every PnL-style curve does — turning a
+ * 2,000,000 VND day into +200,000,000% and compounding a year of them into "-70.5T%". The run's
+ * own capital (`net_pnl / return_pct`) is the only honest denominator, and when the summary has
+ * no `return_pct` there is no percentage to state: the series comes back empty and the percent
+ * metrics dash, which is what the control plane does with the same run.
  */
-export function runToMftCharts(equity: EquityPoint[] | undefined): {
+export function runToMftCharts(
+  equity: EquityPoint[] | undefined,
+  summary?: RunSummary,
+): {
   pnls: StrategyChartData;
   returns: StrategyChartData;
   drawdown: StrategyChartData;
   sharpe: StrategyChartData;
 } {
   const pnlsPts = equityToPoints(equity);
-  const start = pnlsPts[0]?.v;
-  const denom = start && start !== 0 ? Math.abs(start) : 1;
-  const returnPts = toPeriodChanges(pnlsPts).map((p) => ({ t: p.t, v: (p.v / denom) * 100 }));
+  const capital = startingCapital(summary);
+  const returnPts = capital
+    ? toPeriodChanges(pnlsPts).map((p) => ({ t: p.t, v: (p.v / capital) * 100 }))
+    : [];
   const drawdownPts = toDrawdown(equity ?? []).map((d) => ({ t: toUnixSec(d.ts), v: d.pct }));
   const sharpePts = toRollingSharpe(equity ?? []).map((d) => ({ t: toUnixSec(d.ts), v: d.value }));
   return {
@@ -67,7 +77,9 @@ export function runToMftPerf(summary: RunSummary | undefined): StrategyPerforman
     performance: {
       cumulative_return: summary.return_pct ?? undefined,
       sharpe: summary.sharpe_annualized || summary.sharpe,
-      sortino: summary.sortino,
+      // Annualized, like the Sharpe above it: the raw `sortino` is per-closing-trade, so reading
+      // it here printed 0.12 against the control plane's 2.18 for the same run.
+      sortino: summary.sortino_annualized || summary.sortino,
       calmar: summary.calmar,
       max_drawdown: summary.max_drawdown_pct ?? undefined,
       win_rate: summary.win_rate,
@@ -93,14 +105,17 @@ export function runToMftSummaryRows(
       },
     ];
   }
+  // Same rule as the returns series above: a year's growth is only a percentage against capital
+  // the run actually deployed. Without `return_pct` there is no base, and the year carries no
+  // CAGR rather than one measured against a denominator of 1.
+  const capital = startingCapital(summary);
   return years.map((y) => {
     const slice = pts.filter((p) => yearOf(p.t) === y);
     const start = slice[0]?.v ?? 0;
     const end = slice[slice.length - 1]?.v ?? 0;
-    const denom = start !== 0 ? Math.abs(start) : 1;
     return {
       time: String(y),
-      cagr: (end - start) / denom,
+      cagr: capital ? (end - start) / capital : undefined,
     };
   });
 }

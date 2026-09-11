@@ -34,6 +34,25 @@ export type Run = HftComponents["schemas"]["Run"];
 export type RunPage = HftComponents["schemas"]["RunPage"];
 export type RunSummary = HftComponents["schemas"]["RunSummary"];
 export type VolRegimeSummary = HftComponents["schemas"]["VolRegimeSummary"];
+
+/**
+ * One bucket of `GET /api/runs/:id/periodic-summary` — a calendar year (or quarter, for a backtest
+ * spanning under a year) with the same `RunSummary` the whole-run endpoint returns, computed over
+ * that window alone.
+ *
+ * Hand-written because the generated `HftComponents["schemas"]["PeriodSummary"]` is
+ * `Record<string, never>`: the OpenAPI document names the type but declares none of its fields.
+ * Shape confirmed against the dev endpoint for run 01a08f45 (labels "2016".."2025", each carrying
+ * a full 44-field summary).
+ */
+export type PeriodSummary = {
+  /** The bucket's name, as the API formats it for display — "2018", or "2018 Q3". */
+  label: string;
+  /** Inclusive ISO dates (`YYYY-MM-DD`) bounding the bucket. */
+  start_date: string;
+  end_date: string;
+  summary: RunSummary;
+};
 export type VolRegimeBucket = HftComponents["schemas"]["VolRegimeBucket"];
 export type RunStatus = HftComponents["schemas"]["RunStatus"];
 export type RunMode = HftComponents["schemas"]["RunMode"];

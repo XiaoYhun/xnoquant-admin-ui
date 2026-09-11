@@ -1,6 +1,13 @@
 import { describe, it, expect } from "vitest";
 import {
+  annualizedSharpe,
+  annualizedSortino,
+  annualizedVolatility,
+  calmarRatio,
   compound,
+  conditionalValueAtRisk,
+  maxDrawdown,
+  maxDrawdownDuration,
   drawdownEpisodes,
   filterByPeriod,
   lossStreaks,
@@ -9,6 +16,7 @@ import {
   toPeriodChanges,
   toPoints,
   topDrawdowns,
+  valueAtRisk,
   worstLossStreak,
   yearsOf,
   type Point,
@@ -183,5 +191,98 @@ describe("topDrawdowns", () => {
     );
     expect(topDrawdowns(points, 2).map((e) => e.depth)).toEqual([-9, -5]);
     expect(topDrawdowns(points).map((e) => e.depth)).toEqual([-9, -5, -3, -1]);
+  });
+});
+
+// A year of daily samples, one per calendar day. `periodsPerYear` counts the window's own sample
+// rate, so 365 daily points annualize by √365 — the point of inferring it rather than assuming
+// 252 is that a 10-minute series gets its own factor from the same code.
+const daily = (values: number[]): Point[] =>
+  values.map((v, i) => ({ t: ts(2024, 1, 1) + i * 86400, v }));
+
+describe("annualizedVolatility", () => {
+  it("scales the period stddev by the window's own sample rate", () => {
+    // ±1% on alternating days: stddev is exactly 1%, so the annual figure is 0.01 * sqrt(ppy).
+    const points = daily(Array.from({ length: 366 }, (_, i) => (i % 2 ? 1 : -1)));
+    const ppy = (365 / (365 * 86400)) * (365.25 * 86400);
+    expect(annualizedVolatility(points)).toBeCloseTo(0.01 * Math.sqrt(ppy), 6);
+  });
+
+  it("has nothing to measure in a window of one sample", () => {
+    expect(annualizedVolatility(daily([1]))).toBeUndefined();
+    expect(annualizedVolatility([])).toBeUndefined();
+  });
+});
+
+describe("annualizedSharpe", () => {
+  it("is positive for a window that drifts up and negative for one that drifts down", () => {
+    const up = annualizedSharpe(daily([1, -0.5, 1, -0.5, 1, -0.5]));
+    const down = annualizedSharpe(daily([-1, 0.5, -1, 0.5, -1, 0.5]));
+    expect(up).toBeGreaterThan(0);
+    expect(down).toBeLessThan(0);
+    expect(up).toBeCloseTo(-(down as number), 6);
+  });
+
+  it("reports 0 for a flat window rather than dividing by zero", () => {
+    expect(annualizedSharpe(daily([0, 0, 0, 0]))).toBe(0);
+    expect(annualizedSharpe(daily([2, 2, 2, 2]))).toBe(0);
+  });
+});
+
+describe("annualizedSortino", () => {
+  it("ignores upside in the denominator, so it beats Sharpe on a right-skewed window", () => {
+    // One big gain, several small losses: the same mean, but less downside than total spread.
+    const points = daily([6, -1, -1, -1, -1, -1]);
+    expect(annualizedSortino(points)!).toBeGreaterThan(annualizedSharpe(points)!);
+  });
+
+  it("reports 0 when no period lost, rather than dividing by an empty downside", () => {
+    expect(annualizedSortino(daily([1, 2, 3]))).toBe(0);
+  });
+});
+
+describe("valueAtRisk / conditionalValueAtRisk", () => {
+  // Returns -100..-1 percent. The 5% nearest-rank quantile of 100 samples is the 5th worst.
+  const points = daily(Array.from({ length: 100 }, (_, i) => -(100 - i)));
+
+  it("returns a loss that actually happened, as a ratio", () => {
+    expect(valueAtRisk(points)).toBeCloseTo(-0.96, 10);
+  });
+
+  it("averages the tail at or beyond VaR", () => {
+    // -100..-96 inclusive: mean -98%.
+    expect(conditionalValueAtRisk(points)).toBeCloseTo(-0.98, 10);
+  });
+
+  it("has no quantile for an empty window", () => {
+    expect(valueAtRisk([])).toBeUndefined();
+    expect(conditionalValueAtRisk([])).toBeUndefined();
+  });
+});
+
+describe("maxDrawdown / maxDrawdownDuration", () => {
+  const points = pts([0, 0], [1, -2], [2, -7], [3, 0], [4, -1], [5, -3], [6, -4], [7, -5]);
+
+  it("takes the deepest point as a ratio", () => {
+    expect(maxDrawdown(points)).toBeCloseTo(-0.07, 10);
+    expect(maxDrawdown([])).toBeUndefined();
+  });
+
+  it("measures the longest descent, not the longest episode", () => {
+    // First episode falls for 2 periods before recovering; the second falls for 4 and never does.
+    expect(maxDrawdownDuration(points)).toBe(4);
+    expect(maxDrawdownDuration(pts([0, 0], [1, 0]))).toBeUndefined();
+  });
+});
+
+describe("calmarRatio", () => {
+  it("divides the CAGR by the depth of the worst drawdown", () => {
+    expect(calmarRatio(0.2, -0.1)).toBeCloseTo(2, 10);
+  });
+
+  it("has no ratio without both halves, or against a window that never drew down", () => {
+    expect(calmarRatio(0.2, undefined)).toBeUndefined();
+    expect(calmarRatio(undefined, -0.1)).toBeUndefined();
+    expect(calmarRatio(0.2, 0)).toBeUndefined();
   });
 });

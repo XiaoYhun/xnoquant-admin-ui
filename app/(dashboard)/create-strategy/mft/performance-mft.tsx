@@ -29,6 +29,7 @@ import {
   type Metric,
 } from "./results-chrome";
 import { YearlyStatistics, statisticsYears, type Scope } from "./yearly-statistics";
+import type { RunSummary } from "@/types/domain";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -196,6 +197,16 @@ export function PerformanceMft({
   const src = useMftResultsSource({ strategyId, stage, runId });
   const perf = src.perf;
   const summaryRows = src.summaryRows;
+  // `/periodic-summary` buckets by label ("2018", or "2018 Q3" on a sub-year backtest); the year
+  // is what the grid's columns are keyed on, so index by the label's leading year.
+  const periodByYear = useMemo(() => {
+    const m = new Map<number, RunSummary>();
+    for (const p of src.periods ?? []) {
+      const y = Number(p.label.slice(0, 4));
+      if (Number.isFinite(y) && p.summary) m.set(y, p.summary);
+    }
+    return m;
+  }, [src.periods]);
   const returns = src.returns;
   const pnls = src.pnls;
   const dd = src.drawdown;
@@ -224,18 +235,35 @@ export function PerformanceMft({
     [dd.data, stage],
   );
 
-  const years = useMemo(() => statisticsYears(summaryRows), [summaryRows]);
+  // The year columns come from whichever source has them. `/periodic-summary` is the richer one
+  // and covers years the equity curve alone never reaches (2016-17 here, before the first fill).
+  const years = useMemo(
+    () =>
+      periodByYear.size
+        ? [...periodByYear.keys()].sort((a, b) => a - b)
+        : statisticsYears(summaryRows),
+    [periodByYear, summaryRows],
+  );
   const scopeFor = useCallback(
     (year?: number): Scope =>
       year == null
-        ? { isAll: true, perf, returns: stageReturns, drawdown: stageDrawdown }
+        ? {
+            isAll: true,
+            perf,
+            // The whole-run summary answers the All column with the same fields the year columns
+            // read, so the summary line isn't a different calculation from the ones above it.
+            runSummary: src.summary,
+            returns: stageReturns,
+            drawdown: stageDrawdown,
+          }
         : {
             isAll: false,
             row: summaryRows?.find((r) => Number(r.time) === year),
+            runSummary: periodByYear.get(year),
             returns: stageReturns.filter((p) => yearOf(p.t) === year),
             drawdown: stageDrawdown.filter((p) => yearOf(p.t) === year),
           },
-    [perf, summaryRows, stageReturns, stageDrawdown],
+    [perf, src.summary, summaryRows, periodByYear, stageReturns, stageDrawdown],
   );
 
   const p = perf?.performance;

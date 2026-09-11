@@ -3,7 +3,7 @@ import { apiGet, apiPost, retryUnlessForbidden } from "@/lib/api-client";
 import { HFT_API_URL, USE_MOCK } from "@/lib/constant";
 import { normalizeCostCurve, type CostPoint } from "@/lib/cost-curve";
 import { normalizeTurnover, type TurnoverPoint } from "@/lib/turnover-curve";
-import type { EquityPoint, Run, RunMode, RunPage, RunSummary, SampleScope, VolRegimeSummary } from "@/types/domain";
+import type { EquityPoint, PeriodSummary, Run, RunMode, RunPage, RunSummary, SampleScope, VolRegimeSummary } from "@/types/domain";
 import { settlementCurrencyOf, toPaperRunRow } from "@/lib/transform/runs";
 import type { PaperRunRow } from "@/lib/mock/paper-runs";
 import type { AssetKind } from "@/components/market-tabs";
@@ -389,6 +389,24 @@ export function useRunCostCurve(id: string | undefined, sample?: SampleScope) {
 
 // `GET /api/runs/{id}/volatility-regime` — ATR%-bucketed Sharpe for bar-mode single-symbol runs.
 // 200 body is `null` when the feature does not apply (tick-mode, multi-symbol, live, no trades).
+/**
+ * Per-year (or per-quarter) breakdown of a finished backtest — the source for every year column
+ * of the MFT Results grid. Empty for paper/live runs, which have no backtest range to bucket.
+ */
+export function fetchRunPeriodicSummary(id: string, sample?: SampleScope): Promise<PeriodSummary[]> {
+  return apiGet<PeriodSummary[]>(`${HFT_API_URL}/api/runs/${id}/periodic-summary${sampleQs(sample)}`);
+}
+
+export function useRunPeriodicSummary(id: string | undefined, sample?: SampleScope) {
+  return useQuery({
+    queryKey: ["run-periodic-summary", id, sample],
+    queryFn: () => fetchRunPeriodicSummary(id as string, sample),
+    enabled: !!id,
+    retry: retryUnlessForbidden,
+    retryDelay: 400,
+  });
+}
+
 export function fetchRunVolatilityRegime(id: string, sample?: SampleScope): Promise<VolRegimeSummary | null> {
   return apiGet<VolRegimeSummary | null>(`${HFT_API_URL}/api/runs/${id}/volatility-regime${sampleQs(sample)}`);
 }

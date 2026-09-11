@@ -2,23 +2,40 @@
 // MFT Results → Performance → "Yearly Statistics" (Figma 15205:58375). Metrics down the side,
 // years across the top, grouped into collapsible sections with a metric filter and year toggles.
 //
-// Two different sources feed the grid, which is why a metric declares one `get` taking a scope
-// rather than two lookups. A YEAR column can only be answered by `/summary-table` (five metrics)
-// or by re-deriving from the series filtered to that year; the ALL column additionally has the
-// whole of `/performance`. Anything neither can answer renders as "—" — the MFT engine reports no
-// microstructure (holding time, fills, slippage, ticks) and no volatility-regime split at all.
+// Three sources feed the grid, which is why a metric declares one `get` taking a scope rather
+// than separate lookups. A YEAR column has that year's `/summary-table` row (five metrics) and
+// the per-period series narrowed to the year; the ALL column additionally has the whole of
+// `/performance`.
+//
+// Every risk figure prefers the endpoint that reports it and falls back to re-deriving it from
+// the series — see the `annualized*` helpers in lib/transform/mft-results. That fallback is what
+// fills the year columns. An MFT-type run's rows come from `runToMftSummaryRows`, which buckets
+// the equity curve by year and can only answer `cagr` from it; reading the row alone therefore
+// left Sharpe, Calmar and Max Drawdown blank across every year, directly beside a CAGR that came
+// from the very same row.
+//
+// What stays "—" is what no source has at all: the MFT engine reports no per-trade records
+// bucketed by year (trade counts, win rate, average win/loss), no microstructure (holding time,
+// fills, slippage, ticks) and no volatility-regime split.
 import { useMemo, useState } from "react";
 import { DoubleAltArrowDown, DoubleAltArrowUp, Magnifer, AltArrowDown } from "@solar-icons/react";
 
 import { cn, formatAmount, formatCompact } from "@/lib/utils";
 import {
-  compound,
+  annualizedSharpe,
+  annualizedSortino,
+  calmarRatio,
+  conditionalValueAtRisk,
+  maxDrawdown,
+  maxDrawdownDuration,
   monthlyReturns,
   topDrawdowns,
+  valueAtRisk,
   worstLossStreak,
   type Point,
 } from "@/lib/transform/mft-results";
 import type { SummaryTableItem } from "@/hooks/api/use-strategy-results";
+import type { RunSummary } from "@/types/domain";
 import type { StrategyPerformanceDetail } from "@/hooks/api/use-strategy-performance";
 import { EMPTY, GREEN_TEXT, NEUTRAL_TEXT, RED_TEXT, YELLOW_TEXT } from "./results-chrome";
 
@@ -28,6 +45,11 @@ export interface Scope {
   isAll: boolean;
   /** That year's `/summary-table` row (year columns only). */
   row?: SummaryTableItem;
+  /**
+   * That window's own `RunSummary`, off `/periodic-summary` — the only source with per-year
+   * trade, execution and cost figures, and the one the control plane's grid reads.
+   */
+  runSummary?: RunSummary;
   perf?: StrategyPerformanceDetail;
   /** Per-period `returns`, already narrowed to this column's year. */
   returns: Point[];
@@ -35,11 +57,11 @@ export interface Scope {
   drawdown: Point[];
 }
 
-type Format = "ratioPct" | "percent" | "number" | "count" | "periods";
+type Format = "ratioPct" | "rate" | "percent" | "number" | "count" | "periods" | "amount" | "hours" | "bps";
 
 interface StatMetric {
   label: string;
-  get: (s: Scope) => number | undefined;
+  get: (s: Scope) => number | null | undefined;
   format?: Format;
   /** How to colour the value. Defaults to neutral white. */
   tone?: "sign" | "good" | "bad" | "graded";
@@ -52,6 +74,14 @@ interface StatGroup {
 
 const perf = (s: Scope) => s.perf?.performance;
 const analysis = (s: Scope) => s.perf?.analysis;
+/** The window's own run summary. Every metric that has one prefers it — it is the engine's own
+ *  figure for exactly this window, where everything else is re-derived or whole-run. */
+const rs = (s: Scope) => s.runSummary;
+
+/** The window's worst drawdown, as a negative ratio — also Calmar's denominator. */
+function drawdownOf(s: Scope): number | undefined {
+  return (s.isAll ? perf(s)?.max_drawdown : s.row?.max_drawdown) ?? maxDrawdown(s.drawdown);
+}
 
 /** Metrics the MFT engine has no source for, in any column. */
 const unavailable = (label: string): StatMetric => ({ label, get: () => undefined });
@@ -69,29 +99,39 @@ const GROUPS: StatGroup[] = [
     metrics: [
       {
         label: "Net Return",
-        // Per-year the engine reports CAGR, not a cumulative figure, so a year column compounds
-        // its own daily returns instead of borrowing the annualised number.
-        get: (s) => (s.isAll ? perf(s)?.cumulative_return : ratioOf(compoundAll(s.returns))),
+        // `return_pct` is null on a run with no capital base to divide by, and the control plane
+        // dashes it rather than inventing one. The series fallback is for the XALPHA path, whose
+        // returns are genuine percents.
+        get: (s) => rs(s)?.return_pct ?? (s.isAll ? perf(s)?.cumulative_return : undefined),
         format: "ratioPct",
         tone: "sign",
       },
       {
         label: "Gross Return",
-        // Net plus the costs that were taken out of it. Only the run-level fee total exists, so
-        // this is answerable for the All column alone.
+        // Net plus the costs that were taken out of it — both halves have to be percentages of
+        // the same base, so this needs `return_pct` and not just the fee.
         get: (s) => {
-          const net = perf(s)?.cumulative_return;
-          const fee = analysis(s)?.total_fee;
-          return s.isAll && net != null && fee != null ? net + fee : undefined;
+          const net = rs(s)?.return_pct ?? (s.isAll ? perf(s)?.cumulative_return : undefined);
+          const fee = s.isAll ? analysis(s)?.total_fee : undefined;
+          return net != null && fee != null ? net + fee : undefined;
         },
         format: "ratioPct",
         tone: "sign",
       },
       {
         label: "CAGR",
-        get: (s) => (s.isAll ? perf(s)?.annual_return : s.row?.cagr),
+        get: (s) => rs(s)?.cagr ?? (s.isAll ? perf(s)?.annual_return : s.row?.cagr),
         format: "ratioPct",
         tone: "sign",
+      },
+      {
+        // The control plane carries this under Returns rather than Trades: the share of trades
+        // that made money is a property of the return stream, and it is the same `win_rate` the
+        // Trades group reports below.
+        label: "Positive Trades",
+        get: (s) => rs(s)?.win_rate ?? (s.isAll ? perf(s)?.win_rate : undefined),
+        format: "rate",
+        tone: "graded",
       },
       {
         label: "Best month",
@@ -121,34 +161,43 @@ const GROUPS: StatGroup[] = [
     metrics: [
       {
         label: "Sharpe Ratio",
-        get: (s) => (s.isAll ? perf(s)?.sharpe : s.row?.sharpe),
+        get: (s) => rs(s)?.sharpe_annualized ?? (s.isAll ? perf(s)?.sharpe : s.row?.sharpe) ?? annualizedSharpe(s.returns),
         tone: "graded",
       },
-      { label: "Sortino Ratio", get: (s) => (s.isAll ? perf(s)?.sortino : undefined), tone: "graded" },
+      {
+        label: "Sortino Ratio",
+        get: (s) => rs(s)?.sortino_annualized ?? (s.isAll ? perf(s)?.sortino : undefined) ?? annualizedSortino(s.returns),
+        tone: "graded",
+      },
       {
         label: "Calmar Ratio",
-        get: (s) => (s.isAll ? perf(s)?.calmar : s.row?.calmar),
+        get: (s) =>
+          rs(s)?.calmar ??
+          (s.isAll ? perf(s)?.calmar : s.row?.calmar) ??
+          calmarRatio(s.isAll ? perf(s)?.annual_return : s.row?.cagr, drawdownOf(s)),
         tone: "graded",
       },
       {
         label: "Volatility (ann.)",
-        get: (s) => (s.isAll ? perf(s)?.volatility : undefined),
+        get: (s) => rs(s)?.volatility_annualized ?? (s.isAll ? perf(s)?.volatility : undefined),
+        format: "rate",
       },
     ],
   },
   {
     name: "Drawdown",
     metrics: [
+      { label: "Max Drawdown", get: drawdownOf, format: "ratioPct", tone: "bad" },
       {
-        label: "Max Drawdown",
-        get: (s) => (s.isAll ? perf(s)?.max_drawdown : s.row?.max_drawdown),
-        format: "ratioPct",
+        // The descent half of an episode, where Longest Recovery below is the climb back out.
+        label: "Max DD Duration",
+        get: (s) => rs(s)?.max_drawdown_duration_days ?? maxDrawdownDuration(s.drawdown),
+        format: "periods",
         tone: "bad",
       },
-      // Peak-to-trough duration would need the drawdown series' episode boundaries expressed in
-      // calendar time; the series is per-period, so only the recovery leg below is well defined.
-      unavailable("Max DD Duration"),
       {
+        // `longest_recovery_days` is deliberately NOT read: it returns an absolute epoch-day
+        // rather than a span (see the results-endpoint audit), so the local derivation stands.
         label: "Longest Recovery",
         get: (s) => {
           const recoveries = topDrawdowns(s.drawdown, Infinity)
@@ -161,13 +210,13 @@ const GROUPS: StatGroup[] = [
       },
       {
         label: "VaR (95%)",
-        get: (s) => (s.isAll ? perf(s)?.var : undefined),
+        get: (s) => rs(s)?.var_95_pct ?? (s.isAll ? perf(s)?.var : undefined) ?? valueAtRisk(s.returns),
         format: "ratioPct",
         tone: "bad",
       },
       {
         label: "CVaR (95%)",
-        get: (s) => (s.isAll ? perf(s)?.cvar : undefined),
+        get: (s) => rs(s)?.cvar_95_pct ?? (s.isAll ? perf(s)?.cvar : undefined) ?? conditionalValueAtRisk(s.returns),
         format: "ratioPct",
         tone: "bad",
       },
@@ -176,50 +225,44 @@ const GROUPS: StatGroup[] = [
   {
     name: "Trades",
     metrics: [
-      { label: "Total Trades", get: (s) => (s.isAll ? analysis(s)?.total_trades : undefined), format: "count" },
+      {
+        label: "Total Trades",
+        get: (s) => rs(s)?.total_trades ?? (s.isAll ? analysis(s)?.total_trades : undefined),
+        format: "count",
+      },
       {
         label: "Win Rate",
-        get: (s) => (s.isAll ? perf(s)?.win_rate : undefined),
-        format: "ratioPct",
+        get: (s) => rs(s)?.win_rate ?? (s.isAll ? perf(s)?.win_rate : undefined),
+        format: "rate",
         tone: "graded",
       },
       {
         label: "Profit Factor",
-        get: (s) => (s.isAll ? perf(s)?.profit_factor : s.row?.profit_factor),
+        get: (s) => rs(s)?.profit_factor ?? (s.isAll ? perf(s)?.profit_factor : s.row?.profit_factor),
         tone: "graded",
       },
-      {
-        label: "Avg Win",
-        get: (s) => (s.isAll ? analysis(s)?.avg_win_trade : undefined),
-        format: "ratioPct",
-        tone: "good",
-      },
-      {
-        label: "Avg Loss",
-        get: (s) => (s.isAll ? analysis(s)?.avg_loss_trade : undefined),
-        format: "ratioPct",
-        tone: "bad",
-      },
-      // Ticks are an instrument-level concept the MFT bar engine never surfaces.
+      // Settlement-currency amounts on the run path, where the XALPHA `analysis` reports them as
+      // ratios — the run is the only source a year column has, so the amount is what shows.
+      { label: "Avg Win", get: (s) => rs(s)?.avg_win, format: "amount", tone: "good" },
+      { label: "Avg Loss", get: (s) => rs(s)?.avg_loss, format: "amount", tone: "bad" },
+      // Ticks are an instrument-level concept neither engine surfaces.
       unavailable("Profit/Tick Ratio"),
       {
         label: "Max Consecutive Losses",
-        get: (s) => worstLossStreak(s.returns)?.length,
+        get: (s) => rs(s)?.max_consecutive_losses ?? worstLossStreak(s.returns)?.length,
         format: "count",
         tone: "bad",
       },
     ],
   },
   {
-    // Fills, holding time and slippage all require per-trade execution records. `/performance`
-    // reports trade COUNTS and average trade RETURNS, never their timing or their fill quality.
     name: "Execution",
     metrics: [
-      unavailable("Avg Holding Time"),
-      unavailable("Trades < 6h"),
-      unavailable("Overnight Trades"),
-      unavailable("Fill Rate"),
-      unavailable("Slippage (Avg)"),
+      { label: "Avg Holding Time", get: (s) => rs(s)?.avg_holding_time_secs, format: "hours" },
+      { label: "Trades < 6h", get: (s) => rs(s)?.trades_under_6h_pct, format: "rate" },
+      { label: "Overnight Trades", get: (s) => rs(s)?.overnight_trades_pct, format: "rate" },
+      { label: "Fill Rate", get: (s) => rs(s)?.fill_rate, format: "rate", tone: "graded" },
+      { label: "Slippage (Avg)", get: (s) => rs(s)?.slippage_bps, format: "bps", tone: "bad" },
     ],
   },
   {
@@ -227,57 +270,58 @@ const GROUPS: StatGroup[] = [
     metrics: [
       {
         label: "Total Cost",
-        get: (s) => (s.isAll ? analysis(s)?.total_fee : undefined),
-        format: "ratioPct",
+        get: (s) => rs(s)?.total_fee ?? (s.isAll ? analysis(s)?.total_fee : undefined),
+        format: "amount",
         tone: "bad",
       },
       {
         label: "Fee % of Profit",
         get: (s) => {
-          const fee = analysis(s)?.total_fee;
-          const net = perf(s)?.cumulative_return;
-          return s.isAll && fee != null && net ? Math.abs(fee / net) : undefined;
+          const fee = rs(s)?.total_fee;
+          const net = rs(s)?.net_pnl;
+          return fee != null && net ? Math.abs(fee / net) : undefined;
         },
-        format: "ratioPct",
+        format: "rate",
         tone: "bad",
       },
       {
         label: "Fee per Trade",
         get: (s) => {
-          const fee = analysis(s)?.total_fee;
-          const trades = analysis(s)?.total_trades;
-          return s.isAll && fee != null && trades ? fee / trades : undefined;
+          const fee = rs(s)?.total_fee;
+          const trades = rs(s)?.total_trades;
+          return fee != null && trades ? fee / trades : undefined;
         },
-        format: "ratioPct",
+        format: "amount",
         tone: "bad",
       },
       {
+        // The share of GROSS profit the fees ate — net plus the fees is what the strategy made
+        // before they were taken out, which is the base `cost_bps` can't express here.
         label: "Cost Drag",
-        get: (s) => (s.isAll ? analysis(s)?.total_fee : undefined),
-        format: "ratioPct",
+        get: (s) => {
+          const fee = rs(s)?.total_fee;
+          const net = rs(s)?.net_pnl;
+          if (fee == null || net == null) return undefined;
+          const gross = net + fee;
+          return gross ? Math.abs(fee / gross) : undefined;
+        },
+        format: "rate",
         tone: "bad",
       },
     ],
   },
   {
-    // Intraday session buckets and ATR regimes need bar-level market data alongside the results;
-    // the results API returns neither.
     name: "Regime",
     metrics: [
-      unavailable("Peak Hour Concentration"),
+      { label: "Peak Hour Concentration", get: (s) => rs(s)?.peak_hour_concentration_pct, format: "rate" },
+      // An ATR-regime split of the same run; `/volatility-regime` reports it for the whole run
+      // only, never bucketed by year.
       unavailable("Low Vol Sharpe"),
       unavailable("High Vol Sharpe"),
     ],
   },
 ];
 
-function compoundAll(points: Point[]): number | undefined {
-  return points.length ? compound(points.map((p) => p.v)) : undefined;
-}
-/** Percent → ratio, so a derived figure can share the `ratioPct` formatter. */
-function ratioOf(percent: number | undefined): number | undefined {
-  return percent == null ? undefined : percent / 100;
-}
 function maxOf(xs: number[]): number | undefined {
   return xs.length ? Math.max(...xs) : undefined;
 }
@@ -285,30 +329,45 @@ function minOf(xs: number[]): number | undefined {
   return xs.length ? Math.min(...xs) : undefined;
 }
 
-function formatValue(v: number | undefined, format: Format = "number"): string {
+function formatValue(v: number | null | undefined, format: Format = "number"): string {
   if (v == null || !Number.isFinite(v)) return EMPTY;
   switch (format) {
     case "ratioPct":
       return formatPct(v * 100);
+    // A share of something, not a change in it — a win rate has no direction to sign, and "+31%"
+    // read as an improvement over a baseline that doesn't exist.
+    case "rate":
+      return formatPct(v * 100, false);
     case "percent":
       return formatPct(v);
     case "count":
       return v.toLocaleString("en-US");
     case "periods":
-      return `${Math.round(v)}d`;
+      // A day and a tenth is the control plane's own precision here (`62.1d`); rounding to whole
+      // days hid the difference between a two-day dip and a two-week one on short windows.
+      return `${formatAmount(v, 1)}d`;
+    case "amount":
+      // Settlement-currency figures. Whole units: these run to millions of VND, where a decimal
+      // place is noise that costs a column its width.
+      return Math.round(v).toLocaleString("en-US");
+    case "hours":
+      return `${formatAmount(v / 3600, 1)}h`;
+    case "bps":
+      return `${formatAmount(v, 2)} bp`;
     default:
       return formatAmount(v, 2);
   }
 }
 
 /** Compact once a percent no longer fits a 96px year column (`+748,346.70%` → `+748.3K%`). */
-function formatPct(n: number): string {
+function formatPct(n: number, signed = true): string {
   const abs = Math.abs(n);
   const body = abs >= 1000 ? formatCompact(abs) : formatAmount(abs, 2);
-  return `${n > 0 ? "+" : n < 0 ? "-" : ""}${body}%`;
+  const sign = n < 0 ? "-" : signed && n > 0 ? "+" : "";
+  return `${sign}${body}%`;
 }
 
-function toneClass(v: number | undefined, tone: StatMetric["tone"]): string {
+function toneClass(v: number | null | undefined, tone: StatMetric["tone"]): string {
   if (v == null || !Number.isFinite(v)) return "text-[#9db2ce]";
   switch (tone) {
     case "sign":
@@ -325,6 +384,11 @@ function toneClass(v: number | undefined, tone: StatMetric["tone"]): string {
       return NEUTRAL_TEXT;
   }
 }
+
+// The metric-name column, pinned so a wide year range stays readable — scrolling to 2025 with
+// the labels gone leaves eleven columns of bare numbers. It carries its own opaque background
+// because the cells slide underneath it, and `shrink-0` keeps every row's labels on one grid.
+const LABEL_COL = "sticky left-0 z-10 w-[172px] shrink-0 px-3";
 
 export function YearlyStatistics({
   years,
@@ -356,7 +420,7 @@ export function YearlyStatistics({
   // drawdown episodes from the raw series, so leaving them in render would redo that work on each
   // keystroke in the filter box — which changes which ROWS show, never their values.
   const values = useMemo(() => {
-    const out = new Map<string, (number | undefined)[]>();
+    const out = new Map<string, (number | null | undefined)[]>();
     for (const g of GROUPS) {
       for (const m of g.metrics) out.set(m.label, scopes.map((s) => m.get(s)));
     }
@@ -429,7 +493,7 @@ export function YearlyStatistics({
         <div style={{ minWidth: 172 + columns.length * 96 }}>
           {/* Column header. The label column is fixed so every group's rows line up with it. */}
           <div className="flex h-9 items-center border-b border-[#1d2939]">
-            <div className="w-[172px] shrink-0 px-3">
+            <div className={cn(LABEL_COL, "bg-background")}>
               <span className="text-xs leading-[18px] text-[#9db2ce]">Macro</span>
             </div>
             {columns.map((c) => (
@@ -447,9 +511,11 @@ export function YearlyStatistics({
                   type="button"
                   onClick={() => setCollapsed((p) => ({ ...p, [g.name]: !p[g.name] }))}
                   aria-expanded={!isCollapsed}
-                  className="flex h-8 w-full cursor-pointer items-center border-b border-[#1d2939] bg-[#1d2939] px-4"
+                  className="flex h-8 w-full cursor-pointer items-center border-b border-[#1d2939] bg-[#1d2939]"
                 >
-                  <span className="flex items-center gap-2">
+                  {/* Pinned like the metric labels below it, so scrolling out to 2025 doesn't
+                      leave you reading a block of numbers with no group name against them. */}
+                  <span className="sticky left-0 flex items-center gap-2 bg-[#1d2939] px-4">
                     <AltArrowDown
                       weight="Outline"
                       className={cn("size-3 text-[#9db2ce] transition-transform", isCollapsed && "-rotate-90")}
@@ -462,7 +528,7 @@ export function YearlyStatistics({
                 {!isCollapsed &&
                   g.metrics.map((m) => (
                     <div key={m.label} className="flex h-9 items-center border-b border-[#1d2939]">
-                      <div className="w-[172px] shrink-0 px-3">
+                      <div className={cn(LABEL_COL, "bg-background")}>
                         <span className="text-xs leading-[18px] text-[#9db2ce]">{m.label}</span>
                       </div>
                       {columns.map((col, i) => {

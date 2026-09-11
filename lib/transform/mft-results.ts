@@ -240,3 +240,123 @@ export function topDrawdowns(points: Point[], limit = 5): DrawdownEpisode[] {
     .sort((a, b) => a.depth - b.depth)
     .slice(0, limit);
 }
+
+// ── Derived risk statistics ─────────────────────────────────────────────────
+// `/summary-table` answers five metrics per year and `/performance` answers the rest for the run
+// as a whole, which left the Yearly Statistics grid with a column of "—" wherever a year needed a
+// figure only the run-level endpoint had. Everything below re-derives those from the per-period
+// series the grid already holds, so a year column stands on its own.
+//
+// Returns are PERCENT per period (see `compound`), and so is the drawdown series (see the Top 5
+// drawdown table). Ratios are what the grid formats, so these convert on the way out.
+
+const YEAR_SECONDS = 365.25 * 24 * 60 * 60;
+
+/**
+ * How many samples this window would hold in a year, from its own timestamps.
+ *
+ * Annualization can't assume 252 trading days: the same grid is fed by daily bars and by 10-minute
+ * ones, and a fixed factor would scale an intraday year's volatility by an order of magnitude.
+ * Counting the window's actual sample rate self-calibrates to whatever interval the run used, and
+ * lands on ~252 for a year of daily bars because weekends simply hold no samples.
+ */
+function periodsPerYear(points: Point[]): number | undefined {
+  if (points.length < 2) return undefined;
+  const span = points[points.length - 1].t - points[0].t;
+  if (span <= 0) return undefined;
+  // `length - 1` intervals cover the span; the count is what a full year of them would be.
+  return ((points.length - 1) / span) * YEAR_SECONDS;
+}
+
+function mean(xs: number[]): number {
+  return xs.reduce((s, v) => s + v, 0) / xs.length;
+}
+
+/** Population standard deviation, matching the backend's `sharpe()` definition. */
+function stdev(xs: number[], from = mean(xs)): number {
+  return Math.sqrt(mean(xs.map((v) => (v - from) ** 2)));
+}
+
+/** Spread of the losing periods only, measured against zero — the Sortino denominator. */
+function downsideDeviation(xs: number[]): number {
+  const losses = xs.filter((v) => v < 0);
+  return losses.length ? Math.sqrt(mean(losses.map((v) => v ** 2))) : 0;
+}
+
+/** Annualized standard deviation of the per-period returns, as a ratio. */
+export function annualizedVolatility(returns: Point[]): number | undefined {
+  const ppy = periodsPerYear(returns);
+  if (ppy == null || returns.length < 2) return undefined;
+  return (stdev(returns.map((p) => p.v)) / 100) * Math.sqrt(ppy);
+}
+
+/** `mean / stdev` of the per-period returns, scaled by √periods-per-year. */
+export function annualizedSharpe(returns: Point[]): number | undefined {
+  const ppy = periodsPerYear(returns);
+  if (ppy == null || returns.length < 2) return undefined;
+  const vs = returns.map((p) => p.v);
+  const sd = stdev(vs);
+  // A window that never moved has no risk to divide by; the backend reports 0 rather than ∞.
+  return sd === 0 ? 0 : (mean(vs) / sd) * Math.sqrt(ppy);
+}
+
+/** Sharpe with only the downside counted as risk. */
+export function annualizedSortino(returns: Point[]): number | undefined {
+  const ppy = periodsPerYear(returns);
+  if (ppy == null || returns.length < 2) return undefined;
+  const vs = returns.map((p) => p.v);
+  const dd = downsideDeviation(vs);
+  // No losing period at all: same convention as Sharpe's flat window rather than a divide by zero.
+  return dd === 0 ? 0 : (mean(vs) / dd) * Math.sqrt(ppy);
+}
+
+/**
+ * The `1 - confidence` worst returns, ascending — the loss tail both risk figures read.
+ *
+ * The size is floored (with a float guard: `1 - 0.95` is 0.05000000000000004, and ceil-ing that
+ * against a 100-sample window silently took six samples instead of five) and never empty, so a
+ * short window still reports its worst period rather than nothing.
+ */
+function lossTail(returns: Point[], confidence: number): number[] {
+  const sorted = returns.map((p) => p.v).sort((a, b) => a - b);
+  const size = Math.max(1, Math.floor(sorted.length * (1 - confidence) + 1e-9));
+  return sorted.slice(0, size);
+}
+
+/**
+ * Historical Value at Risk — the `1 - confidence` quantile of the per-period returns, as a
+ * negative ratio. Nearest-rank on the sorted sample, so it is always a return that actually
+ * happened rather than an interpolation between two that didn't.
+ */
+export function valueAtRisk(returns: Point[], confidence = 0.95): number | undefined {
+  if (!returns.length) return undefined;
+  const tail = lossTail(returns, confidence);
+  return tail[tail.length - 1] / 100;
+}
+
+/** Mean of the returns at or beyond {@link valueAtRisk} — the average of the tail, as a ratio. */
+export function conditionalValueAtRisk(returns: Point[], confidence = 0.95): number | undefined {
+  if (!returns.length) return undefined;
+  return mean(lossTail(returns, confidence)) / 100;
+}
+
+/** Deepest point of the drawdown series, as a negative ratio. */
+export function maxDrawdown(drawdown: Point[]): number | undefined {
+  if (!drawdown.length) return undefined;
+  return Math.min(...drawdown.map((p) => p.v)) / 100;
+}
+
+/**
+ * The longest peak-to-trough descent, in periods — how long the worst decline took to bottom out,
+ * as opposed to `Longest Recovery`, which measures the climb back from the trough.
+ */
+export function maxDrawdownDuration(drawdown: Point[]): number | undefined {
+  const lengths = drawdownEpisodes(drawdown).map((e) => e.length);
+  return lengths.length ? Math.max(...lengths) : undefined;
+}
+
+/** CAGR over the depth of the worst drawdown; undefined when the window never drew down. */
+export function calmarRatio(cagr: number | undefined, maxDd: number | undefined): number | undefined {
+  if (cagr == null || maxDd == null || maxDd === 0) return undefined;
+  return cagr / Math.abs(maxDd);
+}

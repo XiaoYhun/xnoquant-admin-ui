@@ -27,13 +27,28 @@ export function toEditorTab(s: Strategy): EditorTab {
 //
 // Tolerates any failure (401, empty list, network error) by falling back to `[]` so a broken HFT
 // backend never blocks the page.
-export function useHftStrategies() {
+/**
+ * `owner` narrows to one user's strategies SERVER-side, via `GET /api/strategies?owner=<user_id>`.
+ *
+ * That parameter is real but undocumented — our generated types say `query?: never` for this
+ * endpoint, the same gap that left `PeriodSummary` an empty record. Verified against dev across
+ * all seven owners: each call's count matched a local count of the unfiltered 143 exactly, and
+ * every returned row carried the requested `owner_id`.
+ *
+ * It takes the user ID, not the username: `?owner=hienxnoquant` answers 200 with an empty array
+ * rather than an error, so a wrong-format value is indistinguishable from "this owner has none".
+ * Callers pass `owner_id`.
+ */
+export function useHftStrategies(owner?: string) {
   return useQuery({
-    queryKey: ["hft-strategies"],
+    // Keyed on the filter, so the unfiltered list and each owner's are separate cache entries and
+    // an owner-filtered screen can still read the whole list for its dropdown.
+    queryKey: ["hft-strategies", owner ?? null],
     queryFn: async (): Promise<Strategy[]> => {
       if (USE_MOCK) return [];
       try {
-        const data = await apiGet<Strategy[]>(`${HFT_API_URL}/api/strategies`);
+        const qs = owner ? `?owner=${encodeURIComponent(owner)}` : "";
+        const data = await apiGet<Strategy[]>(`${HFT_API_URL}/api/strategies${qs}`);
         return data ?? [];
       } catch {
         return [];

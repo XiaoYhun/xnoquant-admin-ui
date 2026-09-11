@@ -116,7 +116,18 @@ function blockedReason(strategy: Strategy, next: PromotionStage, runs: Run[]): s
 export default function Page() {
   const router = useRouter();
   const { isAdmin } = useAuth();
-  const { data: strategies = [], isPending, isError, error } = useHftStrategies();
+  const [ownerFilter, setOwnerFilter] = useState("all");
+  // Two reads of the same endpoint. The rows are narrowed server-side by `?owner=`; the dropdowns
+  // read the unfiltered list so their options stay the full cast — options derived from an
+  // owner-filtered list would collapse to the owner already selected, leaving no way back to
+  // anyone else. With no owner picked both share a cache entry, so this is one request.
+  const { data: allStrategies = [] } = useHftStrategies();
+  const {
+    data: strategies = [],
+    isPending,
+    isError,
+    error,
+  } = useHftStrategies(ownerFilter === "all" ? undefined : ownerFilter);
   const { data: roster = [] } = useUserRoster();
   const { data: runsOf = new Map<string, Run[]>() } = useRunsByStrategy();
   // The note an admin typed when promoting lives on the promotion record, not on Strategy, so
@@ -137,7 +148,6 @@ export default function Page() {
 
   const [search, setSearch] = useState("");
   const [stageFilter, setStageFilter] = useState("all");
-  const [ownerFilter, setOwnerFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
   // No default sort: the list arrives in the API order, and clicking a header is what departs
   // from it. Sorting by nothing is a state you can be in, not one you have to sort your way out of.
@@ -154,23 +164,24 @@ export default function Page() {
   const [hftMarket, setHftMarket] = useState("tick-l2");
   const [hftInterval, setHftInterval] = useState("1m");
 
-  // Both dropdowns offer only what the table actually holds — a roster of every user who ever
-  // signed in would be mostly owners with no strategies.
+  // Both dropdowns offer only who and what the strategy list actually holds — a roster of every
+  // user who ever signed in would be mostly owners with no strategies. Read off the UNFILTERED
+  // list for the reason given at the queries above.
   const ownerOptions = useMemo(() => {
     const seen = new Map<string, string>();
-    for (const s of strategies) {
+    for (const s of allStrategies) {
       if (!seen.has(s.owner_id)) seen.set(s.owner_id, owners.get(s.owner_id) ?? `${s.owner_id.slice(0, 8)}…`);
     }
     return [...seen].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
-  }, [strategies, owners]);
+  }, [allStrategies, owners]);
 
   const typeOptions = useMemo(() => {
     const seen = new Set<HftStrategyType>();
-    for (const s of strategies) seen.add(s.strategy_type);
+    for (const s of allStrategies) seen.add(s.strategy_type);
     return [...seen]
       .map((value) => ({ value, label: HFT_TYPE_LABEL[value] ?? value }))
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [strategies]);
+  }, [allStrategies]);
 
   // Search counts as a filter here — it sits in the same row and narrows the same table, and the
   // empty state blames "these filters" for it either way. Sort is deliberately left alone: it is
@@ -194,9 +205,9 @@ export default function Page() {
       // An id-looking entry matches the strategy id; anything else is a name search.
       const matchesSearch = !q || (isIdQuery(debouncedSearch) ? s.id.toLowerCase().includes(needle) : s.name.toLowerCase().includes(q));
       const matchesStage = stageFilter === "all" || strategyStage(s, runsOf.get(s.id)).rung === stageFilter;
-      const matchesOwner = ownerFilter === "all" || s.owner_id === ownerFilter;
       const matchesType = typeFilter === "all" || s.strategy_type === typeFilter;
-      return matchesSearch && matchesStage && matchesOwner && matchesType;
+      // No owner check: `strategies` is already the owner's, narrowed by the API.
+      return matchesSearch && matchesStage && matchesType;
     });
     if (!sort) return filtered;
 
@@ -220,7 +231,7 @@ export default function Page() {
           return dir * a.name.localeCompare(b.name);
       }
     });
-  }, [strategies, debouncedSearch, stageFilter, ownerFilter, typeFilter, sort, owners, runsOf]);
+  }, [strategies, debouncedSearch, stageFilter, typeFilter, sort, owners, runsOf]);
 
   const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
   // Clamped on read rather than written back: narrowing the list can strand the pager past the

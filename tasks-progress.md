@@ -400,3 +400,16 @@ individual fills) · PnL by session hour. `days_dropped_no_atr` / `total_pnl_pct
   filled pin, stored under the signed-in user id; it survived a reload; unpin restored its place. With the pin
   held only by a fake second account id, this account's strip showed no pins. No console errors. Test state
   removed afterwards.
+
+## "Started" column on every run list (2026-09-14) — tsc + eslint clean, 250/250 vitest, browser-verified
+- ✅ **Started, just before Action**, on Backtesting, Paper Trading, Live trade and Alpha pool. Shows
+  `Run.started_at` — the same field the HFT control plane's Runs list uses for "Started" — as `yyyy-MM-dd` over
+  `HH:mm:ss` in local time. "—" when null (a queued run) or when an Alpha pool member has no source run.
+- ✅ Data: `PaperRunRow.startedAt` (optional) set in `toPaperRunRow`. Shared cell: `components/started-at.tsx`.
+- ✅ **Widths:** Started takes 8% in each table. The first pass took it from Strategy Name, which crushed names to
+  "VW…" on Paper Trading and Live trade, so Strategy Name went back to its original width (Paper 12%, Live 15%,
+  Alpha pool 14%) and the 8% came from columns with slack (Return, Sharpe, Action, PnL chart; Alpha pool's Note).
+  Backtesting keeps Strategy Name 15% / Symbol 12%; names still read there.
+- **Verified in Chrome:** the column renders on Backtesting, Paper Trading and Live trade with real start times. No
+  header wraps (including "Max drawdown" on the narrower Live trade table). No Return or Started cell overflows.
+  Names are readable again. No console errors. Alpha pool is empty on dev, so its table was code-verified only.

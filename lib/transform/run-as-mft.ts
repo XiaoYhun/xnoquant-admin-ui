@@ -66,12 +66,18 @@ export function runToMftCharts(
 
 export function runToMftPerf(summary: RunSummary | undefined): StrategyPerformanceDetail | undefined {
   if (!summary) return undefined;
+  // `total_fee` here has to be a fraction of CAPITAL, the same basis `performance.cumulative_return`
+  // uses — every consumer (Cost & Edge's Gross/Net/Cost-Drag rows, Overview's Cost Drag KPI) adds
+  // or divides it against that return. `cost_bps` is cost per unit of traded NOTIONAL instead — an
+  // unrelated denominator — which is why it used to print a near-zero "Total Cost -0.01%" for a run
+  // that actually spent 5.37% of its capital on fees.
+  const capital = startingCapital(summary);
   return {
     analysis: {
       start_value: 0,
       end_value: summary.net_pnl,
       total_return: summary.return_pct ?? undefined,
-      total_fee: summary.cost_bps != null ? summary.cost_bps / 10_000 : undefined,
+      total_fee: capital ? summary.total_fee / capital : undefined,
       total_trades: summary.total_trades,
     },
     performance: {

@@ -43,6 +43,7 @@ describe("run-as-mft", () => {
   });
 
   it("maps run summary ratios onto the MFT performance payload", () => {
+    // Capital backs out to net_pnl / return_pct = 50 / 0.12 ≈ 416.67, so a 5-unit fee is ≈1.2% of it.
     const perf = runToMftPerf({
       net_pnl: 50,
       return_pct: 0.12,
@@ -53,11 +54,17 @@ describe("run-as-mft", () => {
       max_drawdown_pct: -0.08,
       win_rate: 0.55,
       total_trades: 10,
-      cost_bps: 21.2,
+      total_fee: 5,
     } as RunSummary);
     expect(perf?.performance?.cumulative_return).toBe(0.12);
     expect(perf?.performance?.sharpe).toBe(1.8);
-    expect(perf?.analysis?.total_fee).toBeCloseTo(0.00212);
+    expect(perf?.analysis?.total_fee).toBeCloseTo(0.012);
+  });
+
+  it("leaves total_fee undefined when the run has no capital base to divide by", () => {
+    // Same gap `startingCapital` documents: a live run's `return_pct` is always null.
+    const perf = runToMftPerf({ net_pnl: 50, total_fee: 5 } as RunSummary);
+    expect(perf?.analysis?.total_fee).toBeUndefined();
   });
 
   describe("summaryForPeriod", () => {

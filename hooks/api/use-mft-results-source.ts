@@ -56,13 +56,18 @@ export function useMftResultsSource({
   // Dropped rather than rendered when the run's artifacts were too big to compute over — see
   // `realSummary`. Every panel below then shows its ordinary empty state.
   const summary = realSummary(summaryQ.data);
+  // Pulled out to primitives so the memo below can depend on them directly — `period` itself is a
+  // fresh object every render (the shell recomputes `effectivePeriod` each time), which would bust
+  // the memo every render if it were a dependency instead.
+  const year = period?.year;
+  const month = period?.month;
   const fromRun = useMemo(() => {
     if (!runId) return null;
     // Charts and the yearly summary table stay on the WHOLE run — the views that draw them narrow
     // the series themselves (filterByPeriod) or, for the summary table, are a "one row per year"
     // grid that the Period row was never meant to collapse to one row.
     const charts = runToMftCharts(equityQ.data, summary);
-    const scoped = summaryForPeriod(summary, periodsQ.data, period ?? {});
+    const scoped = summaryForPeriod(summary, periodsQ.data, { year, month });
     const q = (data: StrategyChartData): ChartQ => ({
       data,
       isLoading: equityQ.isLoading,
@@ -78,7 +83,7 @@ export function useMftResultsSource({
       drawdown: q(charts.drawdown),
       sharpe: q(charts.sharpe),
     };
-  }, [runId, equityQ.data, equityQ.isLoading, equityQ.isError, summary, periodsQ.data, period?.year, period?.month]);
+  }, [runId, equityQ.data, equityQ.isLoading, equityQ.isError, summary, periodsQ.data, year, month]);
 
   const xId = runId ? undefined : strategyId;
   const perf = useStrategyPerformance(xId, stage);

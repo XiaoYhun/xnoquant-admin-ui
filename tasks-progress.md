@@ -335,3 +335,52 @@ individual fills) · PnL by session hour. `days_dropped_no_atr` / `total_pnl_pct
 - PRE-EXISTING, not investigated: opening **Execution** on the 9,272-trade HFT run froze the
   renderer (the `/trace/history` fetch + render). Reproduced twice; unrelated to these changes,
   which only REMOVED two charts from that view. Verified Execution on a smaller run instead.
+
+## HFT/MFT filter restored server-side + KPI value ellipsis (2026-09-14) — tsc + eslint clean, 230/230 vitest, browser-verified
+- ✅ **HFT/MFT filter back on the three run lists** — reverses the 09-10 "dropped" item above. The deployed
+  dev spec (`hft-dev.xnoquant.io/openapi.json`) and `hft-platform@origin/develop`
+  (`crates/api/src/routes/runs/crud.rs`) now take `engine=hft|mft` on `GET /api/runs`: `hft` matches
+  tick/L2 `data_kind` (or unset on older manifests), `mft` matches bar. The server filters before paging,
+  so `total` and the page count stay correct, which was the reason for dropping it.
+  - `RunsQuery` gained `engine?: "hft" | "mft"` (`hooks/api/use-runs.ts`), added by hand; `gen:types` was
+    NOT re-run to avoid unrelated churn, so `types/api/hft.ts` still lacks the param.
+  - `engineOf()` in `components/strategy-type-filter.tsx` maps All types/HFT/MFT → `undefined`/`hft`/`mft`,
+    mirroring `assetKindOf`.
+  - Backtesting and Paper Trading: control after the status Select. Live trade: after the symbol filter
+    (that page has no status Select). All three reset to page 1 on change; `engine` rides in the query key.
+  - Live trade KPI counts (`useLiveRunCounts`) take `engine` like `asset_kind`, so the tiles describe the
+    same set as the table.
+  - Alpha pool unchanged (still client-side over promotions).
+- ✅ **MFT Overview KPI value truncates** (`create-strategy/mft/overview-mft.tsx` `KpiCards`) — a long Net PnL
+  (`+204,626,563…`) spilled into the Sharpe card. Value span is now `min-w-0 truncate` with `title` for
+  the full number; unit is `shrink-0`.
+- **Verified in Chrome against the real dev API:** Backtesting → HFT: every row HFT-badged, 38 server pages,
+  last `/api/runs` call carries `engine=hft` and `page=0`. Live trade → HFT: KPI tile 0/8 → 0/3, `engine=hft`
+  on the list call and all three count calls. KPI card: long value clips to `+204,626,56…` inside its own
+  card (`clientWidth` 128 < `scrollWidth` 153).
+- NOTE (not changed): Performance view's `SummaryMetricCell` (`create-strategy/performance-view.tsx:84`) has
+  the same un-truncated value span and could overflow on a very large PnL.
+- ✅ **Type filter is now a colored switch** (user's pick: All | HFT | MFT) — `StrategyTypeFilter`
+  body swapped from a Select to a segmented switch styled after `MarketSwitch` (`simulate-modal.tsx`): All
+  neutral (`bg-secondary`), HFT green `#67e1c1`, MFT purple `#7b61ff`; `role=group` + `aria-pressed`. Same props, so
+  all four callers (incl. Alpha pool) pick it up. Verified in Chrome on Backtesting: each segment lights in its
+  color and sends `engine=hft` / `engine=mft` / no engine, from `page=0`.
+
+## Live stream "running but no live data" (2026-09-14) — NOT fixable in this repo; upstream sends nothing
+- Reproduced on two running MFT paper runs (`01a09e5d-2c31…`, `01a09dd3-b4f9…`): every live KPI reads "—"
+  because the snapshot never arrives. The stream delivers no byte beyond our proxy's own `: connected` line:
+  no data frames and no axum keep-alive comment (15s default) over 26s+.
+- Checked and ruled out in this repo: the client parser/reconnect (`hooks/api/use-run-live-snapshot.tsx`) and the
+  proxy passthrough (`app/hft/api/runs/[id]/live/stream/route.ts`). Ruled out in hft-platform: nginx
+  (`proxy_buffering off`) and compression (no such layer in `crates/api`).
+- The Network tab's 200 is the proxy's placeholder answer after `HEADER_GRACE_MS` (1.5s), NOT proof the upstream
+  answered. The first-attempt 503 is the upstream's own status, forwarded at `route.ts:44`; nothing in
+  `crates/api` returns it, so it comes from infra in front of the API (unverified).
+- Unauthenticated or invalid-token requests get a 401 in ~0.1s, so the stall is on the authenticated handler path.
+  Suspects (hft-platform `origin/develop`): `crates/api/src/routes/runs/live.rs:47` (`load_run`),
+  `crates/api/src/result/live.rs:83` (Redis pubsub connect), or infra in front of `hft-dev.xnoquant.io`.
+- Next step needs credentials/backend access: `curl -N` the upstream stream with a valid token to see whether
+  keep-alives arrive, plus server logs for `live_stream`.
+- ✅ Separate fix kept: `usePaperRuns` re-reads every 5s while a loaded row is running. `/live/stream` carries no
+  status, so a run that stopped on its own left an open panel on "Running" forever. The poll wasn't seen firing
+  in the browser (the automation tab reports `visibilityState: hidden`, which pauses `refetchInterval`).

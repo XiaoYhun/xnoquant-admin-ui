@@ -3,7 +3,19 @@ import { apiGet, apiPost, retryUnlessForbidden } from "@/lib/api-client";
 import { HFT_API_URL, USE_MOCK } from "@/lib/constant";
 import { normalizeCostCurve, type CostPoint } from "@/lib/cost-curve";
 import { normalizeTurnover, type TurnoverPoint } from "@/lib/turnover-curve";
-import type { EquityPoint, PeriodSummary, Run, RunMode, RunPage, RunSummary, SampleScope, VolRegimeSummary } from "@/types/domain";
+import type {
+  EquityPoint,
+  ExecutionDetail,
+  PeriodSummary,
+  RiskDetail,
+  Run,
+  RunMode,
+  RunPage,
+  RunSummary,
+  SampleScope,
+  SymbolPnlSummary,
+  VolRegimeSummary,
+} from "@/types/domain";
 import { settlementCurrencyOf, toPaperRunRow } from "@/lib/transform/runs";
 import type { PaperRunRow } from "@/lib/mock/paper-runs";
 import type { AssetKind } from "@/components/market-tabs";
@@ -417,6 +429,55 @@ export function useRunVolatilityRegime(id: string | undefined, sample?: SampleSc
   return useQuery({
     queryKey: ["run-volatility-regime", id, sample],
     queryFn: () => fetchRunVolatilityRegime(id as string, sample),
+    enabled: !!id,
+    retry: retryUnlessForbidden,
+    retryDelay: 400,
+  });
+}
+
+// `GET /api/runs/{id}/risk-detail` — drawdown episodes, the loss-streak histogram and the 24-hour
+// PnL breakdown, bundled off one parquet read (see `RiskDetail` in types/domain.ts). 409s for the
+// whole life of a running run, like every other result endpoint.
+export function fetchRunRiskDetail(id: string, sample?: SampleScope): Promise<RiskDetail> {
+  return apiGet<RiskDetail>(`${HFT_API_URL}/api/runs/${id}/risk-detail${sampleQs(sample)}`);
+}
+
+export function useRunRiskDetail(id: string | undefined, sample?: SampleScope) {
+  return useQuery({
+    queryKey: ["run-risk-detail", id, sample],
+    queryFn: () => fetchRunRiskDetail(id as string, sample),
+    enabled: !!id,
+    retry: retryUnlessForbidden,
+    retryDelay: 400,
+  });
+}
+
+// `GET /api/runs/{id}/execution-detail` — fill-rate-by-day, the slippage/latency histograms and
+// the four execution-quality scalars (see `ExecutionDetail` in types/domain.ts).
+export function fetchRunExecutionDetail(id: string, sample?: SampleScope): Promise<ExecutionDetail> {
+  return apiGet<ExecutionDetail>(`${HFT_API_URL}/api/runs/${id}/execution-detail${sampleQs(sample)}`);
+}
+
+export function useRunExecutionDetail(id: string | undefined, sample?: SampleScope) {
+  return useQuery({
+    queryKey: ["run-execution-detail", id, sample],
+    queryFn: () => fetchRunExecutionDetail(id as string, sample),
+    enabled: !!id,
+    retry: retryUnlessForbidden,
+    retryDelay: 400,
+  });
+}
+
+// `GET /api/runs/{id}/symbol-pnl` — per-symbol PnL attribution (signal/spread/adverse-selection/
+// fee split), one row per traded symbol. Already in the generated types (`SymbolPnlSummary`).
+export function fetchRunSymbolPnl(id: string, sample?: SampleScope): Promise<SymbolPnlSummary[]> {
+  return apiGet<SymbolPnlSummary[]>(`${HFT_API_URL}/api/runs/${id}/symbol-pnl${sampleQs(sample)}`);
+}
+
+export function useRunSymbolPnl(id: string | undefined, sample?: SampleScope) {
+  return useQuery({
+    queryKey: ["run-symbol-pnl", id, sample],
+    queryFn: () => fetchRunSymbolPnl(id as string, sample),
     enabled: !!id,
     retry: retryUnlessForbidden,
     retryDelay: 400,

@@ -76,6 +76,77 @@ export type Instrument = HftComponents["schemas"]["Symbol"];
 export type InstrumentClass = HftComponents["schemas"]["InstrumentClass"];
 export type SymbolPnlSummary = HftComponents["schemas"]["SymbolPnlSummary"];
 
+/**
+ * `GET /api/runs/:id/risk-detail` and `GET /api/runs/:id/execution-detail` — one-shot bundles of
+ * the Risk/Execution tabs' distribution views, computed together off a single parquet read.
+ *
+ * Hand-written, same reason as `PeriodSummary` above: the deployed OpenAPI document *lists* both
+ * paths but never defines their response schemas, so `gen:types` stubs them as `unknown` /
+ * `Record<string, never>`. Shapes confirmed against `crates/api/src/domain/result.rs` on
+ * `origin/develop` (`DrawdownEpisode`, `LossStreakBucket`, `HourlyPnlBucket`, `RiskDetail`,
+ * `HistogramBucket`, `FillRatePoint`, `ExecutionDetail`) rather than a live endpoint.
+ */
+export type DrawdownEpisode = {
+  /** Epoch ms of the peak that preceded this drawdown. */
+  peak_ts: number;
+  /** Epoch ms of the episode's deepest point. */
+  trough_ts: number;
+  /** Epoch ms the curve climbed back to/above the peak; `null` if still open at run end. */
+  recovery_ts: number | null;
+  /** Peak-to-trough drop, in PnL units. */
+  depth: number;
+  /** `depth` as a fraction of starting capital; `null` when no starting capital is known. */
+  depth_pct: number | null;
+  /** `trough_ts - peak_ts`, in days. */
+  length_days: number;
+  /** `recovery_ts - trough_ts`, in days; `null` when the episode never recovered. */
+  recovery_days: number | null;
+};
+/** One bucket of a consecutive-losing-round-trip streak-length histogram, ascending by `streak_len`. */
+export type LossStreakBucket = { streak_len: number; count: number };
+/** Net PnL for one UTC hour-of-day (`0..23`), collapsed across every calendar day sharing it. */
+export type HourlyPnlBucket = {
+  hour: number;
+  pnl: number;
+  /** `pnl` as a fraction of `net_pnl` summed over every hour; `null` when that total is `0`. */
+  pnl_share_pct: number | null;
+};
+export type RiskDetail = {
+  /** Worst first, max 10. */
+  drawdown_episodes: DrawdownEpisode[];
+  loss_streak_histogram: LossStreakBucket[];
+  /** Always 24 entries, one per UTC hour, `hour`-ascending. */
+  hourly_pnl: HourlyPnlBucket[];
+};
+/** One bucket of a fixed-width per-fill histogram (slippage or latency), ascending by `bucket_start`. */
+export type HistogramBucket = {
+  /** Inclusive lower bound, in the metric's own unit. */
+  bucket_start: number;
+  /** Exclusive upper bound, except on the last bucket (which also captures the series max). */
+  bucket_end: number;
+  count: number;
+};
+/** One UTC calendar day's qty-weighted fill rate. */
+export type FillRatePoint = { ts: number; fill_rate: number };
+export type ExecutionDetail = {
+  fill_rate_daily: FillRatePoint[];
+  /** Per-fill signed slippage vs mid, in bps. Negative = adverse. */
+  slippage_histogram: HistogramBucket[];
+  /** Per-fill latency (`fill_ts - submitted_ts`), in ms. */
+  latency_histogram: HistogramBucket[];
+  /** Fraction of submitted orders ever canceled, in `[0, 1]`. */
+  cancel_rate: number;
+  /** Orders submitted per fill executed. */
+  order_to_trade_ratio: number;
+  avg_latency_ms: number;
+  /** Signed; negative = adverse (a buy above mid, or a sell below mid). */
+  slippage_avg_bps: number;
+  /** Sample stddev (ddof=1) of the same per-fill slippage distribution. */
+  slippage_std_bps: number;
+  /** Negative = adverse. */
+  market_impact_bps: number;
+};
+
 // --- Risk management (Figma 14975:41599 / 14975:44103) ---
 // Two scopes with different severities: an account can only go Yellow (warn, no action), the
 // portfolio only Red (stops + flattens every running strategy and halts new launches).

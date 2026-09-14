@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CloseIcon } from "@/components/icons/close";
 import { PlusIcon } from "@/components/icons/plus";
 import {
@@ -13,13 +13,15 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { MinimalisticMagnifer } from "@solar-icons/react";
+import { MinimalisticMagnifer, Pin } from "@solar-icons/react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { canMutate, isShared } from "@/lib/rbac";
 import type { EditorTab } from "@/lib/mock/strategy-builder";
+import { usePinnedEditorStore } from "@/store/pinned-editor-store";
 
-// Browser-style strip of open editors: click to switch, × to close, + to add a new one.
+// Browser-style strip of open editors: click to switch, × to close, + to add a new one, and
+// (on hover) a pin to keep a tab at the left of the strip.
 // The strip never scrolls — it renders only the tabs that fit before the + button, and folds
 // the remainder into a "+N" menu.
 
@@ -28,6 +30,11 @@ import type { EditorTab } from "@/lib/mock/strategy-builder";
 // plus a 2–3 digit count. Keep this in step with the chip's padding below, or the cut
 // under-reserves and the chip gets clipped at the right edge.
 const OVERFLOW_CHIP_WIDTH = 76;
+
+// Stable empty-array fallback for the pinned-ids selector below — returning a fresh `[]` on every
+// call (one account has no pins yet, or userId is momentarily undefined) would make the store
+// look like it changes every render.
+const NO_PINS: string[] = [];
 
 function SharedBadge() {
   return (
@@ -43,8 +50,10 @@ function Tab({
   shared,
   closable,
   grow,
+  pinned,
   onSelect,
   onRequestClose,
+  onTogglePin,
 }: {
   editor: EditorTab;
   active: boolean;
@@ -52,8 +61,10 @@ function Tab({
   closable: boolean;
   /** Share the leftover width so the strip runs flush to the pinned "+N" chip. */
   grow?: boolean;
+  pinned?: boolean;
   onSelect?: () => void;
   onRequestClose?: () => void;
+  onTogglePin?: () => void;
 }) {
   return (
     <div
@@ -71,6 +82,28 @@ function Tab({
       <span className="truncate">{editor.name}</span>
       {/* RBAC plan: a lab-mate's HFT strategy is a read-only share. */}
       {shared && <SharedBadge />}
+      {/* Pin is per-account (store/pinned-editor-store.ts) — hidden entirely until the account
+          id is known, so no pin is ever written under an empty key. */}
+      {onTogglePin && (
+        <button
+          type="button"
+          aria-label={pinned ? `Unpin ${editor.name}` : `Pin ${editor.name}`}
+          aria-pressed={pinned}
+          title={pinned ? `Unpin ${editor.name}` : `Pin ${editor.name}`}
+          onClick={(ev) => {
+            ev.stopPropagation();
+            onTogglePin();
+          }}
+          className={cn(
+            "flex size-4 shrink-0 items-center justify-center rounded cursor-pointer",
+            pinned
+              ? "text-primary"
+              : "text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-white",
+          )}
+        >
+          <Pin size={14} weight={pinned ? "Bold" : "Outline"} />
+        </button>
+      )}
       {/* Closing an HFT tab DELETEs the strategy server-side, which 404s for a strategy the
           caller doesn't own — hide the × for those. */}
       {closable && (
@@ -108,6 +141,22 @@ export function EditorsBar({
   const [query, setQuery] = useState("");
   const { userId, isAdmin } = useAuth();
 
+  const pinnedIds = usePinnedEditorStore((s) => (userId ? (s.byUser[userId] ?? NO_PINS) : NO_PINS));
+  const togglePin = usePinnedEditorStore((s) => s.togglePin);
+
+  // Pinned editors lead the strip, in the order they were pinned; the rest keep the order they
+  // arrived in (page.tsx sorts by created_at). `ordered` drives every layout computation below,
+  // so pinned tabs sit in the leading run the fit logic keeps on-screen. Memoized because the fit
+  // effect below depends on it, and pinnedIds/editors are otherwise the only real inputs.
+  const { pinnedSet, ordered } = useMemo(() => {
+    const pinnedSet = new Set(pinnedIds);
+    const ordered = [
+      ...pinnedIds.map((id) => editors.find((e) => e.id === id)).filter((e): e is EditorTab => e !== undefined),
+      ...editors.filter((e) => !pinnedSet.has(e.id)),
+    ];
+    return { pinnedSet, ordered };
+  }, [editors, pinnedIds]);
+
   const barRef = useRef<HTMLDivElement>(null);
   const measureRef = useRef<HTMLDivElement>(null);
   const plusRef = useRef<HTMLButtonElement>(null);
@@ -123,7 +172,7 @@ export function EditorsBar({
     const recompute = () => {
       const widths = Array.from(measure.children).map((c) => (c as HTMLElement).offsetWidth);
       const plusWidth = plusRef.current?.offsetWidth ?? 0;
-      const activeIndex = editors.findIndex((e) => e.id === activeId);
+      const activeIndex = ordered.findIndex((e) => e.id === activeId);
 
       const fit = (reserved: number) => {
         let used = 0;
@@ -152,20 +201,20 @@ export function EditorsBar({
     const observer = new ResizeObserver(recompute);
     observer.observe(bar);
     return () => observer.disconnect();
-  }, [editors, activeId]);
+  }, [ordered, activeId]);
 
   const canClose = (e: EditorTab) => !(e.type === "hft" && e.owner_id && !canMutate(e, { userId, isAdmin }));
   const sharedFor = (e: EditorTab) => e.type === "hft" && isShared(e, userId);
 
   // Keep the active tab on the strip: if it falls past the cut, it is pinned after the leading
   // run — the fit above has already reserved room for it.
-  const visible = editors.slice(0, visibleCount);
-  const activeIndex = editors.findIndex((e) => e.id === activeId);
+  const visible = ordered.slice(0, visibleCount);
+  const activeIndex = ordered.findIndex((e) => e.id === activeId);
   if (activeIndex >= visibleCount) {
-    visible.push(editors[activeIndex]);
+    visible.push(ordered[activeIndex]);
   }
   const visibleIds = new Set(visible.map((e) => e.id));
-  const hidden = editors.filter((e) => !visibleIds.has(e.id));
+  const hidden = ordered.filter((e) => !visibleIds.has(e.id));
   const hasOverflow = hidden.length > 0;
 
   const q = query.trim().toLowerCase();
@@ -180,8 +229,17 @@ export function EditorsBar({
         className="pointer-events-none absolute top-0 left-0 flex items-stretch opacity-0"
         style={{ visibility: "hidden" }}
       >
-        {editors.map((e) => (
-          <Tab key={e.id} editor={e} active={e.id === activeId} shared={sharedFor(e)} closable={canClose(e)} />
+        {ordered.map((e) => (
+          <Tab
+            key={e.id}
+            editor={e}
+            active={e.id === activeId}
+            shared={sharedFor(e)}
+            closable={canClose(e)}
+            pinned={pinnedSet.has(e.id)}
+            // Render the pin button so its width is measured; this copy is never clickable.
+            onTogglePin={userId ? () => {} : undefined}
+          />
         ))}
       </div>
 
@@ -198,8 +256,10 @@ export function EditorsBar({
             shared={sharedFor(e)}
             closable={canClose(e)}
             grow={hasOverflow}
+            pinned={pinnedSet.has(e.id)}
             onSelect={() => onSelect(e.id)}
             onRequestClose={() => setPendingClose(e)}
+            onTogglePin={userId ? () => togglePin(userId, e.id) : undefined}
           />
         ))}
       </div>

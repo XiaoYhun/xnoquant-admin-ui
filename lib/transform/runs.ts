@@ -202,6 +202,7 @@ export function toPaperRunRow(run: Run): PaperRunRow {
     executionType: manifest.strategy.strategy_type,
     owner: run.owner_username ?? null,
     startingEquity: startingEquity(manifest),
+    startedAt: run.started_at ?? null,
     settlementCurrency: settlementCurrencyOf(manifest),
     pnlSeries: [],
     returnPct: runReturnPct(run),

@@ -29,6 +29,7 @@ import { canMutate, isShared } from "@/lib/rbac";
 import { RunStatusPill } from "@/components/run-status-pill";
 import { RunId } from "@/components/run-id";
 import { StrategyTypeBadge } from "@/components/strategy-type-badge";
+import { StartedAt } from "@/components/started-at";
 import { useStopRun, useDeleteRun } from "@/hooks/api/use-backtest-runs";
 import { useConsoleLog } from "@/store/console-log-store";
 import type { PaperRunRow } from "@/lib/mock/paper-runs";
@@ -43,13 +44,14 @@ const STOPPABLE = new Set(["running", "paused", "pending"]);
 const COLS = [
   { key: "status", label: "Status", w: "8%", align: "left" },
   { key: "id", label: "ID", w: "10%", align: "left" },
-  { key: "name", label: "Strategy Name", w: "19%", align: "left" },
+  { key: "name", label: "Strategy Name", w: "15%", align: "left" },
   { key: "owner", label: "Owner", w: "6%", align: "left" },
-  { key: "symbol", label: "Symbol/Market", w: "16%", align: "left" },
+  { key: "symbol", label: "Symbol/Market", w: "12%", align: "left" },
   { key: "pnl", label: "PnL chart", w: "8%", align: "left" },
   { key: "return", label: "Return", w: "8%", align: "right" },
   { key: "sharpe", label: "Sharpe", w: "6%", align: "right" },
   { key: "mdd", label: "Max drawdown", w: "8%", align: "right" },
+  { key: "started", label: "Started", w: "8%", align: "left" },
   { key: "action", label: "Action", w: "9%", align: "right" },
 ] as const;
 
@@ -175,6 +177,9 @@ export function BacktestRunsTable({
                   ) : (
                     <span className={GRAD_RED}>{formatPercent(r.maxDrawdownPct)}</span>
                   )}
+                </TableCell>
+                <TableCell className="text-xs">
+                  <StartedAt iso={r.startedAt} />
                 </TableCell>
                 <TableCell sticky="right" className="text-right">
                   {!writable ? (

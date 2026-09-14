@@ -14,6 +14,7 @@ import { FlashValue } from "@/components/ui/flash-value";
 import { RunStatusPill } from "@/components/run-status-pill";
 import { RunId } from "@/components/run-id";
 import { StrategyTypeBadge } from "@/components/strategy-type-badge";
+import { StartedAt } from "@/components/started-at";
 import { StartLiveTradingDialog } from "../../paper-trading/start-live-trading-dialog";
 import { isApprovalStale } from "@/hooks/api/use-promotions";
 import { cn, formatAmount, formatPercent } from "@/lib/utils";
@@ -46,13 +47,14 @@ const COLS = [
   { key: "id", label: "ID", w: "9%", align: "left" },
   { key: "name", label: "Strategy Name", w: "14%", align: "left" },
   { key: "account", label: "Account", w: "10%", align: "left" },
-  { key: "symbol", label: "Symbol/Market", w: "13%", align: "left" },
+  { key: "symbol", label: "Symbol/Market", w: "9%", align: "left" },
   { key: "tf", label: "TF", w: "5%", align: "left" },
-  { key: "return", label: "Return", w: "7%", align: "right" },
+  { key: "return", label: "Return", w: "6%", align: "right" },
   { key: "sharpe", label: "Sharpe", w: "5%", align: "right" },
   { key: "mdd", label: "MDD", w: "7%", align: "right" },
-  { key: "note", label: "Note", w: "14%", align: "left" },
-  { key: "action", label: "Action", w: "8%", align: "right" },
+  { key: "note", label: "Note", w: "12%", align: "left" },
+  { key: "started", label: "Started", w: "8%", align: "left" },
+  { key: "action", label: "Action", w: "7%", align: "right" },
 ] as const;
 
 export function AlphaPoolTable({
@@ -174,6 +176,9 @@ export function AlphaPoolTable({
                 ) : (
                   DASH
                 )}
+              </TableCell>
+              <TableCell className="text-xs">
+                <StartedAt iso={run?.startedAt} />
               </TableCell>
               <TableCell sticky="right" className="text-right" onClick={(e) => e.stopPropagation()}>
                 {run && !stale ? (

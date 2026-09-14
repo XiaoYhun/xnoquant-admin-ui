@@ -61,6 +61,8 @@ export type PaperRunRow = {
   // Manifest-derived starting equity — kept so the detail panel can compute % metrics from the
   // lazily-fetched summary. See lib/transform/runs.ts.
   startingEquity: number;
+  /** Run.started_at — when the engine actually began the run; null for queued runs. */
+  startedAt?: string | null;
   /** Accounting currency for every money figure about this run — "USDT", "VND", … */
   settlementCurrency: string;
   pnlSeries: number[];

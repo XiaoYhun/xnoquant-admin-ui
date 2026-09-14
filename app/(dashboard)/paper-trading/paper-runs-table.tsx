@@ -24,6 +24,7 @@ import { isShared } from "@/lib/rbac";
 import { RunStatusPill } from "@/components/run-status-pill";
 import { RunId } from "@/components/run-id";
 import { StrategyTypeBadge } from "@/components/strategy-type-badge";
+import { StartedAt } from "@/components/started-at";
 import type { PaperRunRow } from "@/lib/mock/paper-runs";
 
 // Gradient text tokens from the Figma design.
@@ -61,13 +62,14 @@ const COLS = [
   { key: "name", label: "Strategy Name", w: "12%", align: "left" },
   { key: "owner", label: "Owner", w: "5%", align: "left" },
   { key: "account", label: "Account", w: "10%", align: "left" },
-  { key: "symbol", label: "Symbol/Market", w: "14%", align: "left" },
+  { key: "symbol", label: "Symbol/Market", w: "10%", align: "left" },
   { key: "tf", label: "TF", w: "5%", align: "left" },
   { key: "pnl", label: "PnL chart", w: "7%", align: "left" },
-  { key: "return", label: "Return", w: "8%", align: "right" },
-  { key: "sharpe", label: "Sharpe", w: "6%", align: "right" },
+  { key: "return", label: "Return", w: "7%", align: "right" },
+  { key: "sharpe", label: "Sharpe", w: "5%", align: "right" },
   { key: "mdd", label: "Max drawdown", w: "8%", align: "right" },
-  { key: "action", label: "Action", w: "8%", align: "right" },
+  { key: "started", label: "Started", w: "8%", align: "left" },
+  { key: "action", label: "Action", w: "6%", align: "right" },
 ] as const;
 
 export function PaperRunsTable({
@@ -194,6 +196,9 @@ export function PaperRunsTable({
                   <span className={GRAD_RED}>{formatPercent(r.maxDrawdownPct)}</span>
                 </FlashValue>
               )}
+            </TableCell>
+            <TableCell className="text-xs">
+              <StartedAt iso={r.startedAt} />
             </TableCell>
             <TableCell sticky="right" className="text-right">
               {/* Promotion is admin-only (POST /api/promotions/live/{strategy_id}). */}

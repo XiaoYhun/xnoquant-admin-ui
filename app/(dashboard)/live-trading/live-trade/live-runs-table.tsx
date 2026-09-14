@@ -7,6 +7,7 @@ import { canMutate, isShared } from "@/lib/rbac";
 import { RunStatusPill } from "@/components/run-status-pill";
 import { RunId } from "@/components/run-id";
 import { StrategyTypeBadge } from "@/components/strategy-type-badge";
+import { StartedAt } from "@/components/started-at";
 import {
   Table,
   TableBody,
@@ -66,13 +67,14 @@ const COLS = [
   { key: "name", label: "Strategy Name", w: "15%", align: "left" },
   { key: "owner", label: "Owner", w: "7%", align: "left" },
   { key: "account", label: "Account", w: "10%", align: "left" },
-  { key: "symbols", label: "Symbols/Market", w: "11%", align: "left" },
+  { key: "symbols", label: "Symbols/Market", w: "8%", align: "left" },
   { key: "tf", label: "TF", w: "5%", align: "left" },
-  { key: "pnl", label: "PnL chart", w: "8%", align: "left" },
-  { key: "return", label: "Return", w: "7%", align: "right" },
+  { key: "pnl", label: "PnL chart", w: "6%", align: "left" },
+  { key: "return", label: "Return", w: "5%", align: "right" },
   { key: "sharpe", label: "Sharpe", w: "5%", align: "right" },
   { key: "mdd", label: "Max drawdown", w: "8%", align: "right" },
-  { key: "action", label: "Action", w: "8%", align: "right" },
+  { key: "started", label: "Started", w: "8%", align: "left" },
+  { key: "action", label: "Action", w: "7%", align: "right" },
 ] as const;
 
 export function LiveRunsTable({
@@ -186,6 +188,9 @@ export function LiveRunsTable({
                       <span className={GRAD_RED}>{formatPercent(r.maxDrawdownPct)}</span>
                     </FlashValue>
                   )}
+                </TableCell>
+                <TableCell className="text-xs">
+                  <StartedAt iso={r.startedAt} />
                 </TableCell>
                 <TableCell sticky="right" className="text-right">
                   {/* Hide write controls for runs the caller can't mutate (e.g. a lab-mate's run). */}

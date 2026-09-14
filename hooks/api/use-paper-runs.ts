@@ -4,7 +4,7 @@ import { apiGet } from "@/lib/api-client";
 import { USE_MOCK, HFT_API_URL } from "@/lib/constant";
 import type { TradeHistoryRow } from "@/lib/mock/paper-runs";
 import type { SampleScope, TradePage } from "@/types/domain";
-import { fetchRunRowPage, type RunRowPage, type RunsQuery } from "./use-runs";
+import { fetchRunRowPage, PENDING_RUN_POLL_MS, type RunRowPage, type RunsQuery } from "./use-runs";
 import { toTradeHistoryRow } from "@/lib/transform/runs";
 
 // Paper Trading is `GET /api/runs?mode=paper` — one server page, narrowed and counted upstream.
@@ -26,6 +26,13 @@ export function usePaperRuns(query: RunsQuery = {}) {
       return fetchRunRowPage({ ...query, mode: "paper" });
     },
     placeholderData: (prev) => prev, // keep rows on screen while a new page or search resolves
+    // A running run can stop on its own (risk auto-stop, engine exit, an action taken elsewhere) with
+    // nothing in the browser to notice: `/live/stream` only ever carries metric frames, never a
+    // status change, so an open detail panel would otherwise show "Running" — and its last live
+    // frame, frozen — forever. Re-read while a loaded row is running, and only then; same cadence/
+    // shape as useBacktestRuns' pending-row poll.
+    refetchInterval: (q) =>
+      q.state.data?.rows.some((row) => row.status === "running") ? PENDING_RUN_POLL_MS : false,
   });
 }
 

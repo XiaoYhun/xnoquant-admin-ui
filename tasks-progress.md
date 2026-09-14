@@ -384,3 +384,19 @@ individual fills) · PnL by session hour. `days_dropped_no_atr` / `total_pnl_pct
 - ✅ Separate fix kept: `usePaperRuns` re-reads every 5s while a loaded row is running. `/live/stream` carries no
   status, so a run that stopped on its own left an open panel on "Running" forever. The poll wasn't seen firing
   in the browser (the automation tab reports `visibilityState: hidden`, which pauses `refetchInterval`).
+
+## Pinnable strategy tabs on Create Strategy (2026-09-14) — tsc + eslint clean, 244/244 vitest, browser-verified
+- ✅ **Hover a tab → outline pin; click → pinned** (user's pick: front + always visible). Pinned tabs lead the strip
+  in pin order, so they sit in the leading run the fit logic keeps on-screen, not in "+N". A pinned tab shows a
+  bold `text-primary` Solar `Pin`. Unpinning puts the tab back in its `created_at` place. × still works.
+- ✅ **Per-account localStorage** — new `store/pinned-editor-store.ts` (zustand `persist`, key
+  `xnoquant-pinned-editors`), `byUser: { [userId]: pinnedIds[] }`. `userId` comes from `useAuth()` (`/me`); while it's
+  undefined no pin button renders and nothing is written. Strategy ids are unique across labs, so one list per
+  account covers both. Stale ids are ignored at render.
+- ✅ **`EditorsBar` only** (`page.tsx` untouched): a memoized `ordered` (pinned first) feeds the measuring copy, the fit
+  effect, `visible`/`hidden` and the "+N" picker. The selector falls back to a module-level `NO_PINS`, because a fresh
+  `[]` loops under zustand 5's useSyncExternalStore ("Maximum update depth") — caught in review before it shipped.
+- **Verified in Chrome:** hover shows the outline pin beside ×; pinning the 3rd tab moved it to the front with a
+  filled pin, stored under the signed-in user id; it survived a reload; unpin restored its place. With the pin
+  held only by a fake second account id, this account's strip showed no pins. No console errors. Test state
+  removed afterwards.

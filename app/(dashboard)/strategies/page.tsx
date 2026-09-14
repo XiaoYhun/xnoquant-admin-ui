@@ -2,6 +2,7 @@
 import { Suspense, useState } from "react";
 import { PageSizeSelect } from "@/components/page-size-select";
 import { TablePagination } from "@/components/table-pagination";
+import { StrategyTypeFilter, engineOf, type StrategyTypeFilterValue } from "@/components/strategy-type-filter";
 import { MinimalisticMagnifer } from "@solar-icons/react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useBacktestRuns } from "@/hooks/api/use-backtest-runs";
@@ -54,6 +55,7 @@ function Backtesting() {
   const [search, setSearch] = useState("");
   const [symbol, setSymbol] = useState(ALL_SYMBOLS);
   const [status, setStatus] = useState("all");
+  const [strategyType, setStrategyType] = useState<StrategyTypeFilterValue>("all");
   const [ranges, setRanges] = useState<MetricRanges>(EMPTY_METRIC_RANGES);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = usePageSize();
@@ -70,6 +72,7 @@ function Backtesting() {
     q: runSearchQuery(debouncedSearch),
     status: status === "all" ? undefined : status,
     asset_kind: assetKindOf(market),
+    engine: engineOf(strategyType),
     symbol: symbol === ALL_SYMBOLS ? undefined : symbol,
     ...metricRangeParams(debouncedRanges),
     page: page - 1, // the API counts pages from 0
@@ -150,6 +153,13 @@ function Backtesting() {
             ))}
           </SelectContent>
         </Select>
+        <StrategyTypeFilter
+          value={strategyType}
+          onChange={(v) => {
+            setStrategyType(v);
+            setPage(1);
+          }}
+        />
         <MetricRangeFilters
           value={ranges}
           onChange={(next) => {

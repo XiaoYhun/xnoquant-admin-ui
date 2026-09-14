@@ -26,9 +26,10 @@ export type LaunchRequest = components["schemas"]["LaunchRequest"];
 // `GET /api/runs` is paged AND filtered server-side. It answers `RunPage { runs, total, page,
 // size }` and narrows on `q` (case-insensitive substring over strategy name OR run id),
 // `status` (exact), `mode` (exact — this is what lets each list page itself), `asset_kind`
-// (`stock`/`futures`/`crypto` — the market tabs), `symbol` (substring over the run's traded
-// symbols) and inclusive bounds on the three headline metrics. `page` is 0-indexed and `size`
-// defaults to 100, max 200 (the upstream clamps anything larger).
+// (`stock`/`futures`/`crypto` — the market tabs), `engine` (exact — `hft` (tick/L2) or `mft`
+// (bar), the HFT/MFT filter), `symbol` (substring over the run's traded symbols) and inclusive
+// bounds on the three headline metrics. `page` is 0-indexed and `size` defaults to 100, max 200
+// (the upstream clamps anything larger).
 //
 // The field names are the API's own, so a query object serializes without a mapping table.
 // `metricRangeParams` (components/metric-range-filters.tsx) supplies the `MetricBounds` half in
@@ -38,6 +39,7 @@ export type RunsQuery = {
   status?: string;
   mode?: RunMode;
   asset_kind?: AssetKind;
+  engine?: "hft" | "mft";
   symbol?: string;
   /** 0-indexed, as the API counts. The lists' pagers are 1-based and subtract before calling. */
   page?: number;

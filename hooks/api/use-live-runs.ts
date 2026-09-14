@@ -34,13 +34,14 @@ export function useLiveRuns(query: RunsQuery = {}) {
  * — the rows themselves are discarded.
  *
  * Deliberately NOT narrowed by the search box or the Only Running switch: the strip describes the
- * market tab, as it did when it was summed client-side.
+ * market tab. `engine` IS applied, like `asset_kind` — otherwise the tiles would describe a wider
+ * set of runs than the HFT/MFT-filtered table below them.
  */
-export function useLiveRunCounts(assetKind?: AssetKind) {
+export function useLiveRunCounts(assetKind?: AssetKind, engine?: RunsQuery["engine"]) {
   return useQuery({
-    queryKey: ["live-run-counts", assetKind ?? ""],
+    queryKey: ["live-run-counts", assetKind ?? "", engine ?? ""],
     queryFn: async () => {
-      const base: RunsQuery = { mode: "live", asset_kind: assetKind, size: 1 };
+      const base: RunsQuery = { mode: "live", asset_kind: assetKind, engine, size: 1 };
       const [all, running, paused] = await Promise.all([
         fetchRunsPage(base),
         fetchRunsPage({ ...base, status: "running" }),

@@ -2,6 +2,7 @@
 import { Suspense, useMemo, useState } from "react";
 import { PageSizeSelect } from "@/components/page-size-select";
 import { TablePagination } from "@/components/table-pagination";
+import { StrategyTypeFilter, engineOf, type StrategyTypeFilterValue } from "@/components/strategy-type-filter";
 import { useSearchParams } from "next/navigation";
 import { MinimalisticMagnifer } from "@solar-icons/react";
 import { useLiveRunCounts, useLiveRuns } from "@/hooks/api/use-live-runs";
@@ -103,6 +104,7 @@ function LiveTrade() {
   const [market, setMarket] = useState<Market>(() => marketFromParam(searchParams.get("market")));
   const [search, setSearch] = useState("");
   const [symbolFilter, setSymbolFilter] = useState(ALL_SYMBOLS);
+  const [strategyType, setStrategyType] = useState<StrategyTypeFilterValue>("all");
   const [onlyRunning, setOnlyRunning] = useState(false);
   const [ranges, setRanges] = useState<MetricRanges>(EMPTY_METRIC_RANGES);
   const [page, setPage] = useState(1);
@@ -118,6 +120,7 @@ function LiveTrade() {
     q: runSearchQuery(debouncedSearch),
     status: onlyRunning ? "running" : undefined,
     asset_kind: assetKindOf(market),
+    engine: engineOf(strategyType),
     symbol: symbolFilter === ALL_SYMBOLS ? undefined : symbolFilter,
     ...metricRangeParams(debouncedRanges),
     page: page - 1, // the API counts pages from 0
@@ -161,7 +164,7 @@ function LiveTrade() {
 
   // Counted by the server, not summed over the rows: the table holds one page now, so a headline
   // added up from it would describe that page rather than the market.
-  const { data: counts } = useLiveRunCounts(assetKindOf(market));
+  const { data: counts } = useLiveRunCounts(assetKindOf(market), engineOf(strategyType));
 
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
   // A refetch can shrink the result set under a reader who is already past its new end — a bot
@@ -206,6 +209,13 @@ function LiveTrade() {
           value={symbolFilter}
           onChange={(v) => {
             setSymbolFilter(v);
+            resetPage();
+          }}
+        />
+        <StrategyTypeFilter
+          value={strategyType}
+          onChange={(v) => {
+            setStrategyType(v);
             resetPage();
           }}
         />

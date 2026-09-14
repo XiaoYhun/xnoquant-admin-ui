@@ -194,6 +194,13 @@ export function PerformanceMft({
   period: PeriodSelection;
   runId?: string;
 }) {
+  // `period` is deliberately NOT passed here. `src.perf`/`src.summary` feed both the ratio panel
+  // above and, via `scopeFor(undefined)` below, the Yearly Statistics grid's "All" column — which
+  // has to stay the true whole-run rollup no matter what the Period row has selected, the same way
+  // its year columns don't filter to one year either. Scoping this call would scope the All column
+  // too. The top ratio panel therefore keeps showing whole-run figures — a known gap, not this
+  // screen's fix (the reported bug was Overview's KPI cards and metric strip; see overview-mft.tsx,
+  // risk-mft.tsx, execution-mft.tsx and cost-edge-mft.tsx, none of which have this conflict).
   const src = useMftResultsSource({ strategyId, stage, runId });
   const perf = src.perf;
   const summaryRows = src.summaryRows;

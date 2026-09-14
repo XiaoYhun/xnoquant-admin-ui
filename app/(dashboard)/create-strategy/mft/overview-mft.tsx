@@ -282,7 +282,9 @@ export function OverviewMft({
 }) {
   const [range, setRange] = useState<Range>("All");
 
-  const src = useMftResultsSource({ strategyId, stage, runId });
+  // `period` scopes `perf`/`summary` to the selected year (see summaryForPeriod) — this is the KPI
+  // cards' and metric strip's own Period pill, not just the charts'.
+  const src = useMftResultsSource({ strategyId, stage, runId, period });
   const pnls = src.pnls;
   // Run-only figures, with no counterpart on the XALPHA strategy/stage payload the same strip
   // renders for a stage-scoped view.

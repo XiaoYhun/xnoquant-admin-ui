@@ -176,7 +176,10 @@ export function RiskMft({
 }) {
   const [sharpeWindow, setSharpeWindow] = useState<number>(30);
 
-  const src = useMftResultsSource({ strategyId, stage, runId });
+  // `period` scopes `perf`/`summary` to the selected year — the top risk panel is a headline
+  // figure like Overview's KPI cards, not the Top-5-drawdown table (built from the already
+  // period-filtered `drawdownPts` below either way).
+  const src = useMftResultsSource({ strategyId, stage, runId, period });
   const perf = src.perf;
   const summary = src.summary;
   const dd = src.drawdown;

@@ -2,9 +2,10 @@ import { useMemo } from "react";
 import { realSummary, useRunEquity, useRunPeriodicSummary, useRunSummary } from "@/hooks/api/use-runs";
 import { useStrategyChart, useSummaryTable } from "@/hooks/api/use-strategy-results";
 import { useStrategyPerformance } from "@/hooks/api/use-strategy-performance";
-import { runToMftCharts, runToMftPerf, runToMftSummaryRows } from "@/lib/transform/run-as-mft";
+import { runToMftCharts, runToMftPerf, runToMftSummaryRows, summaryForPeriod } from "@/lib/transform/run-as-mft";
 import type { StrategyChartData, SummaryTableItem } from "@/hooks/api/use-strategy-results";
 import type { StrategyPerformanceDetail } from "@/hooks/api/use-strategy-performance";
+import type { PeriodSelection } from "@/lib/transform/mft-results";
 import type { PeriodSummary, RunSummary } from "@/types/domain";
 
 type ChartQ = {
@@ -18,15 +19,23 @@ export function useMftResultsSource({
   strategyId,
   stage,
   runId,
+  period,
 }: {
   strategyId?: string;
   stage?: string;
   runId?: string;
+  /**
+   * The Period row's selection. Narrows `perf`/`summary` to that window when the run has a
+   * `/periodic-summary` bucket for it — see `summaryForPeriod`. Omitted (or "All") keeps them at
+   * the whole run, which is what every caller got before this existed.
+   */
+  period?: PeriodSelection;
 }): {
   perf: StrategyPerformanceDetail | undefined;
   /**
    * The run's raw `GET /api/runs/{id}/summary`, for the panels whose metrics have no counterpart
-   * in `StrategyPerformanceDetail`. Undefined on the XALPHA strategy/stage path.
+   * in `StrategyPerformanceDetail` — narrowed to `period` via `summaryForPeriod` when the caller
+   * passes one. Undefined on the XALPHA strategy/stage path.
    */
   summary: RunSummary | undefined;
   summaryRows: SummaryTableItem[] | undefined;
@@ -49,15 +58,19 @@ export function useMftResultsSource({
   const summary = realSummary(summaryQ.data);
   const fromRun = useMemo(() => {
     if (!runId) return null;
+    // Charts and the yearly summary table stay on the WHOLE run — the views that draw them narrow
+    // the series themselves (filterByPeriod) or, for the summary table, are a "one row per year"
+    // grid that the Period row was never meant to collapse to one row.
     const charts = runToMftCharts(equityQ.data, summary);
+    const scoped = summaryForPeriod(summary, periodsQ.data, period ?? {});
     const q = (data: StrategyChartData): ChartQ => ({
       data,
       isLoading: equityQ.isLoading,
       isError: equityQ.isError,
     });
     return {
-      perf: runToMftPerf(summary),
-      summary,
+      perf: runToMftPerf(scoped),
+      summary: scoped,
       summaryRows: runToMftSummaryRows(equityQ.data, summary),
       periods: periodsQ.data,
       pnls: q(charts.pnls),
@@ -65,7 +78,7 @@ export function useMftResultsSource({
       drawdown: q(charts.drawdown),
       sharpe: q(charts.sharpe),
     };
-  }, [runId, equityQ.data, equityQ.isLoading, equityQ.isError, summary, periodsQ.data]);
+  }, [runId, equityQ.data, equityQ.isLoading, equityQ.isError, summary, periodsQ.data, period?.year, period?.month]);
 
   const xId = runId ? undefined : strategyId;
   const perf = useStrategyPerformance(xId, stage);

@@ -83,6 +83,7 @@ function Waterfall({ rows }: { rows: WaterfallRow[] }) {
 export function CostEdgeMft({
   strategyId,
   stage,
+  period,
   runId,
 }: {
   strategyId?: string;
@@ -90,7 +91,9 @@ export function CostEdgeMft({
   period: PeriodSelection;
   runId?: string;
 }) {
-  const { perf } = useMftResultsSource({ strategyId, stage, runId });
+  // `period` scopes `perf` to the selected year — Gross/Net PnL and cost drag here are the same
+  // run-level figures the Overview KPI cards show, just re-laid-out.
+  const { perf } = useMftResultsSource({ strategyId, stage, runId, period });
   const p = perf?.performance;
   const a = perf?.analysis;
 

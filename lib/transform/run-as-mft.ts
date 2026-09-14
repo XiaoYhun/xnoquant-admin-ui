@@ -1,8 +1,8 @@
-import type { EquityPoint, RunSummary } from "@/types/domain";
+import type { EquityPoint, PeriodSummary, RunSummary } from "@/types/domain";
 import type { StrategyChartData, SummaryTableItem } from "@/hooks/api/use-strategy-results";
 import type { StrategyPerformanceDetail } from "@/hooks/api/use-strategy-performance";
 import { startingCapital, toDrawdown, toRollingSharpe } from "./results";
-import { toPeriodChanges, yearOf, type Point } from "./mft-results";
+import { toPeriodChanges, yearOf, type PeriodSelection, type Point } from "./mft-results";
 
 // HFT `/api/runs/{id}` equity + summary → the shapes the six Figma-15204 Results screens already
 // consume (XALPHA `/charts` + `/performance` + `/summary-table`). Those screens were built from
@@ -85,6 +85,38 @@ export function runToMftPerf(summary: RunSummary | undefined): StrategyPerforman
       win_rate: summary.win_rate,
     },
   };
+}
+
+/**
+ * The whole-run summary, narrowed to one Period-row selection — what `runToMftPerf` needs to
+ * answer the Overview KPI cards and metric strip for the SELECTED period instead of always the
+ * whole run.
+ *
+ * Only two selections have a real per-period answer: "All" (`period.year == null`) is the whole
+ * run by definition, and a whole calendar year with its own `/periodic-summary` bucket is that
+ * bucket's `summary` — computed by the backend over that window alone (see `PeriodSummary` in
+ * types/domain.ts), so its fields are already window-scoped rather than cumulative. Every other
+ * selection falls back to the whole run UNCHANGED: a month has no bucket at all, and a year backed
+ * only by quarterly buckets can't be answered by summing them (Sharpe and max drawdown aren't
+ * additive across sub-periods). That is a real gap in what the API offers, not something to paper
+ * over with a wrong number.
+ */
+export function summaryForPeriod(
+  whole: RunSummary | undefined,
+  periods: PeriodSummary[] | undefined,
+  period: PeriodSelection,
+): RunSummary | undefined {
+  if (period.year == null) return whole;
+  if (period.month == null) {
+    const bucket = periods?.find((p) => p.label === String(period.year));
+    if (bucket) {
+      // Same guard as `realSummary` (hooks/api/use-runs.ts): an oversized bucket's fields are all
+      // zeroed placeholders, not real figures, and a whole-run number would misrepresent the
+      // period rather than honestly showing "no data".
+      return bucket.summary.oversized ? undefined : bucket.summary;
+    }
+  }
+  return whole;
 }
 
 export function runToMftSummaryRows(

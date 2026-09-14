@@ -28,6 +28,7 @@ import {
 export function ExecutionMft({
   strategyId,
   stage,
+  period,
   runId,
 }: {
   strategyId?: string;
@@ -35,7 +36,9 @@ export function ExecutionMft({
   period: PeriodSelection;
   runId?: string;
 }) {
-  const { perf, summary } = useMftResultsSource({ strategyId, stage, runId });
+  // `period` scopes `perf`/`summary` to the selected year — every figure on this screen is a
+  // run-level aggregate already, so it narrows the same way the Overview KPI cards do.
+  const { perf, summary } = useMftResultsSource({ strategyId, stage, runId, period });
   const a = perf?.analysis;
 
   // An HFT bar-run carries these four on `/api/runs/{id}/summary`; the XALPHA strategy/stage feed

@@ -90,12 +90,15 @@ function KpiCards({ cards }: { cards: KpiCard[] }) {
         >
           <div className="flex min-w-0 flex-col gap-1">
             <span className="truncate text-xs leading-[18px] text-[#9db2ce]">{c.label}</span>
-            <div className="flex items-end gap-1">
-              <span className={cn("text-base leading-5 font-semibold", c.tone ?? "text-white")}>
+            <div className="flex min-w-0 items-end gap-1">
+              <span
+                title={c.value}
+                className={cn("min-w-0 truncate text-base leading-5 font-semibold", c.tone ?? "text-white")}
+              >
                 {c.value}
               </span>
               {c.unit && (
-                <span className="text-[10px] leading-[14px] text-[#9db2ce]">{c.unit}</span>
+                <span className="shrink-0 text-[10px] leading-[14px] text-[#9db2ce]">{c.unit}</span>
               )}
             </div>
             <span className="text-[10px] leading-[14px] text-[#9db2ce]">{c.note ?? " "}</span>

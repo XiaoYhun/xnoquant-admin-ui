@@ -13,6 +13,7 @@ import {
 } from "@solar-icons/react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { OwnerFilter } from "@/components/owner-filter";
 import { useHftStrategies, type HftStrategyType } from "@/hooks/api/use-hft-strategies";
 import { useDemoteStrategy, usePromotions } from "@/hooks/api/use-promotions";
 import { Button } from "@/components/ui/button";
@@ -116,18 +117,17 @@ function blockedReason(strategy: Strategy, next: PromotionStage, runs: Run[]): s
 export default function Page() {
   const router = useRouter();
   const { isAdmin } = useAuth();
-  const [ownerFilter, setOwnerFilter] = useState("all");
-  // Two reads of the same endpoint. The rows are narrowed server-side by `?owner=`; the dropdowns
-  // read the unfiltered list so their options stay the full cast — options derived from an
-  // owner-filtered list would collapse to the owner already selected, leaving no way back to
-  // anyone else. With no owner picked both share a cache entry, so this is one request.
-  const { data: allStrategies = [] } = useHftStrategies();
+  // Owner is multi-select, so there's no single id left to hand the server: `GET
+  // /api/strategies?owner=` only narrows to ONE id, and the endpoint isn't paginated (~143 rows on
+  // dev per use-hft-strategies.ts), so one unfiltered fetch backs both the table and the filter
+  // dropdowns' options, and owner narrows client-side alongside search/stage/type below.
+  const [ownerFilter, setOwnerFilter] = useState<string[]>([]);
   const {
     data: strategies = [],
     isPending,
     isError,
     error,
-  } = useHftStrategies(ownerFilter === "all" ? undefined : ownerFilter);
+  } = useHftStrategies();
   const { data: roster = [] } = useUserRoster();
   const { data: runsOf = new Map<string, Run[]>() } = useRunsByStrategy();
   // The note an admin typed when promoting lives on the promotion record, not on Strategy, so
@@ -166,31 +166,37 @@ export default function Page() {
 
   // Both dropdowns offer only who and what the strategy list actually holds — a roster of every
   // user who ever signed in would be mostly owners with no strategies. Read off the UNFILTERED
-  // list for the reason given at the queries above.
-  const ownerOptions = useMemo(() => {
+  // list — options derived from an owner/type-narrowed list would collapse toward whatever's
+  // already picked, leaving no way back to anyone/anything else.
+  const ownerFilterOptions = useMemo(() => {
     const seen = new Map<string, string>();
-    for (const s of allStrategies) {
+    for (const s of strategies) {
       if (!seen.has(s.owner_id)) seen.set(s.owner_id, owners.get(s.owner_id) ?? `${s.owner_id.slice(0, 8)}…`);
     }
-    return [...seen].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
-  }, [allStrategies, owners]);
+    return [...seen]
+      .map(([id, name]) => {
+        const email = emailOf.get(id);
+        return { id, name, email: email && email !== name ? email : undefined };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [strategies, owners, emailOf]);
 
   const typeOptions = useMemo(() => {
     const seen = new Set<HftStrategyType>();
-    for (const s of allStrategies) seen.add(s.strategy_type);
+    for (const s of strategies) seen.add(s.strategy_type);
     return [...seen]
       .map((value) => ({ value, label: HFT_TYPE_LABEL[value] ?? value }))
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [allStrategies]);
+  }, [strategies]);
 
   // Search counts as a filter here — it sits in the same row and narrows the same table, and the
   // empty state blames "these filters" for it either way. Sort is deliberately left alone: it is
   // an ordering, not a narrowing, and clearing it would hide nothing the admin is looking for.
-  const filtersActive = !!search || stageFilter !== "all" || ownerFilter !== "all" || typeFilter !== "all";
+  const filtersActive = !!search || stageFilter !== "all" || ownerFilter.length > 0 || typeFilter !== "all";
   const resetFilters = () => {
     setSearch("");
     setStageFilter("all");
-    setOwnerFilter("all");
+    setOwnerFilter([]);
     setTypeFilter("all");
   };
 
@@ -206,8 +212,9 @@ export default function Page() {
       const matchesSearch = !q || (isIdQuery(debouncedSearch) ? s.id.toLowerCase().includes(needle) : s.name.toLowerCase().includes(q));
       const matchesStage = stageFilter === "all" || strategyStage(s, runsOf.get(s.id)).rung === stageFilter;
       const matchesType = typeFilter === "all" || s.strategy_type === typeFilter;
-      // No owner check: `strategies` is already the owner's, narrowed by the API.
-      return matchesSearch && matchesStage && matchesType;
+      // Owner is multi-select and unfiltered server-side (see the query above), so it narrows here.
+      const matchesOwner = ownerFilter.length === 0 || ownerFilter.includes(s.owner_id);
+      return matchesSearch && matchesStage && matchesType && matchesOwner;
     });
     if (!sort) return filtered;
 
@@ -231,7 +238,7 @@ export default function Page() {
           return dir * a.name.localeCompare(b.name);
       }
     });
-  }, [strategies, debouncedSearch, stageFilter, typeFilter, sort, owners, runsOf]);
+  }, [strategies, debouncedSearch, stageFilter, typeFilter, ownerFilter, sort, owners, runsOf]);
 
   const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
   // Clamped on read rather than written back: narrowing the list can strand the pager past the
@@ -263,25 +270,14 @@ export default function Page() {
           />
           <MinimalisticMagnifer size={20} weight="Outline" className="shrink-0 text-muted-foreground" />
         </div>
-        <Select
+        <OwnerFilter
+          options={ownerFilterOptions}
           value={ownerFilter}
-          onValueChange={(v) => {
-            setOwnerFilter(v ?? "all");
+          onChange={(next) => {
+            setOwnerFilter(next);
             setPage(1);
           }}
-        >
-          <SelectTrigger className={FILTER_PILL}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All owners</SelectItem>
-            {ownerOptions.map((o) => (
-              <SelectItem key={o.value} value={o.value}>
-                {o.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        />
         <Select
           value={typeFilter}
           onValueChange={(v) => {

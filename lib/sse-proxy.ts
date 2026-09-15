@@ -63,7 +63,17 @@ export async function proxySseStream(req: Request, upstreamUrl: string): Promise
   // Headers arrived in time — pass the real status through so auth/not-found stay accurate.
   if (settled !== "timeout") {
     req.signal.removeEventListener("abort", onClientAbort);
-    if (!settled.ok || !settled.body) return new Response(null, { status: settled.status });
+    if (!settled.ok) {
+      // Forward the upstream's error body too (e.g. `{"error":"live orderbook viewing is not
+      // supported for venue Dnse"}`) — callers parse it for the real reason, and a bare
+      // `Response(null, ...)` here was throwing that away, leaving only the status code.
+      const contentType = settled.headers.get("content-type");
+      return new Response(settled.body, {
+        status: settled.status,
+        headers: contentType ? { "content-type": contentType } : undefined,
+      });
+    }
+    if (!settled.body) return new Response(null, { status: settled.status });
     return new Response(settled.body, { status: 200, headers: SSE_HEADERS });
   }
 

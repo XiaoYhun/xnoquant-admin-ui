@@ -12,6 +12,7 @@ import {
   filterByPeriod,
   lossStreaks,
   monthlyReturns,
+  quarterOf,
   sliceStage,
   toPeriodChanges,
   toPoints,
@@ -80,6 +81,22 @@ describe("filterByPeriod / yearsOf", () => {
     expect(filterByPeriod(points, { year: 2021 }).map((p) => p.v)).toEqual([2, 3]);
     expect(filterByPeriod(points, { year: 2021, month: 6 }).map((p) => p.v)).toEqual([3]);
     expect(filterByPeriod(points, { year: 2021, month: 12 })).toEqual([]);
+  });
+
+  it("filters by year, then by quarter within it (F-046)", () => {
+    // May (Q2) and June (Q2) are both in points; only the Q2 sample should survive a Q2 filter.
+    expect(filterByPeriod(points, { year: 2021, quarter: 2 }).map((p) => p.v)).toEqual([2, 3]);
+    expect(filterByPeriod(points, { year: 2021, quarter: 1 })).toEqual([]);
+  });
+});
+
+describe("quarterOf", () => {
+  it("maps each month to its 1-4 quarter", () => {
+    expect(quarterOf(ts(2024, 1, 15))).toBe(1);
+    expect(quarterOf(ts(2024, 3, 31))).toBe(1);
+    expect(quarterOf(ts(2024, 4, 1))).toBe(2);
+    expect(quarterOf(ts(2024, 8, 1))).toBe(3);
+    expect(quarterOf(ts(2024, 12, 31))).toBe(4);
   });
 });
 

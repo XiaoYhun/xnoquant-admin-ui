@@ -2,7 +2,17 @@ import type { EquityPoint, PeriodSummary, RunSummary } from "@/types/domain";
 import type { StrategyChartData, SummaryTableItem } from "@/hooks/api/use-strategy-results";
 import type { StrategyPerformanceDetail } from "@/hooks/api/use-strategy-performance";
 import { startingCapital, toDrawdown, toRollingSharpe } from "./results";
-import { toPeriodChanges, yearOf, type PeriodSelection, type Point } from "./mft-results";
+import {
+  annualizedSharpe,
+  calmarRatio,
+  maxDrawdown,
+  monthOf,
+  quarterOf,
+  toPeriodChanges,
+  yearOf,
+  type PeriodSelection,
+  type Point,
+} from "./mft-results";
 
 // HFT `/api/runs/{id}` equity + summary → the shapes the six Figma-15204 Results screens already
 // consume (XALPHA `/charts` + `/performance` + `/summary-table`). Those screens were built from
@@ -98,14 +108,14 @@ export function runToMftPerf(summary: RunSummary | undefined): StrategyPerforman
  * answer the Overview KPI cards and metric strip for the SELECTED period instead of always the
  * whole run.
  *
- * Only two selections have a real per-period answer: "All" (`period.year == null`) is the whole
- * run by definition, and a whole calendar year with its own `/periodic-summary` bucket is that
- * bucket's `summary` — computed by the backend over that window alone (see `PeriodSummary` in
- * types/domain.ts), so its fields are already window-scoped rather than cumulative. Every other
- * selection falls back to the whole run UNCHANGED: a month has no bucket at all, and a year backed
- * only by quarterly buckets can't be answered by summing them (Sharpe and max drawdown aren't
- * additive across sub-periods). That is a real gap in what the API offers, not something to paper
- * over with a wrong number.
+ * Three selections have a real per-period answer: "All" (`period.year == null`) is the whole run
+ * by definition, and a whole calendar year OR quarter with its own `/periodic-summary` bucket
+ * (labelled "2024" or "2024 Q3" — see `PeriodSummary` in types/domain.ts) is that bucket's
+ * `summary`, computed by the backend over that window alone, so its fields are already
+ * window-scoped rather than cumulative. Every other selection falls back to the whole run
+ * UNCHANGED: a month has no bucket at all, and a year backed only by quarterly buckets can't be
+ * answered by summing them (Sharpe and max drawdown aren't additive across sub-periods). That is a
+ * real gap in what the API offers, not something to paper over with a wrong number.
  */
 export function summaryForPeriod(
   whole: RunSummary | undefined,
@@ -113,8 +123,14 @@ export function summaryForPeriod(
   period: PeriodSelection,
 ): RunSummary | undefined {
   if (period.year == null) return whole;
-  if (period.month == null) {
-    const bucket = periods?.find((p) => p.label === String(period.year));
+  const label =
+    period.month != null
+      ? undefined
+      : period.quarter != null
+        ? `${period.year} Q${period.quarter}`
+        : String(period.year);
+  if (label) {
+    const bucket = periods?.find((p) => p.label === label);
     if (bucket) {
       // Same guard as `realSummary` (hooks/api/use-runs.ts): an oversized bucket's fields are all
       // zeroed placeholders, not real figures, and a whole-run number would misrepresent the
@@ -125,9 +141,30 @@ export function summaryForPeriod(
   return whole;
 }
 
+/**
+ * A `/periodic-summary` bucket for exactly one calendar year, or `undefined` when there isn't one
+ * (a live/paper run has none at all, and a sub-year backtest buckets by quarter instead — see
+ * `PeriodSummary`'s doc comment) or the backend flagged it oversized. Shared by every function
+ * below that fills a row from the bucket first and a locally-derived figure second.
+ */
+function yearBucket(periods: PeriodSummary[] | undefined, year: number): RunSummary | undefined {
+  const bucket = periods?.find((p) => p.label === String(year));
+  // Same guard as `realSummary`/`summaryForPeriod`: an oversized bucket's fields are all zeroed
+  // placeholders, not real figures.
+  return bucket && !bucket.summary.oversized ? bucket.summary : undefined;
+}
+
+/**
+ * F-063: `/periodic-summary` is the only source with a per-year Sharpe, max drawdown, profit
+ * factor and Calmar (`/summary-table`'s XALPHA equivalent, which `runToMftSummaryRows` used to be
+ * limited to, has no counterpart on the run path) — reading it here is what fills the Overview
+ * Yearly Summary table's four blank columns for a run-scoped view. CAGR keeps its equity-curve
+ * fallback for a year the bucket doesn't cover.
+ */
 export function runToMftSummaryRows(
   equity: EquityPoint[] | undefined,
   summary: RunSummary | undefined,
+  periods: PeriodSummary[] | undefined,
 ): SummaryTableItem[] {
   const pts = equityToPoints(equity);
   const years = [...new Set(pts.map((p) => yearOf(p.t)))].sort((a, b) => a - b);
@@ -139,6 +176,7 @@ export function runToMftSummaryRows(
         sharpe: summary.sharpe_annualized || summary.sharpe,
         cagr: summary.return_pct ?? undefined,
         max_drawdown: summary.max_drawdown_pct ?? undefined,
+        profit_factor: summary.profit_factor ?? undefined,
         calmar: summary.calmar,
       },
     ];
@@ -148,12 +186,83 @@ export function runToMftSummaryRows(
   // CAGR rather than one measured against a denominator of 1.
   const capital = startingCapital(summary);
   return years.map((y) => {
+    const bucket = yearBucket(periods, y);
+    if (bucket) {
+      return {
+        time: String(y),
+        sharpe: bucket.sharpe_annualized || bucket.sharpe,
+        cagr: bucket.return_pct ?? undefined,
+        max_drawdown: bucket.max_drawdown_pct ?? undefined,
+        profit_factor: bucket.profit_factor ?? undefined,
+        calmar: bucket.calmar,
+      };
+    }
     const slice = pts.filter((p) => yearOf(p.t) === y);
     const start = slice[0]?.v ?? 0;
     const end = slice[slice.length - 1]?.v ?? 0;
     return {
       time: String(y),
       cagr: capital ? (end - start) / capital : undefined,
+    };
+  });
+}
+
+const MONTH_LABELS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+] as const;
+
+/**
+ * F-070: one row per month or quarter of `year` — the Overview summary table's Monthly/Quarterly
+ * variant. Each bucket prefers an EXACT `/periodic-summary` match: only a quarter ever gets one
+ * (the backend never buckets by month, see `PeriodSummary`'s doc comment), and only for a sub-year
+ * backtest. Otherwise it derives from `series`, already stage-sliced but not period-filtered:
+ * return over the whole run's capital base (same rule `runToMftSummaryRows` uses for a year),
+ * annualized Sharpe of the bucket's own returns and max drawdown of its own drawdown series, with
+ * Calmar off those two. Profit factor has no series fallback, so it stays `undefined` ("—")
+ * wherever no bucket answers it — never invented.
+ */
+export function bucketedSummaryRows(
+  mode: "month" | "quarter",
+  year: number,
+  series: { pnls: Point[]; returns: Point[]; drawdown: Point[] },
+  periods: PeriodSummary[] | undefined,
+  wholeSummary: RunSummary | undefined,
+): SummaryTableItem[] {
+  const capital = startingCapital(wholeSummary);
+  const buckets = mode === "month" ? [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] : [1, 2, 3, 4];
+
+  return buckets.map((n) => {
+    const time = mode === "month" ? MONTH_LABELS[n - 1] : `Q${n}`;
+    const inBucket = (t: number) =>
+      yearOf(t) === year && (mode === "month" ? monthOf(t) === n : quarterOf(t) === n);
+
+    if (mode === "quarter") {
+      const bucket = periods?.find((p) => p.label === `${year} Q${n}`);
+      const bucketSummary = bucket && !bucket.summary.oversized ? bucket.summary : undefined;
+      if (bucketSummary) {
+        return {
+          time,
+          sharpe: bucketSummary.sharpe_annualized || bucketSummary.sharpe,
+          cagr: bucketSummary.return_pct ?? undefined,
+          max_drawdown: bucketSummary.max_drawdown_pct ?? undefined,
+          profit_factor: bucketSummary.profit_factor ?? undefined,
+          calmar: bucketSummary.calmar,
+        };
+      }
+    }
+
+    const pnlSlice = series.pnls.filter((p) => inBucket(p.t));
+    const start = pnlSlice[0]?.v ?? 0;
+    const end = pnlSlice[pnlSlice.length - 1]?.v ?? 0;
+    const cagr = capital && pnlSlice.length ? (end - start) / capital : undefined;
+    const maxDd = maxDrawdown(series.drawdown.filter((p) => inBucket(p.t)));
+    return {
+      time,
+      sharpe: annualizedSharpe(series.returns.filter((p) => inBucket(p.t))),
+      cagr,
+      max_drawdown: maxDd,
+      calmar: calmarRatio(cagr, maxDd),
     };
   });
 }

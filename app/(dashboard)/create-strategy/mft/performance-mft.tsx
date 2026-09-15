@@ -7,7 +7,7 @@ import type { EChartsOption } from "echarts";
 import { BaseChart } from "@/components/charts/base-chart";
 import { ChartState, chartStatus } from "@/components/charts/chart-state";
 import { formatAmount } from "@/lib/utils";
-import { toReturnHistogram } from "@/lib/transform/results";
+import { startingCapital, toReturnHistogram } from "@/lib/transform/results";
 import {
   filterByPeriod,
   monthlyReturns,
@@ -243,6 +243,15 @@ export function PerformanceMft({
     () => sliceStage(toPoints(dd.data), dd.data, stage),
     [dd.data, stage],
   );
+  // F-057: the source Best/Worst month and Positive Months read (see Scope.equity in
+  // yearly-statistics.tsx) — same stage-wide, not-period-filtered pattern as returns/drawdown above.
+  const stagePnls = useMemo(
+    () => sliceStage(toPoints(pnls.data), pnls.data, stage),
+    [pnls.data, stage],
+  );
+  // The whole run's implied capital base, constant across every column — `undefined` on the
+  // XALPHA (non-run) path, which has no RunSummary to derive one from.
+  const capitalBase = useMemo(() => startingCapital(src.summary) ?? undefined, [src.summary]);
 
   // The year columns come from whichever source has them. `/periodic-summary` is the richer one
   // and covers years the equity curve alone never reaches (2016-17 here, before the first fill).
@@ -264,6 +273,8 @@ export function PerformanceMft({
             runSummary: src.summary,
             returns: stageReturns,
             drawdown: stageDrawdown,
+            equity: stagePnls,
+            capitalBase,
           }
         : {
             isAll: false,
@@ -271,8 +282,10 @@ export function PerformanceMft({
             runSummary: periodByYear.get(year),
             returns: stageReturns.filter((p) => yearOf(p.t) === year),
             drawdown: stageDrawdown.filter((p) => yearOf(p.t) === year),
+            equity: stagePnls.filter((p) => yearOf(p.t) === year),
+            capitalBase,
           },
-    [perf, src.summary, summaryRows, periodByYear, stageReturns, stageDrawdown],
+    [perf, src.summary, summaryRows, periodByYear, stageReturns, stageDrawdown, stagePnls, capitalBase],
   );
 
   const p = perf?.performance;

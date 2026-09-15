@@ -1,5 +1,6 @@
 "use client";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Stop, TrashBinMinimalistic } from "@solar-icons/react";
 import {
   Dialog,
@@ -32,6 +33,10 @@ import { StrategyTypeBadge } from "@/components/strategy-type-badge";
 import { StartedAt } from "@/components/started-at";
 import { useStopRun, useDeleteRun } from "@/hooks/api/use-backtest-runs";
 import { useConsoleLog } from "@/store/console-log-store";
+import { useHftStrategies } from "@/hooks/api/use-hft-strategies";
+import { launchMode } from "@/components/strategy-stage";
+import { PromoteStageDialog } from "../create-strategy/promote-stage-dialog";
+import { SimulateModal } from "../create-strategy/simulate-modal";
 import type { PaperRunRow } from "@/lib/mock/paper-runs";
 
 const GRAD_GREEN = "bg-[linear-gradient(162deg,#cff8ea_0%,#67e1c1_100%)] bg-clip-text text-transparent";
@@ -65,10 +70,25 @@ export function BacktestRunsTable({
   onSelect: (id: string) => void;
 }) {
   const { userId, isAdmin } = useAuth();
+  const router = useRouter();
   const [pendingDelete, setPendingDelete] = useState<PaperRunRow | null>(null);
   const stopRun = useStopRun();
   const deleteRun = useDeleteRun();
   const addLog = useConsoleLog((s) => s.addLog);
+
+  // "Start paper trading" needs the strategy's promotion state, which the run row alone doesn't
+  // carry: `paper_approved_version` decides whether the click can launch straight away or has to
+  // promote first. Rides the cached ["hft-strategies"] query — no extra request.
+  const { data: strategies = [] } = useHftStrategies();
+  const strategyOf = useMemo(() => new Map(strategies.map((s) => [s.id, s])), [strategies]);
+  const [pendingPromote, setPendingPromote] = useState<PaperRunRow | null>(null);
+  const [pendingLaunch, setPendingLaunch] = useState<PaperRunRow | null>(null);
+  const pendingPromoteStrategy = pendingPromote?.strategyId ? strategyOf.get(pendingPromote.strategyId) : undefined;
+  const pendingLaunchStrategy = pendingLaunch?.strategyId ? strategyOf.get(pendingLaunch.strategyId) : undefined;
+  // SimulateModal owns neither of these; they're launch-time choices its caller holds (same as
+  // the Strategy List's own SimulateModal usage).
+  const [hftMarket, setHftMarket] = useState("tick-l2");
+  const [hftInterval, setHftInterval] = useState("1m");
 
   const handleStop = async (r: PaperRunRow) => {
     try {
@@ -110,6 +130,19 @@ export function BacktestRunsTable({
             // Stop and Delete are both owner-or-admin: lab visibility lets a researcher SEE a
             // lab-mate's backtest but every mutation 404s, so hide the controls entirely.
             const writable = canMutate(r, { userId, isAdmin });
+            // "Start paper trading" needs the strategy already approved for paper at its current
+            // version (POST /api/runs' own gate — see resolve_strategy in the HFT API). Not yet
+            // approved: only an admin can fix that, via the same promote-then-launch dialogs the
+            // click opens. Already past paper (live-approved): this button isn't the way there.
+            const strategy = r.strategyId ? strategyOf.get(r.strategyId) : undefined;
+            const paperMode = strategy ? launchMode(strategy) : undefined;
+            const paperBlocked = !strategy
+              ? "Strategy not found."
+              : paperMode === "live"
+                ? "This strategy is already promoted to live."
+                : paperMode === "backtest" && !isAdmin
+                  ? "Ask an admin to promote this strategy to paper first."
+                  : undefined;
             return (
               <TableRow
                 opaque
@@ -186,24 +219,29 @@ export function BacktestRunsTable({
                     <span className="text-xs text-muted-foreground">—</span>
                   ) : (
                     <div className="flex items-center justify-end gap-2">
-                      {/* Figma 14008:35644 — Start paper trading (Playback Speed). Click is UI-only for now. */}
+                      {/* Figma 14008:35644 — Start paper trading (Playback Speed). Already paper-approved:
+                          launches straight away. Not yet approved: admin promotes to paper first (using
+                          this backtest as evidence), then the launch dialog opens automatically. */}
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <button
                             type="button"
                             aria-label={`Start paper trading for ${r.strategyName}`}
+                            disabled={!!paperBlocked}
                             onClick={(e) => {
                               e.stopPropagation();
-                              addLog("info", `Start paper trading — not wired yet ("${r.strategyName}")`);
+                              if (paperBlocked) return;
+                              if (paperMode === "paper") setPendingLaunch(r);
+                              else setPendingPromote(r); // paperMode === "backtest" && isAdmin
                             }}
-                            className="inline-flex size-[30px] cursor-pointer items-center justify-center rounded-lg bg-surface p-1.5 transition-opacity hover:opacity-90"
+                            className="inline-flex size-[30px] cursor-pointer items-center justify-center rounded-lg bg-surface p-1.5 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
                           >
                             <span className="size-[18px] overflow-hidden">
                               <PlaybackSpeedIcon className="size-full" />
                             </span>
                           </button>
                         </TooltipTrigger>
-                        <TooltipContent>Start paper trading</TooltipContent>
+                        <TooltipContent>{paperBlocked ?? "Start paper trading"}</TooltipContent>
                       </Tooltip>
                       {STOPPABLE.has(r.status) && (
                         <button
@@ -264,6 +302,42 @@ export function BacktestRunsTable({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {pendingPromote && pendingPromoteStrategy && (
+        <PromoteStageDialog
+          open={!!pendingPromote}
+          onOpenChange={(open) => !open && setPendingPromote(null)}
+          strategyId={pendingPromote.strategyId ?? ""}
+          strategyName={pendingPromote.strategyName}
+          version={pendingPromoteStrategy.version}
+          stage="paper"
+          basedOnRunId={pendingPromote.id}
+          onPromoted={() => {
+            const run = pendingPromote;
+            setPendingPromote(null);
+            setPendingLaunch(run);
+          }}
+        />
+      )}
+
+      {pendingLaunch && pendingLaunchStrategy && (
+        <SimulateModal
+          open={!!pendingLaunch}
+          onOpenChange={(open) => !open && setPendingLaunch(null)}
+          strategyName={pendingLaunch.strategyName}
+          strategyId={pendingLaunch.strategyId ?? ""}
+          hftType={pendingLaunchStrategy.strategy_type}
+          hftMarket={hftMarket}
+          onHftMarketChange={setHftMarket}
+          hftInterval={hftInterval}
+          onHftIntervalChange={setHftInterval}
+          onLaunched={(run) => {
+            addLog("success", `Started paper trading for "${pendingLaunch.strategyName}"`);
+            setPendingLaunch(null);
+            router.push(`/paper-trading?run=${run.id}`);
+          }}
+        />
+      )}
     </>
   );
 }

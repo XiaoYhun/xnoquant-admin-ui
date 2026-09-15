@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { OverviewView } from "../create-strategy/overview-view";
 import { PerformanceView } from "../create-strategy/performance-view";
 import { RiskView } from "../create-strategy/risk-view";
@@ -34,11 +35,11 @@ import { RUN_STATUS_META } from "@/components/run-status-pill";
 import { downloadTradeHistoryCsv } from "@/lib/trade-history-csv";
 import { TradeHistoryExportButton } from "@/components/trade-history-export-button";
 import { PromoteStageDialog } from "../create-strategy/promote-stage-dialog";
+import { SimulateModal } from "../create-strategy/simulate-modal";
 import { useHftStrategies } from "@/hooks/api/use-hft-strategies";
-import { nextPromotionStage } from "@/components/strategy-stage";
+import { launchMode, nextPromotionStage } from "@/components/strategy-stage";
 import type { PromotionStage } from "@/types/domain";
 import { useAuth } from "@/hooks/use-auth";
-import { useConsoleLog } from "@/store/console-log-store";
 import { marketOf } from "@/components/market-tabs";
 import { CodeEditor } from "../create-strategy/code-editor";
 import { RunMetaStrip } from "../create-strategy/run-meta-strip";
@@ -676,19 +677,24 @@ function LiveHeaderBar({ run, padRight = false }: { run: PaperRunRow; padRight?:
 // Header — paper / backtest variant (Figma 14948:27384 shell). Same layout as LiveHeaderBar:
 // grey eyebrow, strategy name + type + status, right-side action + symbol/timeframe meta.
 // Paper: "PAPER TRADING RESULTS" + Promote to Live (admin). Backtest: "BACKTEST RESULTS" +
-// Start Paper Trading (not wired — no paper-trade launch API yet) + optional date range.
+// Start Paper Trading + optional date range.
 function ResultsHeaderBar({
   run,
   onClose,
   onPromote,
   canPromote,
+  onStartPaper,
+  startPaperBlocked,
 }: {
   run: PaperRunRow;
   onClose: () => void;
   onPromote?: () => void;
   canPromote?: boolean;
+  /** Backtest only — see RunDetailBody for the promote-then-launch decision behind it. */
+  onStartPaper?: () => void;
+  /** Set when the click can't complete yet (not promoted, or non-admin); disables the button. */
+  startPaperBlocked?: string;
 }) {
-  const addLog = useConsoleLog((s) => s.addLog);
   const isBacktest = run.mode === "backtest";
 
   const symbolSegment = run.symbols[0]
@@ -731,14 +737,20 @@ function ResultsHeaderBar({
         )}
       >
         {isBacktest ? (
-          <button
-            type="button"
-            onClick={() => addLog("info", `Start paper trading — not wired yet ("${run.strategyName}")`)}
-            className="inline-flex cursor-pointer items-center gap-2 rounded-[40px] border border-[#1d2939] bg-[#0a0e14] px-3 py-2 text-xs leading-[18px] text-white transition-opacity hover:opacity-90"
-          >
-            <Plain weight="Outline" className="size-4" />
-            Start Paper Trading
-          </button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                disabled={!!startPaperBlocked}
+                onClick={onStartPaper}
+                className="inline-flex cursor-pointer items-center gap-2 rounded-[40px] border border-[#1d2939] bg-[#0a0e14] px-3 py-2 text-xs leading-[18px] text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <Plain weight="Outline" className="size-4" />
+                Start Paper Trading
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>{startPaperBlocked ?? "Start paper trading"}</TooltipContent>
+          </Tooltip>
         ) : canPromote ? (
           <Button
             type="button"
@@ -853,6 +865,27 @@ function RunDetailBody({
     : null;
   const router = useRouter();
   const { isAdmin } = useAuth();
+  const isBacktestRun = run.mode === "backtest";
+  // "Start Paper Trading" (backtest header only): already paper-approved launches straight away;
+  // not yet approved needs an admin to promote first (same gate POST /api/runs itself enforces —
+  // see resolve_strategy in the HFT API), using this backtest as the promotion's evidence.
+  const [paperPromoteOpen, setPaperPromoteOpen] = useState(false);
+  const [paperLaunchOpen, setPaperLaunchOpen] = useState(false);
+  const [hftMarket, setHftMarket] = useState("tick-l2");
+  const [hftInterval, setHftInterval] = useState("1m");
+  const panelPaperMode = panelStrategy ? launchMode(panelStrategy) : undefined;
+  const startPaperBlocked = !panelStrategy
+    ? "Strategy not found."
+    : panelPaperMode === "live"
+      ? "This strategy is already promoted to live."
+      : panelPaperMode === "backtest" && !isAdmin
+        ? "Ask an admin to promote this strategy to paper first."
+        : undefined;
+  const handleStartPaper = () => {
+    if (startPaperBlocked) return;
+    if (panelPaperMode === "paper") setPaperLaunchOpen(true);
+    else setPaperPromoteOpen(true); // panelPaperMode === "backtest" && isAdmin
+  };
   const visibleTabs = tabsFor(run.mode);
   const activeTab: Tab = visibleTabs.includes(tab) ? tab : "Charts";
   const failed = run.status === "failed";
@@ -890,6 +923,8 @@ function RunDetailBody({
             onClose={onClose}
             canPromote={run.mode === "paper" && isAdmin}
             onPromote={() => setPromoteOpen(true)}
+            onStartPaper={handleStartPaper}
+            startPaperBlocked={startPaperBlocked}
           />
         )}
 
@@ -972,6 +1007,41 @@ function RunDetailBody({
             const market = marketOf(run);
             onClose();
             router.push(`/live-trading/alpha-pool${market ? `?market=${market}` : ""}`);
+          }}
+        />
+      )}
+
+      {panelStrategy && isBacktestRun && (
+        <PromoteStageDialog
+          open={paperPromoteOpen}
+          onOpenChange={setPaperPromoteOpen}
+          strategyId={run.strategyId ?? ""}
+          strategyName={run.strategyName}
+          version={panelStrategy.version}
+          stage="paper"
+          basedOnRunId={run.id}
+          onPromoted={() => {
+            setPaperPromoteOpen(false);
+            setPaperLaunchOpen(true);
+          }}
+        />
+      )}
+
+      {panelStrategy && isBacktestRun && (
+        <SimulateModal
+          open={paperLaunchOpen}
+          onOpenChange={setPaperLaunchOpen}
+          strategyName={run.strategyName}
+          strategyId={run.strategyId ?? ""}
+          hftType={panelStrategy.strategy_type}
+          hftMarket={hftMarket}
+          onHftMarketChange={setHftMarket}
+          hftInterval={hftInterval}
+          onHftIntervalChange={setHftInterval}
+          onLaunched={(launchedRun) => {
+            setPaperLaunchOpen(false);
+            onClose();
+            router.push(`/paper-trading?run=${launchedRun.id}`);
           }}
         />
       )}

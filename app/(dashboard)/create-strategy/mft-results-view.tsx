@@ -43,16 +43,22 @@ const STAGES = [
   { value: "live", label: "Live" },
 ] as const;
 
+// F-046: Mo (month pills) / Qtr (quarter pills) / Ytd (today's year pills), right-aligned next to
+// the year pills — exported so OverviewMft (the only view that draws the toggle) can key its
+// summary table variant off the same value.
 const GRANULARITIES = [
-  { value: "Year", label: "Year" },
-  { value: "Month", label: "Month" },
+  { value: "Mo", label: "Mo" },
+  { value: "Qtr", label: "Qtr" },
+  { value: "Ytd", label: "Ytd" },
 ] as const;
-type Granularity = (typeof GRANULARITIES)[number]["value"];
+export type Granularity = (typeof GRANULARITIES)[number]["value"];
 
 const MONTHS = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ] as const;
+
+const QUARTERS = [1, 2, 3, 4] as const;
 
 // ---- status screens (unchanged behaviour, xno-builder's KetQuaStrategy look) -------------------
 
@@ -90,42 +96,61 @@ function PeriodRow({
   granularity?: Granularity;
   onGranularityChange?: (g: Granularity) => void;
 }) {
+  // F-046: "show max 5 years" — applies to the year pills AND the year dropdown, on every view,
+  // not just Ytd. `years` stays ascending, so the tail is the most recent 5.
+  const recentYears = useMemo(() => years.slice(-5), [years]);
+  const fallbackYear = recentYears[recentYears.length - 1];
   const yearOptions = useMemo(
-    () => [{ value: -1, label: "All" }, ...years.map((y) => ({ value: y, label: String(y) }))],
-    [years],
+    () => [{ value: -1, label: "All" }, ...recentYears.map((y) => ({ value: y, label: String(y) }))],
+    [recentYears],
+  );
+
+  const yearDropdown = (onPick: (y: number) => void) => (
+    <Popover>
+      <PopoverTrigger asChild>
+        <DropdownPill label={period.year ?? fallbackYear ?? "—"} className="h-7" />
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-28 p-1.5">
+        <div className="flex flex-col">
+          {recentYears.map((y) => (
+            <button
+              key={y}
+              type="button"
+              onClick={() => onPick(y)}
+              className="cursor-pointer rounded-[6px] px-2 py-2 text-left text-xs text-white hover:bg-secondary/60"
+            >
+              {y}
+            </button>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-3">
       <span className="shrink-0 text-xs leading-[18px] font-medium text-white">Period:</span>
 
-      {granularity === "Month" ? (
+      {granularity === "Mo" ? (
         <>
-          <Popover>
-            <PopoverTrigger asChild>
-              <DropdownPill label={period.year ?? years[years.length - 1] ?? "—"} className="h-7" />
-            </PopoverTrigger>
-            <PopoverContent align="start" className="w-28 p-1.5">
-              <div className="flex flex-col">
-                {years.map((y) => (
-                  <button
-                    key={y}
-                    type="button"
-                    onClick={() => onChange({ year: y, month: period.month })}
-                    className="cursor-pointer rounded-[6px] px-2 py-2 text-left text-xs text-white hover:bg-secondary/60"
-                  >
-                    {y}
-                  </button>
-                ))}
-              </div>
-            </PopoverContent>
-          </Popover>
+          {yearDropdown((y) => onChange({ year: y, month: period.month }))}
           <PillTabs
             size="sm"
             className="gap-1"
             options={MONTHS.map((m, i) => ({ value: i + 1, label: m }))}
             value={period.month ?? 1}
-            onChange={(m) => onChange({ year: period.year ?? years[years.length - 1], month: m })}
+            onChange={(m) => onChange({ year: period.year ?? fallbackYear, month: m })}
+          />
+        </>
+      ) : granularity === "Qtr" ? (
+        <>
+          {yearDropdown((y) => onChange({ year: y, quarter: period.quarter }))}
+          <PillTabs
+            size="sm"
+            className="gap-1"
+            options={QUARTERS.map((q) => ({ value: q, label: `Q${q}/${period.year ?? fallbackYear}` }))}
+            value={period.quarter ?? 1}
+            onChange={(q) => onChange({ year: period.year ?? fallbackYear, quarter: q })}
           />
         </>
       ) : (
@@ -144,11 +169,13 @@ function PeriodRow({
             value={granularity}
             onChange={(g) => {
               onGranularityChange(g);
-              // Switching to Year drops the month; switching to Month needs a year to qualify it.
+              // Switching to Ytd drops month/quarter; switching to Mo/Qtr needs a year to qualify it.
               onChange(
-                g === "Year"
+                g === "Ytd"
                   ? { year: period.year }
-                  : { year: period.year ?? years[years.length - 1], month: period.month ?? 1 },
+                  : g === "Mo"
+                    ? { year: period.year ?? fallbackYear, month: period.month ?? 1 }
+                    : { year: period.year ?? fallbackYear, quarter: period.quarter ?? 1 },
               );
             }}
           />
@@ -174,7 +201,7 @@ export function MftResultsView({
   const [stage, setStage] = useState<string>("train");
   const [view, setView] = useState<View>("Overview");
   const [period, setPeriod] = useState<PeriodSelection>({});
-  const [granularity, setGranularity] = useState<Granularity>("Year");
+  const [granularity, setGranularity] = useState<Granularity>("Ytd");
   const runScoped = !!runId;
 
   // A sample change can drop the year the Period row (below) has selected — e.g. a year with no
@@ -290,7 +317,14 @@ export function MftResultsView({
           that isn't its own. Keying here also resets each view's local range/window toggles. */}
       <div key={`${runId ?? stage}:${sample ?? "default"}`} className="min-w-0">
         {view === "Overview" && (
-          <OverviewMft strategyId={strategyId} stage={stage} period={effectivePeriod} runId={runId} sample={sample} />
+          <OverviewMft
+            strategyId={strategyId}
+            stage={stage}
+            period={effectivePeriod}
+            runId={runId}
+            sample={sample}
+            granularity={granularity}
+          />
         )}
         {view === "Performance" && (
           <PerformanceMft strategyId={strategyId} stage={stage} period={effectivePeriod} runId={runId} sample={sample} />

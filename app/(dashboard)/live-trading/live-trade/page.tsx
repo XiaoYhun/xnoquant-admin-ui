@@ -1,5 +1,5 @@
 "use client";
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useState } from "react";
 import { PageSizeSelect } from "@/components/page-size-select";
 import { TablePagination } from "@/components/table-pagination";
 import { StrategyTypeFilter, engineOf, type StrategyTypeFilterValue } from "@/components/strategy-type-filter";
@@ -21,7 +21,6 @@ import { cn, runSearchQuery } from "@/lib/utils";
 import { LiveRunsTable } from "./live-runs-table";
 import { OrderbookPanel } from "./orderbook-panel";
 import {
-  ALL_MARKETS,
   MarketTabs,
   assetKindOf,
   marketFromParam,
@@ -30,7 +29,6 @@ import {
   type Market,
 } from "@/components/market-tabs";
 import { ALL_SYMBOLS, SymbolFilter } from "@/components/symbol-filter";
-import { useOrderbookSymbols } from "@/hooks/api/use-orderbook-symbols";
 import { RunDetailInline } from "../../paper-trading/run-detail-panel";
 
 
@@ -130,19 +128,6 @@ function LiveTrade() {
   const total = data?.total ?? 0;
   // The open panel is in the URL (`?run=<id>`) so the view can be linked and survives reload.
   const [selectedId, setSelectedId] = useUrlParam("run");
-  // The orderbook rail's symbol. Separate from `symbolFilter` above: that one narrows the table
-  // and carries an "all" option, whereas the rail always shows exactly one book. `null` until the
-  // user picks — the panel defaults to the first symbol of the market tab.
-  const [bookSymbol, setBookSymbol] = useState<string | null>(null);
-  const allOrderbookSymbols = useOrderbookSymbols();
-  // The rail follows the market tab: the catalog spans every venue, so without this the picker
-  // opens on an unrelated market's instrument. A symbol picked under one tab simply isn't in the
-  // next tab's options, and the panel falls back to that market's first symbol. On All the whole
-  // catalog is offered — an empty rail would be the alternative, since no symbol is tagged "all".
-  const orderbookSymbols = useMemo(
-    () => (market === ALL_MARKETS ? allOrderbookSymbols : allOrderbookSymbols.filter((o) => o.market === market)),
-    [allOrderbookSymbols, market],
-  );
 
   const selectedRun = useSelectedRunRow(rows, selectedId);
 
@@ -295,7 +280,7 @@ function LiveTrade() {
           )}
         </section>
 
-        <OrderbookPanel options={orderbookSymbols} symbol={bookSymbol} onSymbolChange={setBookSymbol} />
+        <OrderbookPanel />
       </div>
     </main>
   );

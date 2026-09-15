@@ -3,10 +3,20 @@ import { useMemo, useState } from "react";
 import { AltArrowDown } from "@solar-icons/react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useMarketOrderbook } from "@/hooks/api/use-market-orderbook";
-import type { OrderbookSymbol } from "@/hooks/api/use-orderbook-symbols";
+import { useOrderbookSymbols, type OrderbookSymbol } from "@/hooks/api/use-orderbook-symbols";
+import { useVenues } from "@/hooks/api/use-venues";
+import { useAccounts } from "@/hooks/api/use-accounts";
 
-// Right rail of the Live trade screen (Figma 14779:27408). Opens on the first symbol — nothing to
-// search or select first. Symbol selection lives in the page (live-trade/page.tsx).
+// Right rail of the Live trade screen (Figma 14779:27408). Opens on a book with no clicks — the
+// first venue (API order) whose stream actually opens a book (see `opensDirectlyOnABook` below),
+// its default symbol.
+//
+// Fully self-contained: Venue -> Account -> Symbol all live here, not in the page. That also
+// means the rail is deliberately NOT scoped by the page's market tab (Stocks/Future/Crypto)
+// anymore — the whole point of this picker is "view ANY symbol" (Lark note), so tying it to
+// whatever tab the runs table happens to be on would just make the rail's own venue/account
+// choice redundant with — and sometimes fight — the table filter. Picking a venue here is now
+// the only scoping the rail needs.
 //
 // Depth comes from `/api/market-data/orderbook/stream`, which serves any symbol on any configured
 // venue whether or not a run is using it — so the picker offers the whole catalog (VN30F1M and the
@@ -24,29 +34,169 @@ const ladderNum = new Intl.NumberFormat("en", {
   useGrouping: false,
 });
 
-type OrderbookProps = {
-  /** The instrument catalog — every symbol whose book the market-data stream can serve. */
-  options: OrderbookSymbol[];
-  /** Selected symbol name; falls back to the first option until the user picks one. */
-  symbol: string | null;
-  onSymbolChange: (symbol: string) => void;
+// Only SSI needs credentials to read market data — it reads over the same encrypted
+// api_key/secret_key columns every other venue's account uses. Binance (spot/futures) reads
+// anonymously; DNSE/TCBS have no standalone market-data feed at all and 400 regardless of
+// account_id. Source: crates/api/src/routes/market_data.rs on hft-platform's origin/develop.
+function accountRequiredFor(venueType: string | undefined): boolean {
+  return venueType === "ssi";
+}
+
+// Whether this venue, as-is, opens directly on a book with no further clicks: Binance needs
+// nothing, SSI needs an account it already has. DNSE/TCBS never do (unsupported venue), and an
+// SSI venue with zero accounts doesn't either — both would land the rail on an error/prompt
+// instead of a book, so neither is a candidate default even though both stay pickable.
+function opensDirectlyOnABook(venueType: string | undefined, hasAccount: boolean): boolean {
+  if (venueType === "binance_spot" || venueType === "binance_futures") return true;
+  if (venueType === "ssi") return hasAccount;
+  return false;
+}
+
+// Binance has no natural "first" instrument the way VN30F1M is for SSI, and the alphabetically
+// first pair in a several-thousand-symbol catalog is usually an obscure/delisted-looking one
+// (e.g. "0GBNB") — a poor default. BTCUSDT is the reference viewer's own placeholder example for
+// non-SSI venues (`web/src/routes/orderbook.tsx`) and the obvious "main" pair, so prefer it when
+// the venue lists it.
+const PREFERRED_SYMBOL: Record<string, string> = {
+  binance_spot: "BTCUSDT",
+  binance_futures: "BTCUSDT",
 };
 
-// The whole catalog is several thousand instruments, so the picker is a typeahead over a capped
-// slice, not a plain <Select>: rendering every symbol as an item froze the page on open.
+function defaultSymbolOf(venueType: string | undefined, symbols: OrderbookSymbol[]): OrderbookSymbol | undefined {
+  const preferredSymbol = venueType ? PREFERRED_SYMBOL[venueType] : undefined;
+  const preferred = preferredSymbol ? symbols.find((s) => s.symbol === preferredSymbol) : undefined;
+  return preferred ?? symbols[0];
+}
+
+// The whole catalog is several thousand instruments, so the symbol picker is a typeahead over a
+// capped slice, not a plain <Select>: rendering every symbol as an item froze the page on open.
 const MAX_SHOWN = 100;
 
-// Scoped subscription: only the selected symbol streams, and it re-binds on change.
-export function OrderbookPanel({ options, symbol, onSymbolChange }: OrderbookProps) {
-  const selected = options.find((o) => o.symbol === symbol) ?? options[0];
-  const { book: live, error } = useMarketOrderbook(selected);
+type PickerItem = { id: string; label: string };
+
+// Shared trigger for the Venue and Account pills: both are short, unfiltered lists (a handful of
+// venues/accounts, never thousands like the symbol catalog), so neither needs the symbol picker's
+// search box.
+function PickerPill({
+  placeholder,
+  items,
+  value,
+  onChange,
+}: {
+  placeholder: string;
+  items: PickerItem[];
+  value?: string;
+  onChange: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = items.find((i) => i.id === value);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        disabled={items.length === 0}
+        className="flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-full border border-border bg-background px-2.5 text-[11px] text-foreground outline-none disabled:cursor-not-allowed"
+      >
+        {selected?.label ?? "—"}
+        <AltArrowDown size={12} weight="Outline" className="shrink-0 text-muted-foreground" />
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-48 p-1.5">
+        <div className="max-h-56 overflow-y-auto">
+          {items.length === 0 ? (
+            <p className="px-2 py-2 text-xs text-muted-foreground">{placeholder}</p>
+          ) : (
+            items.map((i) => (
+              <div
+                key={i.id}
+                onClick={() => {
+                  onChange(i.id);
+                  setOpen(false);
+                }}
+                className="cursor-pointer rounded-[6px] px-2 py-2 text-xs text-white hover:bg-secondary/60"
+              >
+                {i.label}
+              </div>
+            ))
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// Scoped subscription: only the selected symbol streams, and it re-binds on venue/account/symbol
+// change.
+export function OrderbookPanel() {
+  const catalog = useOrderbookSymbols();
+  const { data: venues = [] } = useVenues();
+  const { data: accounts = [] } = useAccounts();
+
+  // Only venues that actually carry a symbol are worth offering — an empty venue would open the
+  // Symbol picker on nothing. Deliberately NOT narrowed to venue types the stream supports
+  // (Binance/SSI): DNSE and TCBS stay pickable so the rail can show the venue's own refusal
+  // ("live orderbook viewing is not supported for venue Dnse") rather than hiding them.
+  const venueOptions = useMemo(() => {
+    const withSymbols = new Set(catalog.map((o) => o.venueId));
+    return venues.filter((v) => withSymbols.has(v.id));
+  }, [catalog, venues]);
+
+  // Default venue: the first one (API order) whose stream opens directly on a book, so the rail
+  // never opens with no clicks on an error. DNSE/TCBS and an account-less SSI venue stay pickable
+  // (see `venueOptions` above) but are skipped as a default; if literally nothing qualifies, fall
+  // back to the first venue with symbols at all rather than showing an empty rail.
+  const defaultVenue = useMemo(
+    () =>
+      venueOptions.find((v) => opensDirectlyOnABook(v.venue_type, accounts.some((a) => a.venue_id === v.id))) ??
+      venueOptions[0],
+    [venueOptions, accounts],
+  );
+
+  const [venueId, setVenueId] = useState<string | null>(null);
+  const selectedVenue = venueOptions.find((v) => v.id === venueId) ?? defaultVenue;
+  const accountRequired = accountRequiredFor(selectedVenue?.venue_type);
+
+  const venueAccounts = useMemo(
+    () => accounts.filter((a) => a.venue_id === selectedVenue?.id),
+    [accounts, selectedVenue],
+  );
+
+  const [accountId, setAccountId] = useState(""); // "" = unset (falls back to the default below)
+  const [symbol, setSymbol] = useState<string | null>(null);
+
+  // Switching venues invalidates the account and symbol picked under the old one — reset during
+  // render (not an effect), the same pattern `alignedRunId` on the page uses.
+  const [prevVenueId, setPrevVenueId] = useState(selectedVenue?.id);
+  if (prevVenueId !== selectedVenue?.id) {
+    setPrevVenueId(selectedVenue?.id);
+    setAccountId("");
+    setSymbol(null);
+  }
+
+  // Default account: the venue's first account when the stream requires one (SSI); otherwise no
+  // account at all — the stream works without one, so "no account" IS the default, matching the
+  // hft-platform reference viewer (web/src/routes/orderbook.tsx).
+  const selectedAccountId = accountId || (accountRequired ? venueAccounts[0]?.id : undefined);
+
+  const venueSymbols = useMemo(
+    () => catalog.filter((o) => o.venueId === selectedVenue?.id),
+    [catalog, selectedVenue],
+  );
+  const selectedSymbol = venueSymbols.find((o) => o.symbol === symbol) ?? defaultSymbolOf(selectedVenue?.venue_type, venueSymbols);
+
+  // No stream target while an SSI venue has no account picked yet — the request would just 400
+  // ("account_id is required for SSI venues"), and the rail can say why up front instead.
+  const target: OrderbookSymbol | undefined =
+    selectedSymbol && (!accountRequired || selectedAccountId)
+      ? { ...selectedSymbol, accountId: selectedAccountId }
+      : undefined;
+
+  const { book: live, error } = useMarketOrderbook(target);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [query, setQuery] = useState("");
 
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return q ? options.filter((o) => o.symbol.toLowerCase().includes(q)) : options;
-  }, [options, query]);
+    return q ? venueSymbols.filter((o) => o.symbol.toLowerCase().includes(q)) : venueSymbols;
+  }, [venueSymbols, query]);
 
   // Bids and asks arrive as separate ladders; the table renders them as paired rows, so zip them
   // and let the shorter side leave blanks rather than pretending a level exists on both.
@@ -66,7 +216,19 @@ export function OrderbookPanel({ options, symbol, onSymbolChange }: OrderbookPro
 
   // Not every venue publishes a book — DNSE answers "live orderbook viewing is not supported for
   // venue Dnse" — so show the venue's own reason rather than waiting on a stream that won't come.
-  const emptyMessage = error ?? (selected ? "Waiting for the first book update…" : "No symbols available.");
+  // An SSI venue with no account picked never opens a stream at all, so that gets its own message.
+  const emptyMessage =
+    error ??
+    (accountRequired && !selectedAccountId
+      ? "Select an account to view this venue's book."
+      : selectedSymbol
+        ? "Waiting for the first book update…"
+        : "No symbols available.");
+
+  const accountItems: PickerItem[] = useMemo(() => {
+    const list = venueAccounts.map((a) => ({ id: a.id, label: a.name }));
+    return accountRequired ? list : [{ id: "", label: "No account" }, ...list];
+  }, [venueAccounts, accountRequired]);
 
   return (
         <aside className="flex w-[340px] shrink-0 flex-col overflow-hidden rounded-lg border border-border bg-background">
@@ -76,6 +238,21 @@ export function OrderbookPanel({ options, symbol, onSymbolChange }: OrderbookPro
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 py-3">
+        <div className="flex shrink-0 items-center gap-2 px-4">
+          <PickerPill
+            placeholder="No venues available."
+            items={venueOptions.map((v) => ({ id: v.id, label: v.name }))}
+            value={selectedVenue?.id}
+            onChange={setVenueId}
+          />
+          <PickerPill
+            placeholder={accountRequired ? "No accounts for this venue." : "No account"}
+            items={accountItems}
+            value={selectedAccountId ?? ""}
+            onChange={setAccountId}
+          />
+        </div>
+
         <div className="flex shrink-0 flex-col gap-1 px-4">
           <div className="flex items-center justify-between gap-2">
             <Popover
@@ -86,10 +263,10 @@ export function OrderbookPanel({ options, symbol, onSymbolChange }: OrderbookPro
               }}
             >
               <PopoverTrigger
-                disabled={!selected}
+                disabled={!selectedSymbol}
                 className="flex cursor-pointer items-center gap-1 text-base font-medium leading-6 text-white outline-none disabled:cursor-not-allowed"
               >
-                {selected?.symbol ?? "—"}
+                {selectedSymbol?.symbol ?? "—"}
                 <AltArrowDown weight="Outline" className="size-4" />
               </PopoverTrigger>
               <PopoverContent align="start" className="w-56 p-1.5">
@@ -108,7 +285,7 @@ export function OrderbookPanel({ options, symbol, onSymbolChange }: OrderbookPro
                       <div
                         key={o.symbol}
                         onClick={() => {
-                          onSymbolChange(o.symbol);
+                          setSymbol(o.symbol);
                           setPickerOpen(false);
                         }}
                         className="cursor-pointer rounded-[6px] px-2 py-2 text-xs text-white hover:bg-secondary/60"

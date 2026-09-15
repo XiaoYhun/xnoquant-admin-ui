@@ -45,11 +45,14 @@ export function sliceStage(points: Point[], data?: StrategyChartData, stage?: st
 
 /**
  * The Period row's selection, held as a plain value so the shell can pass it down untouched.
- * `year: undefined` is "All". `month` is 1-12 and only meaningful alongside a year.
+ * `year: undefined` is "All". `month` (1-12) and `quarter` (1-4) are each only meaningful
+ * alongside a year, and mutually exclusive — the Period row's Mo/Qtr/Ytd toggle sets one or
+ * neither, never both.
  */
 export interface PeriodSelection {
   year?: number;
   month?: number;
+  quarter?: number;
 }
 
 function utc(t: number): Date {
@@ -65,6 +68,11 @@ export function monthOf(t: number): number {
   return utc(t).getUTCMonth() + 1;
 }
 
+/** 1-4, matching the Period row's quarter pills and `/periodic-summary`'s "Q1".."Q4" labels. */
+export function quarterOf(t: number): number {
+  return Math.floor((monthOf(t) - 1) / 3) + 1;
+}
+
 /** Every year the series touches, ascending — the Period row's pills are built from this. */
 export function yearsOf(points: Point[]): number[] {
   return [...new Set(points.map((p) => yearOf(p.t)))].sort((a, b) => a - b);
@@ -72,9 +80,12 @@ export function yearsOf(points: Point[]): number[] {
 
 export function filterByPeriod(points: Point[], period: PeriodSelection): Point[] {
   if (period.year == null) return points;
-  return points.filter(
-    (p) => yearOf(p.t) === period.year && (period.month == null || monthOf(p.t) === period.month),
-  );
+  return points.filter((p) => {
+    if (yearOf(p.t) !== period.year) return false;
+    if (period.month != null) return monthOf(p.t) === period.month;
+    if (period.quarter != null) return quarterOf(p.t) === period.quarter;
+    return true;
+  });
 }
 
 /**

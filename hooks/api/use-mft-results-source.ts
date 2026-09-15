@@ -83,7 +83,7 @@ export function useMftResultsSource({
     return {
       perf: runToMftPerf(scoped),
       summary: scoped,
-      summaryRows: runToMftSummaryRows(equityQ.data, summary),
+      summaryRows: runToMftSummaryRows(equityQ.data, summary, periodsQ.data),
       periods: periodsQ.data,
       pnls: q(charts.pnls),
       returns: q(charts.returns),

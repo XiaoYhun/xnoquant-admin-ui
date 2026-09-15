@@ -34,6 +34,8 @@ import {
   worstLossStreak,
   type Point,
 } from "@/lib/transform/mft-results";
+import { monthlyReturnPct, monthlyReturnStats, type MonthlyReturnStats } from "@/lib/transform/pnl-buckets";
+import { startingCapital } from "@/lib/transform/results";
 import type { SummaryTableItem } from "@/hooks/api/use-strategy-results";
 import type { RunSummary } from "@/types/domain";
 import type { StrategyPerformanceDetail } from "@/hooks/api/use-strategy-performance";
@@ -55,6 +57,18 @@ export interface Scope {
   returns: Point[];
   /** `drawdown` series, already narrowed to this column's year. */
   drawdown: Point[];
+  /**
+   * Cumulative equity/PnL curve, already narrowed to this column's year — F-057's source for
+   * Best/Worst month and Positive Months (see `monthlyStats` below), which need raw equity deltas
+   * rather than the capital-scaled `returns` percent series.
+   */
+  equity: Point[];
+  /**
+   * The whole run's implied starting capital (`net_pnl / return_pct`), constant across every
+   * column — see lib/transform/pnl-buckets.ts. `undefined` on the XALPHA (non-run) path, which has
+   * no RunSummary to derive one from.
+   */
+  capitalBase?: number;
 }
 
 type Format = "ratioPct" | "rate" | "percent" | "number" | "count" | "periods" | "amount" | "hours" | "bps";
@@ -86,11 +100,17 @@ function drawdownOf(s: Scope): number | undefined {
 /** Metrics the MFT engine has no source for, in any column. */
 const unavailable = (label: string): StatMetric => ({ label, get: () => undefined });
 
-/** Monthly returns for this column's window, compounded per calendar month. */
-function months(s: Scope): number[] {
-  return monthlyReturns(s.returns)
-    .flatMap((r) => r.months)
-    .filter((m): m is number => m != null);
+/**
+ * Best/worst/positive-month stats for this column's window (F-057). Equity-delta buckets (see
+ * lib/transform/pnl-buckets.ts) are preferred over compounding `s.returns`: `runToMftCharts`
+ * returns an EMPTY `returns` series whenever the run has no `return_pct` to scale by, which
+ * blanked these three rows for every run-scoped column even where the equity curve had data.
+ * Falls back to compounding `s.returns` on the XALPHA (non-run) path, which has no RunSummary/
+ * capital base to divide equity deltas by but whose `returns` series is already a genuine percent.
+ */
+function monthlyStats(s: Scope): MonthlyReturnStats {
+  if (s.capitalBase) return monthlyReturnStats(monthlyReturnPct(s.equity, s.capitalBase));
+  return monthlyReturnStats(monthlyReturns(s.returns));
 }
 
 const GROUPS: StatGroup[] = [
@@ -108,11 +128,24 @@ const GROUPS: StatGroup[] = [
       },
       {
         label: "Gross Return",
-        // Net plus the costs that were taken out of it — both halves have to be percentages of
-        // the same base, so this needs `return_pct` and not just the fee.
+        // Net plus the costs taken out of it, both as fractions of the same capital base
+        // (F-064). A window's own `RunSummary` (year columns, and the run-scoped All column)
+        // carries `total_fee` in raw PnL units, so it's divided by that same `startingCapital` the
+        // rest of this file already uses. The XALPHA (non-run) All column has no RunSummary at
+        // all, so it falls back to the capital-fraction `total_fee` `runToMftPerf` put on
+        // `analysis` for that same reason — which is where this used to stop, leaving every year
+        // column blank.
         get: (s) => {
-          const net = rs(s)?.return_pct ?? (s.isAll ? perf(s)?.cumulative_return : undefined);
-          const fee = s.isAll ? analysis(s)?.total_fee : undefined;
+          const summary = rs(s);
+          if (summary) {
+            const capital = startingCapital(summary);
+            return capital && summary.return_pct != null
+              ? summary.return_pct + summary.total_fee / capital
+              : undefined;
+          }
+          if (!s.isAll) return undefined;
+          const net = perf(s)?.cumulative_return;
+          const fee = analysis(s)?.total_fee;
           return net != null && fee != null ? net + fee : undefined;
         },
         format: "ratioPct",
@@ -135,21 +168,21 @@ const GROUPS: StatGroup[] = [
       },
       {
         label: "Best month",
-        get: (s) => maxOf(months(s)),
+        get: (s) => monthlyStats(s).best,
         format: "percent",
         tone: "good",
       },
       {
         label: "Worst month",
-        get: (s) => minOf(months(s)),
+        get: (s) => monthlyStats(s).worst,
         format: "percent",
         tone: "bad",
       },
       {
         label: "Positive Months",
         get: (s) => {
-          const m = months(s);
-          return m.length ? m.filter((v) => v > 0).length : undefined;
+          const m = monthlyStats(s);
+          return m.total ? m.positive : undefined;
         },
         format: "count",
         tone: "graded",
@@ -324,9 +357,6 @@ const GROUPS: StatGroup[] = [
 
 function maxOf(xs: number[]): number | undefined {
   return xs.length ? Math.max(...xs) : undefined;
-}
-function minOf(xs: number[]): number | undefined {
-  return xs.length ? Math.min(...xs) : undefined;
 }
 
 function formatValue(v: number | null | undefined, format: Format = "number"): string {

@@ -1,13 +1,12 @@
 "use client";
 // MFT Results → "Overview" (Figma 15204:30669). Six sparkline KPI cards, the equity curve with its
 // nine-metric strip, and the yearly summary table.
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { EChartsOption } from "echarts";
 import { MaximizeSquareMinimalistic } from "@solar-icons/react";
 
 import { BaseChart } from "@/components/charts/base-chart";
 import { ChartState, chartStatus } from "@/components/charts/chart-state";
-import { Sparkline } from "@/components/charts/sparkline";
 import {
   Table,
   TableBody,
@@ -24,13 +23,14 @@ import {
   type PeriodSelection,
   type Point,
 } from "@/lib/transform/mft-results";
+import { bucketedSummaryRows } from "@/lib/transform/run-as-mft";
 import { useMftResultsSource } from "@/hooks/api/use-mft-results-source";
 import type { SampleScope } from "@/types/domain";
+import type { Granularity } from "../mft-results-view";
 import {
   ChartCard,
   EMPTY,
   GREEN_TEXT,
-  PillTabs,
   RED_TEXT,
   count,
   durationDays,
@@ -39,25 +39,6 @@ import {
   pctFromRatio,
   toneBySign,
 } from "./results-chrome";
-
-// Trailing windows on the equity chart (Figma 15204:30778). "All" keeps whatever the Period row
-// already selected; the rest cut a tail off the end of that.
-const RANGES = [
-  { value: "All", label: "All", days: 0 },
-  { value: "1M", label: "1M", days: 30 },
-  { value: "3M", label: "3M", days: 90 },
-  { value: "1W", label: "1W", days: 7 },
-] as const;
-type Range = (typeof RANGES)[number]["value"];
-
-const DAY = 86_400;
-
-function trailing(points: Point[], range: Range): Point[] {
-  const days = RANGES.find((r) => r.value === range)?.days ?? 0;
-  if (!days || !points.length) return points;
-  const cutoff = points[points.length - 1].t - days * DAY;
-  return points.filter((p) => p.t >= cutoff);
-}
 
 function dateLabel(t: number): string {
   return new Date(t * 1000).toLocaleDateString("en-US", {
@@ -104,11 +85,8 @@ function KpiCards({ cards }: { cards: KpiCard[] }) {
             </div>
             <span className="text-[10px] leading-[14px] text-[#9db2ce]">{c.note ?? " "}</span>
           </div>
-          {/* The card keeps the sparkline's height even with no series, so a row of six cards
-              stays flush whether or not each metric happens to have a curve behind it. */}
-          <div className="h-[42px] w-full">
-            {c.spark && c.spark.length > 1 && <Sparkline data={c.spark} />}
-          </div>
+          {/* Sparkline strip hidden for now (product ask) — `spark` stays on every card and the
+              Sparkline component/series plumbing are untouched, so this is a one-line revert. */}
         </div>
       ))}
     </div>
@@ -226,22 +204,29 @@ function LegendDot({ color, label, dashed }: { color: string; label: string; das
   );
 }
 
-// ---- yearly summary (Figma 15205:55638) ------------------------------------------------------
+// ---- summary table (Figma 15205:55638) -------------------------------------------------------
+// One row per year, month or quarter depending on the Period row's Mo/Qtr/Ytd toggle (F-046/
+// F-070) — same five metric columns either way, only the title and the first column's header and
+// values change.
 
-function YearlySummary({
+function SummaryTable({
+  title,
+  columnLabel,
   rows,
 }: {
+  title: string;
+  columnLabel: string;
   rows: { time?: string; sharpe?: number; cagr?: number; max_drawdown?: number; profit_factor?: number; calmar?: number }[];
 }) {
   return (
     <div className="min-w-0 overflow-hidden rounded-xl border border-[#1d2939] bg-background">
       <div className="border-b border-[#1d2939] bg-[#151a24] px-4 py-2">
-        <span className="text-sm leading-5 font-medium text-white">Yearly Summary</span>
+        <span className="text-sm leading-5 font-medium text-white">{title}</span>
       </div>
       <Table className="table-fixed">
         <TableHeader>
           <TableRow>
-            <TableHead className="h-10">Year</TableHead>
+            <TableHead className="h-10">{columnLabel}</TableHead>
             <TableHead className="h-10">Sharpe</TableHead>
             <TableHead className="h-10">CAGR</TableHead>
             <TableHead className="h-10">Max drawdown</TableHead>
@@ -276,15 +261,16 @@ export function OverviewMft({
   period,
   runId,
   sample,
+  granularity,
 }: {
   strategyId?: string;
   stage: string;
   period: PeriodSelection;
   runId?: string;
   sample?: SampleScope;
+  /** The Period row's Mo/Qtr/Ytd toggle — picks which summary table variant renders below. */
+  granularity: Granularity;
 }) {
-  const [range, setRange] = useState<Range>("All");
-
   // `period` scopes `perf`/`summary` to the selected year (see summaryForPeriod) — this is the KPI
   // cards' and metric strip's own Period pill, not just the charts'.
   const src = useMftResultsSource({ strategyId, stage, runId, period, sample });
@@ -293,15 +279,15 @@ export function OverviewMft({
   // renders for a stage-scoped view.
   const summary = src.summary;
 
-  // Stage slice first (the charts endpoint returns every stage at once), then the Period row,
-  // then the chart's own trailing range. A run-scoped view has no stages, so sliceStage is a no-op.
+  // Stage slice first (the charts endpoint returns every stage at once), then the Period row.
+  // A run-scoped view has no stages, so sliceStage is a no-op.
   const equity = useMemo(
-    () => trailing(filterByPeriod(sliceStage(toPoints(pnls.data), pnls.data, stage), period), range),
-    [pnls.data, stage, period, range],
+    () => filterByPeriod(sliceStage(toPoints(pnls.data), pnls.data, stage), period),
+    [pnls.data, stage, period],
   );
   const drawdown = useMemo(
-    () => trailing(filterByPeriod(sliceStage(toPoints(src.drawdown.data), src.drawdown.data, stage), period), range),
-    [src.drawdown.data, stage, period, range],
+    () => filterByPeriod(sliceStage(toPoints(src.drawdown.data), src.drawdown.data, stage), period),
+    [src.drawdown.data, stage, period],
   );
   const sharpePts = useMemo(
     () => filterByPeriod(sliceStage(toPoints(src.sharpe.data), src.sharpe.data, stage), period),
@@ -313,6 +299,38 @@ export function OverviewMft({
   );
   const perf = src.perf;
   const summaryRows = src.summaryRows;
+
+  // Stage-wide series (NOT period-filtered) for the Monthly/Quarterly Summary table — it always
+  // shows every month/quarter of the selected year, regardless of which one the Period row's own
+  // pills currently narrow the charts above to. Same pattern as Performance's `stageReturns`.
+  const stagePnls = useMemo(
+    () => sliceStage(toPoints(pnls.data), pnls.data, stage),
+    [pnls.data, stage],
+  );
+  const stageReturns = useMemo(
+    () => sliceStage(toPoints(src.returns.data), src.returns.data, stage),
+    [src.returns.data, stage],
+  );
+  const stageDrawdown = useMemo(
+    () => sliceStage(toPoints(src.drawdown.data), src.drawdown.data, stage),
+    [src.drawdown.data, stage],
+  );
+  const bucketRows = useMemo(() => {
+    if (granularity === "Ytd" || period.year == null) return undefined;
+    return bucketedSummaryRows(
+      granularity === "Mo" ? "month" : "quarter",
+      period.year,
+      { pnls: stagePnls, returns: stageReturns, drawdown: stageDrawdown },
+      src.periods,
+      src.summary,
+    );
+  }, [granularity, period.year, stagePnls, stageReturns, stageDrawdown, src.periods, src.summary]);
+  // F-046: at most the 5 most recent years, same cap as the Period row's own year pills.
+  const yearlyRows = summaryRows?.slice(-5);
+  const tableRows = granularity === "Ytd" ? yearlyRows : bucketRows;
+  const tableTitle =
+    granularity === "Mo" ? "Monthly Summary" : granularity === "Qtr" ? "Quarterly Summary" : "Yearly Summary";
+  const tableColumnLabel = granularity === "Mo" ? "Month" : granularity === "Qtr" ? "Quarter" : "Year";
 
   const a = perf?.analysis;
   const p = perf?.performance;
@@ -374,16 +392,15 @@ export function OverviewMft({
       <ChartCard
         title="Equity Curve"
         right={
-          <>
-            <PillTabs options={RANGES} value={range} onChange={setRange} size="sm" />
-            <button
-              type="button"
-              aria-label="Expand Equity Curve chart"
-              className="inline-flex cursor-pointer items-center justify-center text-[#9db2ce] transition-colors hover:text-white"
-            >
-              <MaximizeSquareMinimalistic className="size-5" />
-            </button>
-          </>
+          // F-069: the trailing-range pills (All/1M/3M/1W) were redundant with the Period row above
+          // and are removed; the expand button is the only control left here.
+          <button
+            type="button"
+            aria-label="Expand Equity Curve chart"
+            className="inline-flex cursor-pointer items-center justify-center text-[#9db2ce] transition-colors hover:text-white"
+          >
+            <MaximizeSquareMinimalistic className="size-5" />
+          </button>
         }
       >
         <div className="flex min-w-0 flex-col gap-4">
@@ -426,7 +443,9 @@ export function OverviewMft({
         </div>
       </ChartCard>
 
-      {summaryRows && summaryRows.length > 0 && <YearlySummary rows={summaryRows} />}
+      {tableRows && tableRows.length > 0 && (
+        <SummaryTable title={tableTitle} columnLabel={tableColumnLabel} rows={tableRows} />
+      )}
     </div>
   );
 }

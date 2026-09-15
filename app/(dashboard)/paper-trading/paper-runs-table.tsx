@@ -1,10 +1,21 @@
 "use client";
 import { type ReactNode, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Bolt } from "@solar-icons/react";
+import { Bolt, CloseCircle, Stop } from "@solar-icons/react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { marketOf } from "@/components/market-tabs";
 import { PromoteStageDialog } from "../create-strategy/promote-stage-dialog";
+import { DEMOTE_TARGET } from "../strategy-list/row-actions";
 import { useHftStrategies } from "@/hooks/api/use-hft-strategies";
 import { nextPromotionStage } from "@/components/strategy-stage";
 import type { PromotionStage } from "@/types/domain";
@@ -19,12 +30,16 @@ import {
 import { Sparkline } from "@/components/charts/sparkline";
 import { FlashValue } from "@/components/ui/flash-value";
 import { cn, formatAmount, formatPercent } from "@/lib/utils";
+import { resourceErrorMessage } from "@/lib/api-client";
 import { useAuth } from "@/hooks/use-auth";
-import { isShared } from "@/lib/rbac";
+import { canMutate, isShared } from "@/lib/rbac";
 import { RunStatusPill } from "@/components/run-status-pill";
 import { RunId } from "@/components/run-id";
 import { StrategyTypeBadge } from "@/components/strategy-type-badge";
 import { StartedAt } from "@/components/started-at";
+import { useStopRun } from "@/hooks/api/use-runs";
+import { useDemoteStrategy } from "@/hooks/api/use-promotions";
+import { useConsoleLog } from "@/store/console-log-store";
 import type { PaperRunRow } from "@/lib/mock/paper-runs";
 
 // Gradient text tokens from the Figma design.
@@ -93,6 +108,21 @@ export function PaperRunsTable({
   const pendingNextStage: PromotionStage | null = pendingStrategy
     ? nextPromotionStage(pendingStrategy)
     : null;
+
+  const stopRun = useStopRun();
+  const demoteStrategy = useDemoteStrategy();
+  const addLog = useConsoleLog((s) => s.addLog);
+  const [pendingDemote, setPendingDemote] = useState<PaperRunRow | null>(null);
+
+  const handleStop = async (r: PaperRunRow) => {
+    try {
+      await stopRun.mutateAsync(r.id);
+      addLog("success", `Stopped "${r.strategyName}"`);
+    } catch (err) {
+      addLog("error", `Stop failed: ${resourceErrorMessage(err, "this run")}`);
+    }
+  };
+
   return (
     <>
     <Table className="table-fixed min-w-[1600px]">
@@ -111,7 +141,15 @@ export function PaperRunsTable({
         </TableRow>
       </TableHeader>
       <TableBody>
-        {rows.map((r) => (
+        {rows.map((r) => {
+          // Stop is owner-or-admin, same gate every other run mutation uses. Demote is
+          // admin-only, and only meaningful once the strategy is actually a member of the paper
+          // basket — a stopped run's strategy can be un-promoted (Promote to Live still available
+          // above the API's own version-matching rule).
+          const strategy = r.strategyId ? strategyOf.get(r.strategyId) : undefined;
+          const canStop = canMutate(r, { userId, isAdmin }) && r.status === "running";
+          const canDemote = isAdmin && r.status === "stopped" && strategy?.paper_approved_version != null;
+          return (
           <TableRow
             opaque
             key={r.id}
@@ -201,31 +239,71 @@ export function PaperRunsTable({
               <StartedAt iso={r.startedAt} />
             </TableCell>
             <TableCell sticky="right" className="text-right">
-              {/* Promotion is admin-only (POST /api/promotions/live/{strategy_id}). */}
-              {isAdmin && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      aria-label={`Promote ${r.strategyName} to live`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setPendingPromote(r);
-                      }}
-                      className="group inline-flex cursor-pointer items-center justify-center rounded-lg bg-surface p-2 transition-all hover:bg-[linear-gradient(135deg,#fffbd6_0%,#f1c617_100%)] active:scale-95 active:brightness-90"
-                    >
-                      <Bolt
-                        weight="Bold"
-                        className="size-5 text-[#f1c617] transition-colors group-hover:text-[#151a24]"
-                      />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent>Promote to Live</TooltipContent>
-                </Tooltip>
-              )}
+              <div className="flex items-center justify-end gap-2">
+                {canStop && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label={`Stop ${r.strategyName}`}
+                        disabled={stopRun.isPending}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleStop(r);
+                        }}
+                        className="inline-flex cursor-pointer items-center justify-center rounded-lg bg-surface p-2 text-[#9db2ce] transition-colors hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <Stop weight="Bold" className="size-4" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>Stop</TooltipContent>
+                  </Tooltip>
+                )}
+                {canDemote && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label={`Demote ${r.strategyName}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPendingDemote(r);
+                        }}
+                        className="inline-flex cursor-pointer items-center justify-center rounded-lg bg-surface p-2 text-[#9db2ce] transition-colors hover:text-[#ff135b]"
+                      >
+                        <CloseCircle weight="Bold" className="size-4" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>Demote to {DEMOTE_TARGET.paper}</TooltipContent>
+                  </Tooltip>
+                )}
+                {/* Promotion is admin-only (POST /api/promotions/live/{strategy_id}). */}
+                {isAdmin && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label={`Promote ${r.strategyName} to live`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPendingPromote(r);
+                        }}
+                        className="group inline-flex cursor-pointer items-center justify-center rounded-lg bg-surface p-2 transition-all hover:bg-[linear-gradient(135deg,#fffbd6_0%,#f1c617_100%)] active:scale-95 active:brightness-90"
+                      >
+                        <Bolt
+                          weight="Bold"
+                          className="size-5 text-[#f1c617] transition-colors group-hover:text-[#151a24]"
+                        />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>Promote to Live</TooltipContent>
+                  </Tooltip>
+                )}
+              </div>
             </TableCell>
           </TableRow>
-        ))}
+          );
+        })}
       </TableBody>
     </Table>
 
@@ -248,6 +326,51 @@ export function PaperRunsTable({
         }}
       />
     )}
+
+    <Dialog
+      open={!!pendingDemote}
+      onOpenChange={(open) => {
+        if (!open) {
+          setPendingDemote(null);
+          demoteStrategy.reset();
+        }
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Demote to {DEMOTE_TARGET.paper}</DialogTitle>
+          <DialogDescription>
+            Remove &ldquo;{pendingDemote?.strategyName}&rdquo; from the paper basket. It goes back to{" "}
+            {DEMOTE_TARGET.paper} only — no new paper runs can be launched until an admin promotes it again.
+          </DialogDescription>
+        </DialogHeader>
+        {demoteStrategy.isError && (
+          <p className="text-xs text-destructive">
+            {resourceErrorMessage(demoteStrategy.error, "the paper promotion basket")}
+          </p>
+        )}
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="outline">Cancel</Button>
+          </DialogClose>
+          <Button
+            type="button"
+            variant="destructive"
+            disabled={demoteStrategy.isPending}
+            onClick={() => {
+              if (pendingDemote?.strategyId) {
+                demoteStrategy.mutate(
+                  { stage: "paper", strategyId: pendingDemote.strategyId },
+                  { onSuccess: () => setPendingDemote(null) },
+                );
+              }
+            }}
+          >
+            {demoteStrategy.isPending ? "Demoting…" : "Demote"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
     </>
   );
 }

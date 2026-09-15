@@ -21,6 +21,7 @@ import { useMemo, useState } from "react";
 import { DoubleAltArrowDown, DoubleAltArrowUp, Magnifer, AltArrowDown } from "@solar-icons/react";
 
 import { cn, formatAmount, formatCompact } from "@/lib/utils";
+import { expectancy } from "@/lib/transform/derived-metrics";
 import {
   annualizedSharpe,
   annualizedSortino,
@@ -225,10 +226,15 @@ const GROUPS: StatGroup[] = [
         tone: "bad",
       },
       {
-        // `longest_recovery_days` is deliberately NOT read: it returns an absolute epoch-day
-        // rather than a span (see the results-endpoint audit), so the local derivation stands.
+        // F-073: `longest_recovery_days` now returns a real peak-to-recovery span (see
+        // risk-mft.tsx's comment on the same field), so it's preferred like every other
+        // RunSummary-backed metric here. Falls back to the local derivation for a column with no
+        // RunSummary (XALPHA) or no completed recovery (the drawdown never closed within the
+        // window).
         label: "Longest Recovery",
         get: (s) => {
+          const summary = rs(s);
+          if (summary?.longest_recovery_days != null) return summary.longest_recovery_days;
           const recoveries = topDrawdowns(s.drawdown, Infinity)
             .map((e) => e.recovery)
             .filter((r): r is number => r != null);
@@ -274,8 +280,19 @@ const GROUPS: StatGroup[] = [
       // ratios — the run is the only source a year column has, so the amount is what shows.
       { label: "Avg Win", get: (s) => rs(s)?.avg_win, format: "amount", tone: "good" },
       { label: "Avg Loss", get: (s) => rs(s)?.avg_loss, format: "amount", tone: "bad" },
-      // Ticks are an instrument-level concept neither engine surfaces.
-      unavailable("Profit/Tick Ratio"),
+      {
+        // F-075: replaces "Profit/Tick Ratio" — ticks are an instrument-level concept neither
+        // engine surfaces, and this is the control plane's own replacement metric. RunSummary-only
+        // (no XALPHA `analysis` fallback): that feed has no avg_win/avg_loss/win_rate on the same
+        // per-trade basis to compute it from.
+        label: "Expectancy",
+        get: (s) => {
+          const summary = rs(s);
+          return summary ? expectancy(summary) : undefined;
+        },
+        format: "amount",
+        tone: "sign",
+      },
       {
         label: "Max Consecutive Losses",
         get: (s) => rs(s)?.max_consecutive_losses ?? worstLossStreak(s.returns)?.length,

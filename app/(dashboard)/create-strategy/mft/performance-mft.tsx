@@ -22,6 +22,7 @@ import {
   ChartCard,
   MetricPanel,
   YELLOW_TEXT,
+  money,
   num,
   pctFromPercent,
   pctFromRatio,
@@ -289,6 +290,10 @@ export function PerformanceMft({
 
   const p = perf?.performance;
   const a = perf?.analysis;
+  // F-074: on the run path (an HFT/MFT run) `src.summary` is set and Avg Win/Avg Loss are
+  // settlement-currency amounts (`RunSummary.avg_win`/`avg_loss`); the XALPHA strategy/stage path
+  // has no RunSummary but already reports these as ratios on `analysis` — kept as-is there.
+  const runSummary = src.summary;
 
   const rows: Metric[][] = [
     [
@@ -299,11 +304,15 @@ export function PerformanceMft({
     ],
     [
       {
-        label: "Best Trade",
-        value: pctFromRatio(a?.best_trade),
-        tone: toneBySign(a?.best_trade),
+        label: "Avg Win",
+        value: runSummary ? money(runSummary.avg_win) : pctFromRatio(a?.avg_win_trade),
+        tone: toneBySign(runSummary ? runSummary.avg_win : a?.avg_win_trade),
       },
-      { label: "Avg Loss", value: pctFromRatio(a?.avg_loss_trade), tone: toneBySign(a?.avg_loss_trade) },
+      {
+        label: "Avg Loss",
+        value: runSummary ? money(runSummary.avg_loss) : pctFromRatio(a?.avg_loss_trade),
+        tone: toneBySign(runSummary ? runSummary.avg_loss : a?.avg_loss_trade),
+      },
       { label: "Payoff Ratio", value: num(p?.win_loss_ratio), tone: YELLOW_TEXT },
       { label: "Recovery Factor", value: num(p?.recovery_factor), tone: YELLOW_TEXT },
     ],

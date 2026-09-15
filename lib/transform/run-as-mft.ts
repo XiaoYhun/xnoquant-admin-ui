@@ -2,6 +2,7 @@ import type { EquityPoint, PeriodSummary, RunSummary } from "@/types/domain";
 import type { StrategyChartData, SummaryTableItem } from "@/hooks/api/use-strategy-results";
 import type { StrategyPerformanceDetail } from "@/hooks/api/use-strategy-performance";
 import { startingCapital, toDrawdown, toRollingSharpe } from "./results";
+import { payoffRatio, recoveryFactor } from "./derived-metrics";
 import {
   annualizedSharpe,
   calmarRatio,
@@ -99,6 +100,11 @@ export function runToMftPerf(summary: RunSummary | undefined): StrategyPerforman
       calmar: summary.calmar,
       max_drawdown: summary.max_drawdown_pct ?? undefined,
       win_rate: summary.win_rate,
+      // F-074: the run path has no server field for these two — same ported formulas the
+      // control plane uses (see lib/transform/derived-metrics.ts).
+      volatility: summary.volatility_annualized ?? undefined,
+      win_loss_ratio: payoffRatio(summary) ?? undefined,
+      recovery_factor: recoveryFactor(summary) ?? undefined,
     },
   };
 }

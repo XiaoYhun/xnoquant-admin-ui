@@ -207,12 +207,20 @@ export function RiskMft({
   const worst = useMemo(() => worstLossStreak(returnPts), [returnPts]);
   const episodes = useMemo(() => topDrawdowns(drawdownPts), [drawdownPts]);
 
+  // F-073: `RunSummary.longest_recovery_days` used to report an absolute epoch-day instead of a
+  // span whenever the series opened already in a drawdown (its implicit starting peak's
+  // timestamp stayed at the Unix epoch) — fixed upstream (hft-platform commit f4569f2, "the
+  // implicit starting peak... is 'reached' at the series' first timestamp, not at the Unix
+  // epoch"). Read directly now; the local derivation is only a fallback for `null` (no RunSummary
+  // for this window, or no completed recovery — see the neighbouring `max_drawdown_duration_days`
+  // doc, which covers the still-open-drawdown case this field deliberately excludes).
   const longestRecovery = useMemo(() => {
+    if (summary?.longest_recovery_days != null) return summary.longest_recovery_days;
     const recoveries = topDrawdowns(drawdownPts, Infinity)
       .map((e) => e.recovery)
       .filter((r): r is number => r != null);
     return recoveries.length ? Math.max(...recoveries) : undefined;
-  }, [drawdownPts]);
+  }, [drawdownPts, summary]);
 
   const p = perf?.performance;
 
@@ -243,11 +251,7 @@ export function RiskMft({
       },
       {
         label: "Longest Recovery",
-        // Derived locally on purpose. `RunSummary.longest_recovery_days` is documented as a span
-        // but returns an absolute epoch-day: run 01a08924-c639 (Jan 2020 - Aug 2026) reports
-        // 18291.17, and 18291 days after the epoch is that run's own start. Wire it once the
-        // upstream field returns a difference.
-        value: longestRecovery == null ? EMPTY : `${longestRecovery}d`,
+        value: longestRecovery == null ? EMPTY : `${formatAmount(longestRecovery, 1)}d`,
       },
       { label: "Kelly Criterion", value: pctFromRatio(p?.kelly_criterion) },
     ],

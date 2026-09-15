@@ -54,6 +54,16 @@ export function num(v: number | null | undefined, digits = 2): string {
 }
 
 /**
+ * Settlement-currency amount, rounded to whole units — the same "amount" format
+ * yearly-statistics.tsx uses for these same run-summary figures (Avg Win/Avg Loss, Total Cost):
+ * they run to millions of VND, where a decimal place is noise.
+ */
+export function money(v: number | null | undefined): string {
+  if (v == null || !Number.isFinite(v)) return EMPTY;
+  return Math.round(v).toLocaleString("en-US");
+}
+
+/**
  * Seconds as the coarsest unit that still reads precisely — "45s", "12m", "3.5h", "2.1d".
  * `RunSummary.avg_holding_time_secs` spans a scalp and a multi-day swing on the same screen.
  */

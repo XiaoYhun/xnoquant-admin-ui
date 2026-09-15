@@ -1,10 +1,12 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { toPosition } from "./use-run-live";
 import {
   toLiveSnapshot,
   mergeLiveSummary,
   mergeLiveTrades,
   preferLiveEquity,
+  withIdleTimeout,
+  StreamIdleError,
   type LiveSnapshot,
 } from "./use-run-live-snapshot";
 
@@ -221,5 +223,31 @@ describe("mergeLiveTrades", () => {
   it("passes the persisted page through when the frame has no fills", () => {
     const persisted = toLiveSnapshot({ recent_trades: [fill(1, 1000)] }, 0)!.recentTrades;
     expect(mergeLiveTrades(persisted, undefined)).toBe(persisted);
+  });
+});
+
+describe("withIdleTimeout", () => {
+  it("resolves with the inner value when it settles before the deadline", async () => {
+    vi.useFakeTimers();
+    const inner = Promise.resolve("frame");
+    await expect(withIdleTimeout(inner, 1000)).resolves.toBe("frame");
+    vi.useRealTimers();
+  });
+
+  it("rejects with StreamIdleError once the deadline passes with nothing from the inner promise", async () => {
+    vi.useFakeTimers();
+    const inner = new Promise(() => {}); // never settles — e.g. a stalled upstream
+    const result = withIdleTimeout(inner, 1000);
+    const assertion = expect(result).rejects.toBeInstanceOf(StreamIdleError);
+    await vi.advanceTimersByTimeAsync(1000);
+    await assertion;
+    vi.useRealTimers();
+  });
+
+  it("propagates the inner rejection instead of waiting out the deadline", async () => {
+    vi.useFakeTimers();
+    const inner = Promise.reject(new Error("boom"));
+    await expect(withIdleTimeout(inner, 1000)).rejects.toThrow("boom");
+    vi.useRealTimers();
   });
 });

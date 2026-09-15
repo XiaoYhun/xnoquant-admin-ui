@@ -257,6 +257,38 @@ const EMPTY: LiveSnapshotValue = { snapshot: undefined, sharpeSamples: [], state
 /** Reconnect backoff after a dropped stream — the same fixed delay the reference client uses. */
 const RETRY_MS = 2000;
 
+/**
+ * A stream that's still nominally "open" but has produced no bytes — not even axum's own
+ * keep-alive comment, sent every 15s by default — for this long is indistinguishable from a dead
+ * connection. Bigger than that keep-alive interval so a healthy stream never trips it.
+ */
+const IDLE_TIMEOUT_MS = 20_000;
+
+/** Thrown by `withIdleTimeout` when `promise` doesn't settle within the deadline. */
+export class StreamIdleError extends Error {}
+
+/**
+ * Rejects with `StreamIdleError` if `promise` hasn't settled within `ms`, otherwise settles the
+ * same as `promise`. Used to detect an SSE read that's stalled — the proxy route (`lib/sse-proxy`)
+ * can itself hang waiting on a broken upstream with no error and no bytes, ever, so a plain
+ * `reader.read()` isn't enough to notice the stream is dead.
+ */
+export function withIdleTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new StreamIdleError(`no data for ${ms}ms`)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
+
 const LiveSnapshotContext = createContext<LiveSnapshotValue>(EMPTY);
 
 /**
@@ -296,12 +328,17 @@ function useLiveSnapshotStream(
 
   useEffect(() => {
     if (!streamKey) return;
-    const controller = new AbortController();
     let cancelled = false;
     let retry: ReturnType<typeof setTimeout> | undefined;
+    // One AbortController per connection attempt, not per effect: the idle watchdog below aborts
+    // it to force a reconnect, and reusing a single controller across retries would leave every
+    // later attempt's fetch permanently pre-aborted.
+    let activeController: AbortController | undefined;
 
     async function connect() {
       let terminal = false;
+      const controller = new AbortController();
+      activeController = controller;
       try {
         const res = await fetch(`${HFT_API_URL}/api/runs/${runId}/live/stream`, {
           headers: { Authorization: `Bearer ${accessToken}` },
@@ -315,7 +352,10 @@ function useLiveSnapshotStream(
         const decoder = new TextDecoder();
         let buffer = "";
         while (!cancelled) {
-          const { done, value } = await reader.read();
+          // The proxy route can hang open on a broken upstream with no error and no bytes,
+          // ever (that's the failure this watchdog exists for) — a bare `reader.read()` would
+          // wait forever, so race it against the idle deadline instead.
+          const { done, value } = await withIdleTimeout(reader.read(), IDLE_TIMEOUT_MS);
           if (done) break;
           buffer += decoder.decode(value, { stream: true });
           // Frames are separated by a blank line; split on CRLF *or* LF, since an \r\n\r\n
@@ -340,7 +380,11 @@ function useLiveSnapshotStream(
           }
         }
       } catch {
-        // Aborted on unmount, or the stream dropped / never opened.
+        // Aborted on unmount, the stream dropped / never opened, or the idle watchdog fired.
+        // Abort explicitly: an idle-timeout rejection leaves the fetch itself still pending, and
+        // an un-aborted connection would sit open (and the proxy route would keep pumping into
+        // it) even after we give up on it here.
+        controller.abort();
       }
       if (cancelled) return;
       // Reconnect on a fixed backoff, which is what `EventSource` would do for us if it could
@@ -354,7 +398,7 @@ function useLiveSnapshotStream(
 
     return () => {
       cancelled = true;
-      controller.abort();
+      activeController?.abort();
       if (retry) clearTimeout(retry);
     };
   }, [runId, streamKey, accessToken]);

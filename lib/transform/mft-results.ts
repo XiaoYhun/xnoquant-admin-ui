@@ -78,6 +78,42 @@ export function yearsOf(points: Point[]): number[] {
   return [...new Set(points.map((p) => yearOf(p.t)))].sort((a, b) => a - b);
 }
 
+/**
+ * Which months (1-12) of `year` the series has a sample in, ascending — the Period row's Mo pills
+ * (F-071) are restricted to these, so a run that started or ended mid-year doesn't offer months it
+ * never ran in.
+ */
+export function monthsOf(points: Point[], year: number): number[] {
+  return [...new Set(points.filter((p) => yearOf(p.t) === year).map((p) => monthOf(p.t)))].sort(
+    (a, b) => a - b,
+  );
+}
+
+/**
+ * Which quarters (1-4) of `year` the series covers — a quarter shows if any of its three months
+ * has a sample, so it stays in lockstep with `monthsOf` instead of re-deriving from timestamps.
+ */
+export function quartersOf(points: Point[], year: number): number[] {
+  const months = new Set(monthsOf(points, year));
+  const quarters: number[] = [];
+  for (let q = 1; q <= 4; q++) {
+    if ([1, 2, 3].some((m) => months.has((q - 1) * 3 + m))) quarters.push(q);
+  }
+  return quarters;
+}
+
+/**
+ * The value in `options` closest to `target`, or `undefined` when `options` is empty. Used to
+ * re-point the Period row's Mo/Qtr pill at the nearest one still offered when a year switch (or
+ * turning Mo/Qtr on) drops the previously selected month/quarter (F-071).
+ */
+export function nearestOption(options: number[], target: number): number | undefined {
+  return options.reduce<number | undefined>(
+    (best, o) => (best == null || Math.abs(o - target) < Math.abs(best - target) ? o : best),
+    undefined,
+  );
+}
+
 export function filterByPeriod(points: Point[], period: PeriodSelection): Point[] {
   if (period.year == null) return points;
   return points.filter((p) => {

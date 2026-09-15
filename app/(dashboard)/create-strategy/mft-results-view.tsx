@@ -9,6 +9,9 @@ import { cn } from "@/lib/utils";
 import { USE_MOCK } from "@/lib/constant";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
+  monthsOf,
+  nearestOption,
+  quartersOf,
   sliceStage,
   toPoints,
   yearsOf,
@@ -84,12 +87,18 @@ function StatusCard({ title, subtitle, danger }: { title: string; subtitle?: str
 
 function PeriodRow({
   years,
+  availableMonths,
+  availableQuarters,
   period,
   onChange,
   granularity,
   onGranularityChange,
 }: {
   years: number[];
+  /** F-071: months (1-12) / quarters (1-4) the selected year's series actually covers — the Mo/Qtr
+      pills are restricted to these instead of always offering Jan-Dec / Q1-Q4. */
+  availableMonths: number[];
+  availableQuarters: number[];
   period: PeriodSelection;
   onChange: (p: PeriodSelection) => void;
   /** Omitted on every view but Overview, which is the only frame that draws the toggle. */
@@ -137,7 +146,9 @@ function PeriodRow({
           <PillTabs
             size="sm"
             className="gap-1"
-            options={MONTHS.map((m, i) => ({ value: i + 1, label: m }))}
+            options={MONTHS.map((m, i) => ({ value: i + 1, label: m })).filter((o) =>
+              availableMonths.includes(o.value),
+            )}
             value={period.month ?? 1}
             onChange={(m) => onChange({ year: period.year ?? fallbackYear, month: m })}
           />
@@ -148,7 +159,10 @@ function PeriodRow({
           <PillTabs
             size="sm"
             className="gap-1"
-            options={QUARTERS.map((q) => ({ value: q, label: `Q${q}/${period.year ?? fallbackYear}` }))}
+            options={QUARTERS.filter((q) => availableQuarters.includes(q)).map((q) => ({
+              value: q,
+              label: `Q${q}/${period.year ?? fallbackYear}`,
+            }))}
             value={period.quarter ?? 1}
             onChange={(q) => onChange({ year: period.year ?? fallbackYear, quarter: q })}
           />
@@ -224,10 +238,37 @@ export function MftResultsView({
 
   // The Period pills are built from whatever the series actually covers for this stage, so a
   // strategy trained over two years never offers a third empty year.
-  const years = useMemo(
-    () => yearsOf(sliceStage(toPoints(src.returns.data), src.returns.data, runScoped ? undefined : stage)),
+  const periodPoints = useMemo(
+    () => sliceStage(toPoints(src.returns.data), src.returns.data, runScoped ? undefined : stage),
     [src.returns.data, stage, runScoped],
   );
+  const years = useMemo(() => yearsOf(periodPoints), [periodPoints]);
+
+  // F-071: which months/quarters the selected year's own series covers — a run that started or
+  // ended mid-year shouldn't offer pills for the months/quarters it never ran in. Derived from the
+  // same `periodPoints` `years` comes from, so paper/live runs (no backtest stage range) work too.
+  const activeYear = period.year ?? years[years.length - 1];
+  const availableMonths = useMemo(
+    () => (activeYear != null ? monthsOf(periodPoints, activeYear) : []),
+    [periodPoints, activeYear],
+  );
+  const availableQuarters = useMemo(
+    () => (activeYear != null ? quartersOf(periodPoints, activeYear) : []),
+    [periodPoints, activeYear],
+  );
+
+  // If the selected month/quarter falls outside that coverage — after switching year, or right
+  // when Mo/Qtr turns on — snap to the nearest one still offered rather than leave the pills
+  // pointed at a hidden pill. Compared during render, same pattern as the sample reset above:
+  // stable once applied, since the snapped value is always a member of the list just computed.
+  const snappedMonth = period.month != null ? nearestOption(availableMonths, period.month) : undefined;
+  if (granularity === "Mo" && snappedMonth != null && snappedMonth !== period.month) {
+    setPeriod({ ...period, year: activeYear, month: snappedMonth });
+  }
+  const snappedQuarter = period.quarter != null ? nearestOption(availableQuarters, period.quarter) : undefined;
+  if (granularity === "Qtr" && snappedQuarter != null && snappedQuarter !== period.quarter) {
+    setPeriod({ ...period, year: activeYear, quarter: snappedQuarter });
+  }
 
   // Only Overview draws the Year/Month toggle; the other five frames show the year pills alone.
   const isOverview = view === "Overview";
@@ -268,6 +309,8 @@ export function MftResultsView({
     <div className="flex min-w-0 flex-col gap-4">
       <PeriodRow
         years={years}
+        availableMonths={availableMonths}
+        availableQuarters={availableQuarters}
         period={period}
         onChange={setPeriod}
         granularity={isOverview ? granularity : undefined}

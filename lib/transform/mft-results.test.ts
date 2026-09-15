@@ -12,7 +12,10 @@ import {
   filterByPeriod,
   lossStreaks,
   monthlyReturns,
+  monthsOf,
+  nearestOption,
   quarterOf,
+  quartersOf,
   sliceStage,
   toPeriodChanges,
   toPoints,
@@ -87,6 +90,55 @@ describe("filterByPeriod / yearsOf", () => {
     // May (Q2) and June (Q2) are both in points; only the Q2 sample should survive a Q2 filter.
     expect(filterByPeriod(points, { year: 2021, quarter: 2 }).map((p) => p.v)).toEqual([2, 3]);
     expect(filterByPeriod(points, { year: 2021, quarter: 1 })).toEqual([]);
+  });
+});
+
+describe("monthsOf / quartersOf (F-071)", () => {
+  // A run that ends mid-year: Jan through Aug only, nothing in Sep-Dec.
+  const points = pts(
+    [ts(2026, 1, 5), 1],
+    [ts(2026, 7, 10), 2],
+    [ts(2026, 8, 20), 3],
+    [ts(2027, 3, 1), 4],
+  );
+
+  it("lists only the months the year actually has samples in", () => {
+    expect(monthsOf(points, 2026)).toEqual([1, 7, 8]);
+    expect(monthsOf(points, 2027)).toEqual([3]);
+  });
+
+  it("is empty for a year the series never touches", () => {
+    expect(monthsOf(points, 2025)).toEqual([]);
+  });
+
+  it("shows a quarter if any of its three months has a sample", () => {
+    // Q1 from January, Q3 from July/August; Q2 and Q4 have nothing.
+    expect(quartersOf(points, 2026)).toEqual([1, 3]);
+    expect(quartersOf(points, 2027)).toEqual([1]); // March
+  });
+
+  it("is empty for a year the series never touches", () => {
+    expect(quartersOf(points, 2025)).toEqual([]);
+  });
+});
+
+describe("nearestOption", () => {
+  it("picks the closest offered value", () => {
+    expect(nearestOption([1, 2, 3, 4, 5, 6, 7, 8], 9)).toBe(8);
+    expect(nearestOption([1, 2, 3, 4, 5, 6, 7, 8], 0)).toBe(1);
+    expect(nearestOption([1, 7, 8], 5)).toBe(7);
+  });
+
+  it("breaks a tie toward the earlier (smaller) option", () => {
+    expect(nearestOption([2, 8], 5)).toBe(2);
+  });
+
+  it("returns the value itself when it's already offered", () => {
+    expect(nearestOption([1, 3], 3)).toBe(3);
+  });
+
+  it("is undefined when there is nothing to offer", () => {
+    expect(nearestOption([], 5)).toBeUndefined();
   });
 });
 

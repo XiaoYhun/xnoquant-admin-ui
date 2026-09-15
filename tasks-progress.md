@@ -413,3 +413,62 @@ individual fills) · PnL by session hour. `days_dropped_no_atr` / `total_pnl_pct
 - **Verified in Chrome:** the column renders on Backtesting, Paper Trading and Live trade with real start times. No
   header wraps (including "Max drawdown" on the narrower Live trade table). No Return or Started cell overflows.
   Names are readable again. No console errors. Alpha pool is empty on dev, so its table was code-verified only.
+
+## Lark "Not yet started" triage (2026-09-15) — HFT base, Task list view, 18 records
+Source: the user's Lark Base (Task Breakdown → Task list, Status = Not yet started). Read-only; nothing in the
+base is edited from here (one accidental blank row was inserted while probing the grid and undone at once —
+count re-checked at 18).
+- ✅ F-004 Start live trading (Alpha pool → Live trade) — already built (`StartLiveTradingDialog`, T9 above).
+- ✅ F-053 / F-055 Filter strategy list by owner — already there ("All owners" on Strategy List).
+- ✅ F-068 Started time — shipped 2026-09-14 (467b959).
+- ✅ F-054 Execution tab metrics, F-062 IS/OS/All missing, F-065 Cost & Edge / Regime charts — see
+  "Run-detail charts wired to /risk-detail, /execution-detail, /symbol-pnl" below.
+- 🔄 F-060 No live latency / live trades — PARTIAL. Reproduced on running paper run `01a09e5d-2c31`: our proxy
+  gets 503, then a grace-path 200 that carries only `: connected` and never data (55 s+), so the client never
+  reconnected; hft-dev direct gets 200 + data at once. Survives a dev-server restart. Fixed our half: the proxy
+  (`lib/sse-proxy.ts`, shared by the live / trace / orderbook stream routes) now aborts the upstream on client
+  cancel and gives up after 20 s, and the client has a 20 s idle watchdog — verified the stream now cycles
+  (503, 200, 200, …) instead of freezing. STILL no data through our proxy for that run: unauthenticated Node
+  probes always get a fast 401 (no 503, no hang), and the app has no 503-mapping error, so the refusal happens
+  only on the authenticated path, above the app (ingress) or in its unbounded auth call — backend
+  `crates/api/src/lib.rs:267` builds the `reqwest::Client` with no timeout and `AuthUser` awaits
+  `AUTH_API_URL/me` on every request, which would hang the whole response before headers exactly like this.
+  Needs an authenticated probe or the backend team.
+
+## Run-detail charts wired to /risk-detail, /execution-detail, /symbol-pnl + IS/OS/All on MFT (2026-09-15) — tsc + eslint clean, 270/270 vitest, browser-verified
+Compared our run detail with hft-dev.xnoquant.io on MFT backtest `01a0a047` (#4309) and HFT backtest
+`01a08484`; every panel that had data there and not here came from `/risk-detail`, `/execution-detail`,
+`/symbol-pnl` (never called) or `/summary` fields left unread.
+- ✅ Data layer (4af9f53, 186bbd4): hand-written `RiskDetail` / `ExecutionDetail` (the deployed OpenAPI lists
+  both paths but never defines the schemas), three hooks, pure transforms with tests. `run-as-mft`'s
+  `total_fee` was `cost_bps / 10000` (cost per NOTIONAL) — now `summary.total_fee / capital`.
+- ✅ HFT: Execution distributions + Avg Latency / Slippage (Std) / Market Impact; Risk "Consecutive loss
+  streaks" + "Top drawdowns"; Performance "PnL by session hour (UTC)"; Cost & Capacity "PnL attribution".
+- ✅ MFT: Regime session-hour chart + Top-3 Hours; Execution Slippage (Std) + both distributions; Cost & Edge
+  Cost Breakdown donut, Gross-to-Net middle rows, Cumulative cost & Gross PnL, Turnover, PnL attribution.
+  Overview "Cost Drag" is now cost ÷ gross (was cost ÷ capital), matching Cost & Edge and the reference.
+- ✅ IS/OS/All ("Period:" row, `?sample=`) now also on MFT runs, in Create Strategy Results and the run detail
+  panel: one `useSamplePeriodRow` (`sample-period-row.tsx`, rule in `lib/sample-period.ts`) for all four
+  places, `sample` threaded through `MftResultsView` → every MFT query. Before this, MFT runs never sent
+  `sample`, so they silently showed IN-SAMPLE figures (server default).
+- **Verified in Chrome vs the reference:** MFT IS/OS/All Net PnL +19,034,450 / −2,536,028 / +16,498,422,
+  Sharpe 0.94 / −3.59 / 0.77, trades 146 / 7 / 153 — identical. Cost Breakdown 5,365,550 = Commission
+  1,825,000 (34%) + Tax 3,540,550 (66%); Gross→Net +24.40 / −1.83 / −3.54 / 0.00 / +19.03%; Cost Drag −21.99%
+  (ref 22.0%). HFT Execution Avg Latency 14,169.07 ms, Std 0.68 bp, Market Impact −0.54 bp; Top drawdowns 1
+  episode (−48,007,243, −4.80%); PnL attribution Signal −28,475,000 / Spread +31,255,000 — all match.
+- NOTE: HFT "Slippage (Avg)" still reads `summary.slippage_bps` (0.00 bp, unsigned round-trip); the reference
+  shows `execution-detail.slippage_avg_bps` (0.79 bp, signed per-fill). Left as is — different metrics.
+- ⛔ F-067 PnL curve in run list — blocked: `pnl_sparkline` exists neither in the deployed OpenAPI `Run` schema
+  nor on any hft-platform branch.
+- ⬜ F-056 Paper list: Stop a running run + Demote a stopped one (Action cell has only Promote today).
+- ⬜ F-058 Backtest list "Start paper trading" is a log-only stub (`backtest-runs-table.tsx`); launching paper
+  needs the strategy in the paper basket (`launchMode`).
+- ⬜ F-063 MFT Overview "Yearly Summary": only CAGR is filled; Sharpe / Max DD / Profit factor / Calmar blank.
+- ⬜ F-064 Gross Return row blank in Yearly Statistics.
+- ⬜ F-057 Best / Worst / Positive months — reference derives them from equity points (`pnl-buckets.ts`).
+- ⬜ F-066 Remove the sidebar HFT/MFT toggle, move it into a filter (only the sidebar and Create Strategy read it).
+- ⬜ F-069 MFT Equity Curve: drop the chart's own All/1M/3M/1W pills — the Period filter above already scopes it.
+- ⬜ F-046 Results by Month / Quarter / Year, max 5 years — `/periodic-summary` has no granularity param, so
+  month/quarter buckets would come from the equity curve.
+- ⬜ F-037 Orderbook for any symbol — core already works (whole catalog, any venue); the note asks for a
+  venue → account → symbol picker on top.

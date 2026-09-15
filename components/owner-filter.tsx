@@ -11,15 +11,21 @@ export type OwnerOption = { id: string; name: string; email?: string };
  * Toolbar "owner" filter — multi-select, popover chrome matching `SymbolFilter`/pill styling
  * matching this page's other filters. `value` is the set of selected owner ids; empty means no
  * filter (every owner). Typing in the search box narrows the list by name or email.
+ *
+ * `single`: the run lists (Backtesting/Paper Trading/Live trade) opt into single selection
+ * because `GET /api/runs?owner=` only accepts one id — clicking a row selects just it, clicking
+ * the already-selected row clears it. Strategy List leaves this off and stays multi-select.
  */
 export function OwnerFilter({
   options,
   value,
   onChange,
+  single,
 }: {
   options: OwnerOption[];
   value: string[];
   onChange: (next: string[]) => void;
+  single?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -32,7 +38,13 @@ export function OwnerFilter({
   }, [options, query]);
 
   const selected = new Set(value);
-  const toggle = (id: string) => onChange(selected.has(id) ? value.filter((v) => v !== id) : [...value, id]);
+  const toggle = (id: string) => {
+    if (single) {
+      onChange(selected.has(id) ? [] : [id]);
+      return;
+    }
+    onChange(selected.has(id) ? value.filter((v) => v !== id) : [...value, id]);
+  };
 
   const label =
     value.length === 0

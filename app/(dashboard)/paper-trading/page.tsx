@@ -7,10 +7,14 @@ import { MinimalisticMagnifer } from "@solar-icons/react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { usePaperRuns } from "@/hooks/api/use-paper-runs";
 import { useSelectedRunRow } from "@/hooks/api/use-runs";
+import { useUserRoster } from "@/hooks/api/use-users";
+import { useAuth } from "@/hooks/use-auth";
 import { useDebounced } from "@/hooks/use-debounced";
 import { runSearchQuery } from "@/lib/utils";
 import { usePageSize } from "@/hooks/use-page-size";
 import { useUrlParam } from "@/hooks/use-url-param";
+import { useRunOwnerOptions } from "@/hooks/use-run-owner-options";
+import { OwnerFilter } from "@/components/owner-filter";
 import {
   DEFAULT_MARKET,
   MarketTabs,
@@ -46,15 +50,22 @@ function PaperTrading() {
   const [symbol, setSymbol] = useState(ALL_SYMBOLS);
   const [status, setStatus] = useState("all");
   const [strategyType, setStrategyType] = useState<StrategyTypeFilterValue>("all");
+  // Single owner: `GET /api/runs?owner=` only accepts one id (see hooks/api/use-runs.ts).
+  const [owner, setOwner] = useState("");
   const [ranges, setRanges] = useState<MetricRanges>(EMPTY_METRIC_RANGES);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = usePageSize();
   // The open panel is in the URL (`?run=<id>`) so the view can be linked and survives reload.
   const [selectedId, setSelectedId] = useUrlParam("run");
 
+  // The owner filter's options: the roster for admins, the loaded rows' owners otherwise (roster
+  // is admin-only — see hooks/api/use-users.ts).
+  const { isAdmin } = useAuth();
+  const { data: roster = [] } = useUserRoster(isAdmin);
+
   // Every control on this toolbar is served by `GET /api/runs` — search, status, market tab,
-  // symbol, the three metric bounds and the page itself. Nothing is narrowed in the browser, so
-  // the row count below is the real one and page 2 holds the rows page 1 didn't.
+  // symbol, owner, the three metric bounds and the page itself. Nothing is narrowed in the
+  // browser, so the row count below is the real one and page 2 holds the rows page 1 didn't.
   // The two free-typed groups are debounced: otherwise each keystroke is a request.
   const debouncedSearch = useDebounced(search);
   const debouncedRanges = useDebounced(ranges);
@@ -64,12 +75,14 @@ function PaperTrading() {
     asset_kind: assetKindOf(market),
     engine: engineOf(strategyType),
     symbol: symbol === ALL_SYMBOLS ? undefined : symbol,
+    owner: owner || undefined,
     ...metricRangeParams(debouncedRanges),
     page: page - 1, // the API counts pages from 0
     size: pageSize,
   });
 
   const rows = data?.rows ?? [];
+  const ownerOptions = useRunOwnerOptions(roster, rows, owner);
   const total = data?.total ?? 0;
   const selectedRun = useSelectedRunRow(rows, selectedId);
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
@@ -122,6 +135,15 @@ function PaperTrading() {
           value={symbol}
           onChange={(v) => {
             setSymbol(v);
+            setPage(1);
+          }}
+        />
+        <OwnerFilter
+          single
+          options={ownerOptions}
+          value={owner ? [owner] : []}
+          onChange={(next) => {
+            setOwner(next[0] ?? "");
             setPage(1);
           }}
         />

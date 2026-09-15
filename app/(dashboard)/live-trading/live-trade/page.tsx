@@ -7,9 +7,13 @@ import { useSearchParams } from "next/navigation";
 import { MinimalisticMagnifer } from "@solar-icons/react";
 import { useLiveRunCounts, useLiveRuns } from "@/hooks/api/use-live-runs";
 import { useSelectedRunRow } from "@/hooks/api/use-runs";
+import { useUserRoster } from "@/hooks/api/use-users";
+import { useAuth } from "@/hooks/use-auth";
 import { useDebounced } from "@/hooks/use-debounced";
 import { usePageSize } from "@/hooks/use-page-size";
 import { useUrlParam } from "@/hooks/use-url-param";
+import { useRunOwnerOptions } from "@/hooks/use-run-owner-options";
+import { OwnerFilter } from "@/components/owner-filter";
 import { resourceErrorMessage } from "@/lib/api-client";
 import {
   EMPTY_METRIC_RANGES,
@@ -104,13 +108,20 @@ function LiveTrade() {
   const [symbolFilter, setSymbolFilter] = useState(ALL_SYMBOLS);
   const [strategyType, setStrategyType] = useState<StrategyTypeFilterValue>("all");
   const [onlyRunning, setOnlyRunning] = useState(false);
+  // Single owner: `GET /api/runs?owner=` only accepts one id (see hooks/api/use-runs.ts).
+  const [owner, setOwner] = useState("");
   const [ranges, setRanges] = useState<MetricRanges>(EMPTY_METRIC_RANGES);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = usePageSize();
 
+  // The owner filter's options: the roster for admins, the loaded rows' owners otherwise (roster
+  // is admin-only — see hooks/api/use-users.ts).
+  const { isAdmin } = useAuth();
+  const { data: roster = [] } = useUserRoster(isAdmin);
+
   // Every control on this toolbar is served by `GET /api/runs` — search, Only Running, market
-  // tab, symbol, the three metric bounds and the page itself. Nothing is narrowed in the browser,
-  // so the row count below is the real one and page 2 holds the rows page 1 didn't.
+  // tab, symbol, owner, the three metric bounds and the page itself. Nothing is narrowed in the
+  // browser, so the row count below is the real one and page 2 holds the rows page 1 didn't.
   // The two free-typed groups are debounced: otherwise each keystroke is a request.
   const debouncedSearch = useDebounced(search);
   const debouncedRanges = useDebounced(ranges);
@@ -120,11 +131,13 @@ function LiveTrade() {
     asset_kind: assetKindOf(market),
     engine: engineOf(strategyType),
     symbol: symbolFilter === ALL_SYMBOLS ? undefined : symbolFilter,
+    owner: owner || undefined,
     ...metricRangeParams(debouncedRanges),
     page: page - 1, // the API counts pages from 0
     size: pageSize,
   });
   const rows = data?.rows ?? [];
+  const ownerOptions = useRunOwnerOptions(roster, rows, owner);
   const total = data?.total ?? 0;
   // The open panel is in the URL (`?run=<id>`) so the view can be linked and survives reload.
   const [selectedId, setSelectedId] = useUrlParam("run");
@@ -149,7 +162,7 @@ function LiveTrade() {
 
   // Counted by the server, not summed over the rows: the table holds one page now, so a headline
   // added up from it would describe that page rather than the market.
-  const { data: counts } = useLiveRunCounts(assetKindOf(market), engineOf(strategyType));
+  const { data: counts } = useLiveRunCounts(assetKindOf(market), engineOf(strategyType), owner || undefined);
 
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
   // A refetch can shrink the result set under a reader who is already past its new end — a bot
@@ -194,6 +207,15 @@ function LiveTrade() {
           value={symbolFilter}
           onChange={(v) => {
             setSymbolFilter(v);
+            resetPage();
+          }}
+        />
+        <OwnerFilter
+          single
+          options={ownerOptions}
+          value={owner ? [owner] : []}
+          onChange={(next) => {
+            setOwner(next[0] ?? "");
             resetPage();
           }}
         />

@@ -53,6 +53,9 @@ export type RunsQuery = {
   asset_kind?: AssetKind;
   engine?: "hft" | "mft";
   symbol?: string;
+  // Exact single-owner match (external auth user id); empty/omitted = no filter. Added to
+  // `GET /api/runs` by hft-platform@6033a55 — not yet in the checked-in generated spec.
+  owner?: string;
   /** 0-indexed, as the API counts. The lists' pagers are 1-based and subtract before calling. */
   page?: number;
   size?: number;

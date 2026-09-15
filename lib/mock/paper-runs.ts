@@ -60,6 +60,9 @@ export type PaperRunRow = {
   executionType: StrategyType;
   // Run.owner_username — the owner's display name; null when the roster hasn't been populated.
   owner: string | null;
+  // Run.owner_email — the owner's email; null/unset when the roster hasn't been populated. Used
+  // as the owner filter's non-admin fallback option source (see hooks/use-run-owner-options.ts).
+  ownerEmail?: string | null;
   // Manifest-derived starting equity — kept so the detail panel can compute % metrics from the
   // lazily-fetched summary. See lib/transform/runs.ts.
   startingEquity: number;

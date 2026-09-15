@@ -486,3 +486,25 @@ partial work as d0a602b / ad9b1b8. Finished and fixed forward here: 2af4071, 70c
   year is bucketed over the whole curve (was crediting a year's first month with all prior PnL).
 - ✅ F-069 Equity Curve's All/1M/3M/1W pills removed. ✅ MFT Overview KPI sparklines hidden (one-line revert).
 - NOTE: Monthly/Quarterly tables still head the return column "CAGR"; MFT Max Drawdown reads "+10.10%" (pre-existing).
+
+## Lark batch 3 (2026-09-16) — F-053 run lists, F-071…F-075 — tsc clean, 307/307 vitest, browser-verified
+Lark statuses for batch 2's 14 shipped tasks set to "In review" (F-053 / F-060 / F-067 left as they were).
+- ✅ F-053 run lists (084634b): backend added `owner` to `GET /api/runs` (hft-platform 6033a55, exact single
+  owner id), so Backtesting / Paper Trading / Live trade got the owner dropdown in single-select mode
+  (`OwnerFilter single`). Options: admin → user roster, others → owners on the loaded rows
+  (`hooks/use-run-owner-options.ts`). Live trade KPI counts follow the filter. Verified: `owner=` sent (200);
+  Xuân Anh Researcher → alpha1/test2 only; Live trade quan → 4 rows, Active 0/8 → 0/7. Multi-owner needs the
+  backend to accept a list (F-055 note asks for it).
+- ✅ F-072 (e52edf8) Paper list: running → Stop only; stopped → Demote + Promote.
+- ✅ F-071 (926c7c0, 18db749) Mo/Qtr pills and Monthly/Quarterly Summary rows limited to the months/quarters
+  the selected year's series covers; out-of-range selection snaps to the nearest. Run 01a0a413 2026: Feb–Aug,
+  Q1–Q3 (Jan 2026 has no data points, so it is hidden too).
+- ✅ F-074 / F-075 / F-073 (067beb6): `lib/transform/derived-metrics.ts` (payoff, recovery factor, expectancy,
+  ported from hft-platform web). MFT Performance panel: Volatility (ann.), Avg Win (replaces Best Trade),
+  Avg Loss, Payoff Ratio, Recovery Factor. Yearly Statistics: Expectancy replaces Profit/Tick. Longest Recovery
+  reads `RunSummary.longest_recovery_days` (backend epoch-day bug fixed in hft-platform f4569f2), local
+  derivation only as fallback. Run 01a0a2b5: Vol +8.99%, Avg Win 498,421, Avg Loss −224,542, Payoff 2.22,
+  RF 0.31, Longest Recovery 385.0d.
+- NOTE: Live trade "Active Strategies" reads 0/8 while the unfiltered table shows 5 rows (pre-existing).
+- NOTE: Rolling Sharpe (F-016, Ongoing): wired — live samples while running, equity-derived when finished — but
+  the live half waits on F-060, and the live series is annualized while the equity one is not.

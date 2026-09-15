@@ -195,7 +195,7 @@ describe("run-as-mft", () => {
       ]);
       // Jan's only sample is its own value (10) over 100 capital = +10%.
       expect(rows[0].cagr).toBeCloseTo(0.1, 10);
-      expect(rows[6].cagr).toBeCloseTo(0.05, 10); // Jul: 15 - 15 (no prior sample in-bucket) ... see below
+      expect(rows[6].cagr).toBeCloseTo(0.05, 10); // Jul: 15 - 10 (prior sample in Jan) = +5%
       expect(rows[1].cagr).toBeUndefined(); // Feb has no PnL sample at all
     });
 

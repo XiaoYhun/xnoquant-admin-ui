@@ -231,6 +231,9 @@ export function bucketedSummaryRows(
 ): SummaryTableItem[] {
   const capital = startingCapital(wholeSummary);
   const buckets = mode === "month" ? [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] : [1, 2, 3, 4];
+  // Deltas against the previous sample on the WHOLE curve, so a bucket with one point still
+  // measures growth from the last sample before it (Jan's first sample carries its own value).
+  const pnlDeltas = toPeriodChanges(series.pnls);
 
   return buckets.map((n) => {
     const time = mode === "month" ? MONTH_LABELS[n - 1] : `Q${n}`;
@@ -252,10 +255,10 @@ export function bucketedSummaryRows(
       }
     }
 
-    const pnlSlice = series.pnls.filter((p) => inBucket(p.t));
-    const start = pnlSlice[0]?.v ?? 0;
-    const end = pnlSlice[pnlSlice.length - 1]?.v ?? 0;
-    const cagr = capital && pnlSlice.length ? (end - start) / capital : undefined;
+    const deltas = pnlDeltas.filter((p) => inBucket(p.t));
+    const cagr = capital && deltas.length
+      ? deltas.reduce((sum, p) => sum + p.v, 0) / capital
+      : undefined;
     const maxDd = maxDrawdown(series.drawdown.filter((p) => inBucket(p.t)));
     return {
       time,

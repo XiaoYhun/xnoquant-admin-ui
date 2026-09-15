@@ -460,15 +460,29 @@ Compared our run detail with hft-dev.xnoquant.io on MFT backtest `01a0a047` (#43
   shows `execution-detail.slippage_avg_bps` (0.79 bp, signed per-fill). Left as is — different metrics.
 - ⛔ F-067 PnL curve in run list — blocked: `pnl_sparkline` exists neither in the deployed OpenAPI `Run` schema
   nor on any hft-platform branch.
-- ⬜ F-056 Paper list: Stop a running run + Demote a stopped one (Action cell has only Promote today).
-- ⬜ F-058 Backtest list "Start paper trading" is a log-only stub (`backtest-runs-table.tsx`); launching paper
-  needs the strategy in the paper basket (`launchMode`).
-- ⬜ F-063 MFT Overview "Yearly Summary": only CAGR is filled; Sharpe / Max DD / Profit factor / Calmar blank.
-- ⬜ F-064 Gross Return row blank in Yearly Statistics.
-- ⬜ F-057 Best / Worst / Positive months — reference derives them from equity points (`pnl-buckets.ts`).
-- ⬜ F-066 Remove the sidebar HFT/MFT toggle, move it into a filter (only the sidebar and Create Strategy read it).
-- ⬜ F-069 MFT Equity Curve: drop the chart's own All/1M/3M/1W pills — the Period filter above already scopes it.
-- ⬜ F-046 Results by Month / Quarter / Year, max 5 years — `/periodic-summary` has no granularity param, so
-  month/quarter buckets would come from the equity curve.
-- ⬜ F-037 Orderbook for any symbol — core already works (whole catalog, any venue); the note asks for a
-  venue → account → symbol picker on top.
+- ✅ F-056 … F-070 — see "Lark batch 2" below.
+
+## Lark batch 2 (2026-09-15) — F-056, F-058, F-063, F-064, F-057, F-066, F-069, F-046, F-070, F-037, F-053 — tsc + eslint clean, 286/286 vitest, browser-verified
+Four Sonnet agents did most of it; they hit the session limit mid-way, and a Cursor session committed their
+partial work as d0a602b / ad9b1b8. Finished and fixed forward here: 2af4071, 70ca25a, 8592121.
+- ✅ F-066 HFT/MFT lab switch removed (sidebar toggle, `store/mode-store.ts`, nav `modes`); Create Strategy always
+  loads HFT strategies; remembered editor tab is one id. XALPHA-only editor paths (`useEditors`, `type === "mft"`
+  branches in create-strategy/page.tsx) are now unreachable but left in place.
+- ✅ F-037 Orderbook rail: Venue → Account → Symbol, self-contained (no longer follows the market tab). Default =
+  first venue whose stream opens a book (Binance; SSI only with an account), BTCUSDT on Binance. DNSE/TCBS stay
+  pickable and show the backend's own refusal — `lib/sse-proxy.ts` now forwards non-2xx bodies. No SSI venue has
+  catalog symbols on dev, so the SSI account path is code-verified only.
+- ✅ F-053 `components/owner-filter.tsx` (search + multi-select, name/email) on Strategy List, filtered
+  client-side. ⛔ Run lists: `GET /api/runs` has no owner parameter (backend `RunsQuery`) — needs the backend.
+- ✅ F-056 Paper list: Stop on running rows (owner/admin), Demote on stopped rows whose strategy is in the paper
+  basket (admin, confirm dialog). Rendered and dialog opened/cancelled only — no real run was stopped or demoted.
+- ✅ F-058 "Start paper trading" (Backtesting list + run detail header): paper-approved → launch dialog in Paper
+  mode; not approved → admin "Promote to paper" first (non-admin: disabled + reason). The dialog is seeded from
+  the backtest's own data kind (Bar + interval for MFT). Verified up to the dialogs; nothing launched/promoted.
+- ✅ F-046 Period row Mo | Qtr | Ytd (quarter pills Q1/2026…), year pills capped to the 5 most recent years.
+- ✅ F-070 Overview table follows the toggle: Yearly / Monthly / Quarterly Summary.
+- ✅ F-063 Yearly Summary fills Sharpe / CAGR / Max DD / Profit factor / Calmar from `/periodic-summary`.
+- ✅ F-064 Gross Return filled per year. ✅ F-057 Best/Worst/Positive months from equity deltas — fixed so each
+  year is bucketed over the whole curve (was crediting a year's first month with all prior PnL).
+- ✅ F-069 Equity Curve's All/1M/3M/1W pills removed. ✅ MFT Overview KPI sparklines hidden (one-line revert).
+- NOTE: Monthly/Quarterly tables still head the return column "CAGR"; MFT Max Drawdown reads "+10.10%" (pre-existing).

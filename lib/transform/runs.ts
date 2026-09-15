@@ -197,6 +197,7 @@ export function toPaperRunRow(run: Run): PaperRunRow {
     accounts: accountNames(manifest),
     symbols: symbolRows(manifest),
     timeframe: timeframeLabel(manifest.data_kind),
+    barInterval: manifest.data_kind?.kind === "bar" ? manifest.data_kind.interval : undefined,
     strategyId: run.strategy_id ?? manifest.strategy.id,
     symbolIds: manifest.symbols.map((s) => s.id),
     executionType: manifest.strategy.strategy_type,

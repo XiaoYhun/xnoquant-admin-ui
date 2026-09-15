@@ -89,6 +89,13 @@ export function BacktestRunsTable({
   // the Strategy List's own SimulateModal usage).
   const [hftMarket, setHftMarket] = useState("tick-l2");
   const [hftInterval, setHftInterval] = useState("1m");
+  // Seed the launch dialog from the backtest itself: an MFT (bar) backtest starts paper on the same
+  // bars, not on the dialog's tick default.
+  const openLaunch = (r: PaperRunRow) => {
+    setHftMarket(r.barInterval ? "bar-ohlc" : "tick-l2");
+    if (r.barInterval) setHftInterval(r.barInterval);
+    setPendingLaunch(r);
+  };
 
   const handleStop = async (r: PaperRunRow) => {
     try {
@@ -231,7 +238,7 @@ export function BacktestRunsTable({
                             onClick={(e) => {
                               e.stopPropagation();
                               if (paperBlocked) return;
-                              if (paperMode === "paper") setPendingLaunch(r);
+                              if (paperMode === "paper") openLaunch(r);
                               else setPendingPromote(r); // paperMode === "backtest" && isAdmin
                             }}
                             className="inline-flex size-[30px] cursor-pointer items-center justify-center rounded-lg bg-surface p-1.5 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
@@ -315,7 +322,7 @@ export function BacktestRunsTable({
           onPromoted={() => {
             const run = pendingPromote;
             setPendingPromote(null);
-            setPendingLaunch(run);
+            openLaunch(run);
           }}
         />
       )}

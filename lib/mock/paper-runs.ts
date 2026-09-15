@@ -53,6 +53,8 @@ export type PaperRunRow = {
   accounts: string[];
   symbols: { symbol: string; market: string }[];
   timeframe: string;
+  /** The bar size ("5m", "1h", …) of a bar-mode run's `data_kind`; unset for tick runs. */
+  barInterval?: string;
   strategyId: string | null;
   symbolIds: string[];
   executionType: StrategyType;

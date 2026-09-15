@@ -873,6 +873,13 @@ function RunDetailBody({
   const [paperLaunchOpen, setPaperLaunchOpen] = useState(false);
   const [hftMarket, setHftMarket] = useState("tick-l2");
   const [hftInterval, setHftInterval] = useState("1m");
+  // Seeded from this backtest's own data kind, so an MFT (bar) run starts paper on the same bars
+  // rather than the dialog's tick default.
+  const openPaperLaunch = () => {
+    setHftMarket(run.barInterval ? "bar-ohlc" : "tick-l2");
+    if (run.barInterval) setHftInterval(run.barInterval);
+    setPaperLaunchOpen(true);
+  };
   const panelPaperMode = panelStrategy ? launchMode(panelStrategy) : undefined;
   const startPaperBlocked = !panelStrategy
     ? "Strategy not found."
@@ -883,7 +890,7 @@ function RunDetailBody({
         : undefined;
   const handleStartPaper = () => {
     if (startPaperBlocked) return;
-    if (panelPaperMode === "paper") setPaperLaunchOpen(true);
+    if (panelPaperMode === "paper") openPaperLaunch();
     else setPaperPromoteOpen(true); // panelPaperMode === "backtest" && isAdmin
   };
   const visibleTabs = tabsFor(run.mode);
@@ -1022,7 +1029,7 @@ function RunDetailBody({
           basedOnRunId={run.id}
           onPromoted={() => {
             setPaperPromoteOpen(false);
-            setPaperLaunchOpen(true);
+            openPaperLaunch();
           }}
         />
       )}

@@ -143,7 +143,7 @@ export function RowActions({
   // Create Strategy restores its tab from this store on mount, so setting it is the whole
   // handoff — no route param to thread through a page that doesn't read one.
   const openInEditor = () => {
-    setRememberedEditor("hft", strategy.id);
+    setRememberedEditor(strategy.id);
     router.push("/create-strategy");
   };
 

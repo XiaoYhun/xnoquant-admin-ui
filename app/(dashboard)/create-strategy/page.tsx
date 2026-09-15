@@ -11,11 +11,10 @@ import { ResultsPanel, type ResultsPanelTab } from "./results-panel";
 import { shortRunId } from "@/lib/utils";
 import type { Run } from "@/types/domain";
 import { type EditorTab } from "@/lib/mock/strategy-builder";
-import { useEditors, useCreateEditor, useSimulateEditor, useUpdateEditor, useDeleteEditor, fetchEditors } from "@/hooks/api/use-strategy-builder";
+import { useCreateEditor, useSimulateEditor, useUpdateEditor, useDeleteEditor, fetchEditors } from "@/hooks/api/use-strategy-builder";
 import { useHftStrategies, useHftStrategy, toEditorTab, useCreateHftStrategy, useUpdateHftStrategy, useDeleteHftStrategy, type HftStrategyType, type FeatureDef } from "@/hooks/api/use-hft-strategies";
 import { CreateStrategyModal } from "@/components/layout/create-strategy-modal";
 import { useConsoleLog } from "@/store/console-log-store";
-import { useMode, type Mode } from "@/store/mode-store";
 import { useActiveEditorStore } from "@/store/active-editor-store";
 import { useAuth } from "@/hooks/use-auth";
 import { canMutate } from "@/lib/rbac";
@@ -76,34 +75,28 @@ function ResizableSplit({ left, right }: { left: ReactNode; right: ReactNode }) 
 }
 
 export default function Page() {
-  const mode = useMode();
-  const { data: mftEditors } = useEditors();
   const { data: hftStrategies } = useHftStrategies();
   // The builder wants editor tabs; the query now yields raw records so the Strategy List can read
-  // versions and approvals off the same cache entry.
+  // versions and approvals off the same cache entry. `hftEditors` becomes `[]` (not undefined)
+  // even on failure, so a down HFT backend never blocks the page.
   const hftEditors = useMemo(() => hftStrategies?.map(toEditorTab), [hftStrategies]);
-  // Editors are scoped to the active lab mode: HFT lab shows only HFT strategies, MFT lab only
-  // MFT editors (Figma 13964-56847). Wait for the active mode's list to settle. `hftEditors`
-  // becomes `[]` (not undefined) even on failure, so a down HFT backend never blocks the page.
-  const list = mode === "hft" ? hftEditors : mftEditors;
-  if (list === undefined) {
+  if (hftEditors === undefined) {
     return <div className="min-h-0 flex-1 bg-surface p-3" />;
   }
   const createdAt = (e: EditorTab) => (e.created_at ? new Date(e.created_at).getTime() : 0);
-  const editorsForMode = [...list].sort((a, b) => createdAt(a) - createdAt(b));
-  // Remount per mode so each lab is its own workspace (fresh active tab + local editor state).
-  return <StrategyBuilder key={mode} mode={mode} initialEditors={editorsForMode} />;
+  const sortedEditors = [...hftEditors].sort((a, b) => createdAt(a) - createdAt(b));
+  return <StrategyBuilder initialEditors={sortedEditors} />;
 }
 
-function StrategyBuilder({ mode, initialEditors }: { mode: Mode; initialEditors: EditorTab[] }) {
+function StrategyBuilder({ initialEditors }: { initialEditors: EditorTab[] }) {
   const [editors, setEditors] = useState<EditorTab[]>(initialEditors);
   // Baseline of what is on the server, so Save can be offered only when the code actually differs.
   const [savedCodes, setSavedCodes] = useState<Record<string, string>>(() =>
     Object.fromEntries(initialEditors.map((e) => [e.id, e.code])),
   );
-  // Restore the tab this lab was last on. Validated against what actually loaded: a remembered
-  // strategy may have been deleted since, or belong to another account on this browser.
-  const rememberedId = useActiveEditorStore((s) => s.byMode[mode]);
+  // Restore the last-active tab. Validated against what actually loaded: a remembered strategy
+  // may have been deleted since, or belong to another account on this browser.
+  const rememberedId = useActiveEditorStore((s) => s.activeEditorId);
   const setRememberedEditor = useActiveEditorStore((s) => s.setActiveEditor);
   const [activeId, setActiveIdState] = useState(() =>
     rememberedId && initialEditors.some((e) => e.id === rememberedId)
@@ -113,7 +106,7 @@ function StrategyBuilder({ mode, initialEditors }: { mode: Mode; initialEditors:
   // Every selection goes through here so the remembered tab can't drift from the rendered one.
   const setActiveId = (id: string) => {
     setActiveIdState(id);
-    setRememberedEditor(mode, id);
+    setRememberedEditor(id);
   };
   const active = editors.find((e) => e.id === activeId) ?? editors[0];
   const [consoleOpen, setConsoleOpen] = useState(true);
@@ -344,11 +337,11 @@ function StrategyBuilder({ mode, initialEditors }: { mode: Mode; initialEditors:
           </div>
         ) : (
           <div className="flex flex-1 items-center justify-center p-6 text-center text-sm text-muted-foreground">
-            No {mode.toUpperCase()} strategies yet — click the + above to create one.
+            No HFT strategies yet — click the + above to create one.
           </div>
         )}
       </main>
-      <CreateStrategyModal open={createOpen} onOpenChange={setCreateOpen} onConfirm={addEditor} mode={mode} />
+      <CreateStrategyModal open={createOpen} onOpenChange={setCreateOpen} onConfirm={addEditor} mode="hft" />
     </div>
   );
 }

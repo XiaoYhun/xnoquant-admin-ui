@@ -367,6 +367,8 @@ export function MftResultsView({
             runId={runId}
             sample={sample}
             granularity={granularity}
+            availableMonths={availableMonths}
+            availableQuarters={availableQuarters}
           />
         )}
         {view === "Performance" && (

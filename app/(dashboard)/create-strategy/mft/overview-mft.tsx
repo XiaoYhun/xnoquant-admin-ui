@@ -262,6 +262,8 @@ export function OverviewMft({
   runId,
   sample,
   granularity,
+  availableMonths,
+  availableQuarters,
 }: {
   strategyId?: string;
   stage: string;
@@ -270,6 +272,11 @@ export function OverviewMft({
   sample?: SampleScope;
   /** The Period row's Mo/Qtr/Ytd toggle — picks which summary table variant renders below. */
   granularity: Granularity;
+  /** F-071: months (1-12) / quarters (1-4) `period.year`'s series actually covers — same values
+      the Period row's own Mo/Qtr pills are filtered to, so the Monthly/Quarterly Summary table
+      below hides the same "—" rows those pills hide. */
+  availableMonths: number[];
+  availableQuarters: number[];
 }) {
   // `period` scopes `perf`/`summary` to the selected year (see summaryForPeriod) — this is the KPI
   // cards' and metric strip's own Period pill, not just the charts'.
@@ -317,14 +324,29 @@ export function OverviewMft({
   );
   const bucketRows = useMemo(() => {
     if (granularity === "Ytd" || period.year == null) return undefined;
-    return bucketedSummaryRows(
+    const rows = bucketedSummaryRows(
       granularity === "Mo" ? "month" : "quarter",
       period.year,
       { pnls: stagePnls, returns: stageReturns, drawdown: stageDrawdown },
       src.periods,
       src.summary,
     );
-  }, [granularity, period.year, stagePnls, stageReturns, stageDrawdown, src.periods, src.summary]);
+    // F-071: bucketedSummaryRows always returns one row per calendar month/quarter, in bucket
+    // order (index i = bucket i+1) — drop the ones outside the run's own coverage so the table
+    // agrees with the Period row's Mo/Qtr pills above it, instead of listing them as all "—".
+    const available = granularity === "Mo" ? availableMonths : availableQuarters;
+    return rows.filter((_, i) => available.includes(i + 1));
+  }, [
+    granularity,
+    period.year,
+    stagePnls,
+    stageReturns,
+    stageDrawdown,
+    src.periods,
+    src.summary,
+    availableMonths,
+    availableQuarters,
+  ]);
   // F-046: at most the 5 most recent years, same cap as the Period row's own year pills.
   const yearlyRows = summaryRows?.slice(-5);
   const tableRows = granularity === "Ytd" ? yearlyRows : bucketRows;

@@ -3,7 +3,9 @@
 // volatility regime and the regime breakdown table.
 //
 // `/api/runs/{id}/volatility-regime` covers the ATR buckets (low/normal/high Sharpe, % PnL).
-// Peak-hour concentration is on `/summary`. Session-hour bars and Top-3 Hours have no endpoint.
+// Peak-hour concentration is on `/summary`. Session-hour bars and Top-3 Hours come off
+// `/risk-detail`'s `hourly_pnl` — undefined on the XALPHA strategy/stage feed (no `runId`), which
+// keeps the empty state it always had.
 import { useMemo } from "react";
 import type { EChartsOption } from "echarts";
 
@@ -17,10 +19,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useRunSummary, useRunVolatilityRegime } from "@/hooks/api/use-runs";
-import { formatAmount } from "@/lib/utils";
+import { useRunCurrency, useRunRiskDetail, useRunSummary, useRunVolatilityRegime } from "@/hooks/api/use-runs";
+import { formatAmount, formatSignedAmount } from "@/lib/utils";
+import { currencySymbol } from "@/lib/transform/runs";
 import type { PeriodSelection } from "@/lib/transform/mft-results";
-import type { VolRegimeBucket, VolRegimeSummary } from "@/types/domain";
+import { buildHourlyPnlOption, toHourlyPnlBars, topHoursByShare } from "@/lib/transform/run-detail";
+import type { SampleScope, VolRegimeBucket, VolRegimeSummary } from "@/types/domain";
 import {
   ChartCard,
   EMPTY,
@@ -106,14 +110,18 @@ function bucketRow(label: string, bucket: VolRegimeBucket | undefined) {
 
 export function RegimeMft({
   runId,
+  sample,
 }: {
   strategyId?: string;
   stage: string;
   period: PeriodSelection;
   runId?: string;
+  sample?: SampleScope;
 }) {
-  const volQ = useRunVolatilityRegime(runId);
-  const summaryQ = useRunSummary(runId);
+  const volQ = useRunVolatilityRegime(runId, sample);
+  const summaryQ = useRunSummary(runId, sample);
+  const riskQ = useRunRiskDetail(runId, sample);
+  const currency = useRunCurrency(runId);
   const data = volQ.data ?? undefined;
   const labels = regimeLabels(data);
 
@@ -125,13 +133,19 @@ export function RegimeMft({
         ? peakHour * 100
         : peakHour;
 
+  const top3 = useMemo(() => topHoursByShare(riskQ.data?.hourly_pnl ?? [], 3), [riskQ.data]);
+
   const metrics: Metric[] = [
     {
       label: "Peak Hour Concentration",
       value: peakHourPct == null ? EMPTY : `${formatAmount(peakHourPct, 1)}%`,
       tone: peakHourPct == null ? undefined : GREEN_TEXT,
     },
-    { label: "Top-3 Hours", value: EMPTY },
+    {
+      label: "Top-3 Hours",
+      value: top3.hours.length ? top3.hours.map((h) => `${String(h).padStart(2, "0")}:00`).join(", ") : EMPTY,
+      sub: top3.totalSharePct == null ? undefined : `${formatAmount(top3.totalSharePct * 100, 1)}% of PnL`,
+    },
     {
       label: "Low Vol Sharpe",
       value: num(data?.low_vol.sharpe),
@@ -143,6 +157,21 @@ export function RegimeMft({
       sub: data ? labels.highSub : undefined,
     },
   ];
+
+  const hourlyBars = useMemo(() => toHourlyPnlBars(riskQ.data?.hourly_pnl ?? []), [riskQ.data]);
+  const hourlyOption = useMemo(
+    () => buildHourlyPnlOption(hourlyBars, (n) => `${formatSignedAmount(n, 0)} ${currencySymbol(currency)}`),
+    [hourlyBars, currency],
+  );
+  const hourlyStatus = chartStatus({
+    idle: !runId,
+    loading: riskQ.isLoading,
+    error: riskQ.isError,
+    empty: !riskQ.data?.hourly_pnl?.length,
+  });
+  const hourlyDetail = riskQ.isError
+    ? "Hour-of-day PnL could not be loaded."
+    : "No hour-of-day PnL for this run.";
 
   const sharpeValues = useMemo(
     () => [data?.low_vol.sharpe ?? null, data?.normal_vol.sharpe ?? null, data?.high_vol.sharpe ?? null],
@@ -173,12 +202,10 @@ export function RegimeMft({
     <div className="flex min-w-0 flex-col gap-4">
       <MetricPanel rows={[metrics]} />
 
-      <ChartCard title="PnL by session hour">
-        <ChartState
-          status="empty"
-          height={196}
-          detail="Hour-of-day PnL is not on the volatility-regime or summary APIs."
-        />
+      <ChartCard title="PnL by session hour (UTC)">
+        <ChartState status={hourlyStatus} height={196} detail={hourlyDetail}>
+          <BaseChart option={hourlyOption} style={{ height: 196 }} />
+        </ChartState>
       </ChartCard>
 
       <ChartCard title="Sharpe by volatility regime">

@@ -25,6 +25,7 @@ import {
   type Point,
 } from "@/lib/transform/mft-results";
 import { useMftResultsSource } from "@/hooks/api/use-mft-results-source";
+import type { SampleScope } from "@/types/domain";
 import {
   ChartCard,
   EMPTY,
@@ -274,17 +275,19 @@ export function OverviewMft({
   stage,
   period,
   runId,
+  sample,
 }: {
   strategyId?: string;
   stage: string;
   period: PeriodSelection;
   runId?: string;
+  sample?: SampleScope;
 }) {
   const [range, setRange] = useState<Range>("All");
 
   // `period` scopes `perf`/`summary` to the selected year (see summaryForPeriod) — this is the KPI
   // cards' and metric strip's own Period pill, not just the charts'.
-  const src = useMftResultsSource({ strategyId, stage, runId, period });
+  const src = useMftResultsSource({ strategyId, stage, runId, period, sample });
   const pnls = src.pnls;
   // Run-only figures, with no counterpart on the XALPHA strategy/stage payload the same strip
   // renders for a stage-scoped view.
@@ -322,6 +325,9 @@ export function OverviewMft({
   const tradingDays = returnPts.length || undefined;
 
   const netPnl = a?.end_value != null && a?.start_value != null ? a.end_value - a.start_value : undefined;
+  const fee = a?.total_fee;
+  const net = p?.cumulative_return;
+  const costDrag = fee != null && net != null && net + fee !== 0 ? fee / (net + fee) : undefined;
 
   const cards: KpiCard[] = [
     {
@@ -345,10 +351,11 @@ export function OverviewMft({
     // Turnover is not reported by the MFT engine, so return-per-unit-of-turnover has no source.
     { label: "Return / Turnover", value: EMPTY },
     {
-      // Fees are reported as a positive magnitude; shown here as the drag they are.
+      // Cost ÷ gross, the same drag Cost & Edge shows: `total_fee` is a fraction of capital, and
+      // gross = net + fee on that same basis. Shown negative, as the drag it is.
       label: "Cost Drag",
-      value: a?.total_fee == null ? EMPTY : pctFromRatio(-Math.abs(a.total_fee)),
-      tone: a?.total_fee == null ? undefined : RED_TEXT,
+      value: costDrag == null ? EMPTY : pctFromRatio(-Math.abs(costDrag)),
+      tone: costDrag == null ? undefined : RED_TEXT,
     },
     // Capacity analysis is an HFT-only artifact; nothing in /performance approximates it.
     { label: "Max Capacity", value: EMPTY },

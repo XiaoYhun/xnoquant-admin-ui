@@ -29,7 +29,7 @@ import {
   type Metric,
 } from "./results-chrome";
 import { YearlyStatistics, statisticsYears, type Scope } from "./yearly-statistics";
-import type { RunSummary } from "@/types/domain";
+import type { RunSummary, SampleScope } from "@/types/domain";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -188,11 +188,13 @@ export function PerformanceMft({
   stage,
   period,
   runId,
+  sample,
 }: {
   strategyId?: string;
   stage: string;
   period: PeriodSelection;
   runId?: string;
+  sample?: SampleScope;
 }) {
   // `period` is deliberately NOT passed here. `src.perf`/`src.summary` feed both the ratio panel
   // above and, via `scopeFor(undefined)` below, the Yearly Statistics grid's "All" column — which
@@ -201,7 +203,7 @@ export function PerformanceMft({
   // too. The top ratio panel therefore keeps showing whole-run figures — a known gap, not this
   // screen's fix (the reported bug was Overview's KPI cards and metric strip; see overview-mft.tsx,
   // risk-mft.tsx, execution-mft.tsx and cost-edge-mft.tsx, none of which have this conflict).
-  const src = useMftResultsSource({ strategyId, stage, runId });
+  const src = useMftResultsSource({ strategyId, stage, runId, sample });
   const perf = src.perf;
   const summaryRows = src.summaryRows;
   // `/periodic-summary` buckets by label ("2018", or "2018 Q3" on a sub-year backtest); the year

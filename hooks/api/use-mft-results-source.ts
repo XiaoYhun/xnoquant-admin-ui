@@ -6,7 +6,7 @@ import { runToMftCharts, runToMftPerf, runToMftSummaryRows, summaryForPeriod } f
 import type { StrategyChartData, SummaryTableItem } from "@/hooks/api/use-strategy-results";
 import type { StrategyPerformanceDetail } from "@/hooks/api/use-strategy-performance";
 import type { PeriodSelection } from "@/lib/transform/mft-results";
-import type { PeriodSummary, RunSummary } from "@/types/domain";
+import type { PeriodSummary, RunSummary, SampleScope } from "@/types/domain";
 
 type ChartQ = {
   data: StrategyChartData | undefined;
@@ -20,6 +20,7 @@ export function useMftResultsSource({
   stage,
   runId,
   period,
+  sample,
 }: {
   strategyId?: string;
   stage?: string;
@@ -30,6 +31,12 @@ export function useMftResultsSource({
    * the whole run, which is what every caller got before this existed.
    */
   period?: PeriodSelection;
+  /**
+   * The "Period: All | IS | OS" row's selection (`?sample=` on every run-result endpoint —
+   * SampleScope in types/domain.ts). Ignored on the XALPHA strategy/stage path, which has no
+   * concept of a backtest split.
+   */
+  sample?: SampleScope;
 }): {
   perf: StrategyPerformanceDetail | undefined;
   /**
@@ -50,9 +57,9 @@ export function useMftResultsSource({
   drawdown: ChartQ;
   sharpe: ChartQ;
 } {
-  const equityQ = useRunEquity(runId);
-  const summaryQ = useRunSummary(runId);
-  const periodsQ = useRunPeriodicSummary(runId);
+  const equityQ = useRunEquity(runId, sample);
+  const summaryQ = useRunSummary(runId, sample);
+  const periodsQ = useRunPeriodicSummary(runId, sample);
   // Dropped rather than rendered when the run's artifacts were too big to compute over — see
   // `realSummary`. Every panel below then shows its ordinary empty state.
   const summary = realSummary(summaryQ.data);

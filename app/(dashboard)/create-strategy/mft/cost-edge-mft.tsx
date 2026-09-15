@@ -1,14 +1,34 @@
 "use client";
 // MFT Results → "Cost & Edge" (Figma 15212:62900). Cost panel, the cost-breakdown donut, the
-// cumulative cost/gross curve and the gross-to-net waterfall.
+// cumulative cost/gross curve, turnover, the gross-to-net waterfall and the PnL attribution table.
 //
-// MFT reports ONE fee figure for the whole run (`analysis.total_fee`). That is enough for the
-// panel and for the waterfall's two endpoints, but not for the commission/tax/slippage split the
-// donut and the middle waterfall rows are drawn around.
-import { ChartState } from "@/components/charts/chart-state";
-import { cn, formatAmount } from "@/lib/utils";
-import type { PeriodSelection } from "@/lib/transform/mft-results";
+// The metric panel and the waterfall's two endpoints (Gross/Net PnL) only ever needed
+// `analysis.total_fee` — the MFT-shaped view of `RunSummary.total_fee` (see run-as-mft.ts). The
+// donut, the waterfall's three middle rows, the cumulative chart, turnover and PnL attribution are
+// all run-scoped additions: they read `summary` (the run's own `RunSummary`, off
+// `useMftResultsSource` — undefined on the XALPHA strategy/stage feed) plus three fresh endpoints,
+// so they only render once `runId` is set. The XALPHA path keeps every empty state it had before.
+import { useMemo } from "react";
+import type { EChartsOption } from "echarts";
+
+import { BaseChart } from "@/components/charts/base-chart";
+import { ChartState, chartStatus } from "@/components/charts/chart-state";
+import {
+  useRunCostCurve,
+  useRunCurrency,
+  useRunSymbolPnl,
+  useRunTurnover,
+  type CostPoint,
+  type TurnoverPoint,
+} from "@/hooks/api/use-runs";
+import { PnlAttributionTable } from "@/components/pnl-attribution-table";
+import { cn, currencyDigits, formatAmount, formatCompact } from "@/lib/utils";
+import { currencySymbol } from "@/lib/transform/runs";
+import { equityDayLabel, startingCapital } from "@/lib/transform/results";
+import { costBreakdownSlices } from "@/lib/transform/run-detail";
+import { toPoints, type PeriodSelection, type Point } from "@/lib/transform/mft-results";
 import { useMftResultsSource } from "@/hooks/api/use-mft-results-source";
+import type { SampleScope } from "@/types/domain";
 import {
   ChartCard,
   EMPTY,
@@ -80,20 +100,130 @@ function Waterfall({ rows }: { rows: WaterfallRow[] }) {
   );
 }
 
+// Cost Breakdown donut swatches — Commission/Tax match the waterfall's cost-red family loosely but
+// stay distinguishable from each other; Slippage and the single-slice "Total Fee" fallback reuse
+// the blue HFT Cost & Capacity already uses for its own one-slice donut.
+const SLICE_COLORS: Record<string, [string, string]> = {
+  Commission: ["#cfdbf8", "#2d84ff"],
+  Tax: ["#ffe8b8", "#f1c617"],
+  Slippage: ["#ffcce2", "#ff135b"],
+  "Total Fee": ["#cfdbf8", "#2d84ff"],
+};
+
+const grad = (from: string, to: string) => ({
+  type: "linear" as const,
+  x: 0,
+  y: 0,
+  x2: 1,
+  y2: 1,
+  colorStops: [
+    { offset: 0, color: from },
+    { offset: 1, color: to },
+  ],
+});
+
+/**
+ * Step-join the cumulative-fee curve onto the equity/PnL timestamps — same algorithm HFT's
+ * overview-view.tsx uses to build its Gross line from `/cost-curve` + equity, reimplemented here
+ * because the point shapes differ (`Point.t` unix seconds off the MFT series vs `EquityPoint.ts`
+ * epoch ms). `[]` when either side has nothing to join.
+ */
+function joinCostToEquity(equity: Point[], cost: CostPoint[]): { t: number; cost: number; gross: number }[] {
+  if (equity.length === 0 || cost.length === 0) return [];
+  const sorted = [...cost].sort((a, b) => a.ts - b.ts);
+  let i = 0;
+  let cumulative = 0;
+  return equity.map((p) => {
+    const tsMs = p.t * 1000;
+    while (i < sorted.length && sorted[i].ts <= tsMs) {
+      cumulative = sorted[i].cumulative;
+      i += 1;
+    }
+    return { t: p.t, cost: cumulative, gross: p.v + cumulative };
+  });
+}
+
+function costGrossOption(points: { t: number; cost: number; gross: number }[], digits: number): EChartsOption {
+  return {
+    tooltip: { trigger: "axis", valueFormatter: (v: unknown) => formatAmount(Number(v), digits) },
+    legend: { bottom: 0, textStyle: { color: "#9db2ce", fontSize: 10 } },
+    grid: { left: 8, right: 8, top: 16, bottom: 40, containLabel: true },
+    xAxis: {
+      type: "category",
+      data: points.map((p) => equityDayLabel(p.t * 1000)),
+      boundaryGap: false,
+      axisLabel: { fontSize: 10, hideOverlap: true },
+    },
+    yAxis: { type: "value", axisLabel: { fontSize: 10, formatter: (v: string | number) => formatCompact(Number(v)) } },
+    series: [
+      {
+        name: "Gross PnL",
+        type: "line",
+        data: points.map((p) => p.gross),
+        showSymbol: false,
+        lineStyle: { width: 1.5, color: "#67e1c1" },
+      },
+      {
+        name: "Cumulative Cost",
+        type: "line",
+        data: points.map((p) => p.cost),
+        showSymbol: false,
+        lineStyle: { width: 1.5, color: "#ff9783", type: "dashed" },
+      },
+    ],
+  };
+}
+
+/** Running sum of `turnover`, falling back to the endpoint's own `cumulative` when it's present. */
+function cumulativeTurnoverPoints(points: TurnoverPoint[]): { label: string; value: number }[] {
+  const sorted = [...points].sort((a, b) => a.ts - b.ts);
+  let running = 0;
+  return sorted.map((pt) => {
+    running += pt.turnover;
+    return { label: equityDayLabel(pt.ts), value: pt.cumulative ?? running };
+  });
+}
+
+function turnoverOption(points: { label: string; value: number }[]): EChartsOption {
+  return {
+    grid: { left: 8, right: 8, top: 16, bottom: 8, containLabel: true },
+    tooltip: { trigger: "axis", valueFormatter: (v: unknown) => formatCompact(Number(v)) },
+    xAxis: {
+      type: "category",
+      data: points.map((p) => p.label),
+      boundaryGap: false,
+      axisLabel: { fontSize: 10, hideOverlap: true },
+    },
+    yAxis: { type: "value", axisLabel: { fontSize: 10, formatter: (v: string | number) => formatCompact(Number(v)) } },
+    series: [
+      {
+        type: "line",
+        data: points.map((p) => p.value),
+        showSymbol: false,
+        lineStyle: { width: 1.5, color: "#f1c617" },
+      },
+    ],
+  };
+}
+
 export function CostEdgeMft({
   strategyId,
   stage,
   period,
   runId,
+  sample,
 }: {
   strategyId?: string;
   stage: string;
   period: PeriodSelection;
   runId?: string;
+  sample?: SampleScope;
 }) {
-  // `period` scopes `perf` to the selected year — Gross/Net PnL and cost drag here are the same
-  // run-level figures the Overview KPI cards show, just re-laid-out.
-  const { perf } = useMftResultsSource({ strategyId, stage, runId, period });
+  // `period` scopes `perf`/`summary` to the selected year — Gross/Net PnL and cost drag here are
+  // the same run-level figures the Overview KPI cards show, just re-laid-out.
+  const src = useMftResultsSource({ strategyId, stage, runId, period, sample });
+  const perf = src.perf;
+  const summary = src.summary;
   const p = perf?.performance;
   const a = perf?.analysis;
 
@@ -101,6 +231,11 @@ export function CostEdgeMft({
   const cost = a?.total_fee;
   const gross = net != null && cost != null ? net + cost : undefined;
   const trades = a?.total_trades;
+
+  const currency = useRunCurrency(runId);
+  const digits = currencyDigits(currency);
+  // Same basis the waterfall's Gross/Net rows already read (ratio of starting capital).
+  const capital = useMemo(() => startingCapital(summary), [summary]);
 
   const rows: Metric[][] = [
     [
@@ -136,13 +271,94 @@ export function CostEdgeMft({
     ],
   ];
 
+  // Commission/Tax/Slippage as a fraction of capital — same denominator `gross`/`net` above use,
+  // so all five waterfall rows compare on one basis. `null` capital or a missing summary field
+  // (older pre-split runs, or the XALPHA path which has no `summary` at all) leaves a row unfilled.
+  const hasSplit = summary?.commission_total != null && summary?.tax_total != null;
+  const commissionRatio =
+    capital && summary?.commission_total != null ? -(Math.abs(summary.commission_total) / capital) : undefined;
+  const taxRatio = capital && summary?.tax_total != null ? -(Math.abs(summary.tax_total) / capital) : undefined;
+  const slippageRatio =
+    capital && summary?.slippage_total != null ? -(Math.abs(summary.slippage_total) / capital) : undefined;
+
   const waterfall: WaterfallRow[] = [
     { label: "Gross PnL", value: gross, kind: "total" },
-    { label: "− Commission", kind: "step" },
-    { label: "− Tax", kind: "step" },
-    { label: "− Slippage", kind: "step" },
+    { label: "− Commission", value: commissionRatio, kind: "step" },
+    { label: "− Tax", value: taxRatio, kind: "step" },
+    { label: "− Slippage", value: slippageRatio, kind: "step" },
     { label: "Net PnL", value: net, kind: "total" },
   ];
+
+  // Cost Breakdown — commission/tax/slippage when the run recorded the split, else one Total Fee
+  // slice plus slippage (see costBreakdownSlices). `[]` on the XALPHA path (`summary` undefined).
+  const slices = useMemo(() => costBreakdownSlices(summary), [summary]);
+  const sliceTotal = slices.reduce((s, x) => s + x.value, 0);
+  const donutOption = useMemo<EChartsOption>(
+    () => ({
+      tooltip: {
+        trigger: "item",
+        valueFormatter: (v: unknown) => `${formatAmount(Number(v), digits)} ${currencySymbol(currency)}`,
+      },
+      series: [
+        {
+          type: "pie",
+          radius: ["62%", "92%"],
+          center: ["50%", "50%"],
+          avoidLabelOverlap: false,
+          label: { show: false },
+          labelLine: { show: false },
+          data: slices.map((s) => {
+            const [from, to] = SLICE_COLORS[s.key] ?? SLICE_COLORS["Total Fee"];
+            return { name: s.key, value: s.value, itemStyle: { color: grad(from, to), borderWidth: 0 } };
+          }),
+        },
+      ],
+    }),
+    [slices, digits, currency],
+  );
+
+  // Cumulative cost & Gross PnL — `/cost-curve` step-joined onto the run's own PnL series (the
+  // same `pnls` chart Overview draws), same construction as HFT overview-view.tsx's Gross line.
+  const { data: costCurve = [] } = useRunCostCurve(runId, sample);
+  const equityPts = useMemo(() => toPoints(src.pnls.data), [src.pnls.data]);
+  const costGrossPoints = useMemo(() => joinCostToEquity(equityPts, costCurve), [equityPts, costCurve]);
+  const costGrossOpt = useMemo(() => costGrossOption(costGrossPoints, digits), [costGrossPoints, digits]);
+  const costGrossStatus = chartStatus({
+    loading: src.pnls.isLoading,
+    error: src.pnls.isError,
+    empty: costGrossPoints.length === 0,
+  });
+  const costGrossDetail = src.pnls.isError
+    ? "The equity curve for this run could not be loaded."
+    : "No cost/PnL points for this run yet.";
+
+  // Turnover — cumulative traded notional, `/turnover-curve`.
+  const { data: turnover = [], isLoading: turnoverLoading, isError: turnoverError } = useRunTurnover(runId, sample);
+  const turnoverPoints = useMemo(() => cumulativeTurnoverPoints(turnover), [turnover]);
+  const turnoverOpt = useMemo(() => turnoverOption(turnoverPoints), [turnoverPoints]);
+  const turnoverStatus = chartStatus({
+    loading: turnoverLoading,
+    error: turnoverError,
+    empty: turnoverPoints.length === 0,
+  });
+  const turnoverDetail = turnoverError
+    ? "Turnover for this run could not be loaded."
+    : "No turnover has been recorded for this run yet.";
+
+  // PnL attribution — shared with HFT Cost & Capacity rather than a second copy of the table.
+  const {
+    data: symbolPnl = [],
+    isLoading: symbolPnlLoading,
+    isError: symbolPnlError,
+  } = useRunSymbolPnl(runId, sample);
+  const symbolPnlStatus = chartStatus({
+    loading: symbolPnlLoading,
+    error: symbolPnlError,
+    empty: symbolPnl.length === 0,
+  });
+  const symbolPnlDetail = symbolPnlError
+    ? "PnL attribution for this run could not be loaded."
+    : "No per-symbol PnL has been recorded for this run yet.";
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
@@ -150,19 +366,75 @@ export function CostEdgeMft({
 
       <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2">
         <ChartCard title="Cost Breakdown">
-          <ChartState
-            status="empty"
-            detail="MFT reports one combined fee for the run, so commission, tax and slippage cannot be split apart."
-          />
+          {slices.length > 0 ? (
+            <div className="flex min-w-0 flex-wrap items-center justify-center gap-4">
+              <div className="relative size-[148px] shrink-0">
+                <BaseChart option={donutOption} style={{ height: 148 }} />
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1">
+                  <span className="text-[10px] leading-4 text-[#9db2ce]">Total Cost</span>
+                  <span className="text-sm leading-[18px] font-semibold text-white">
+                    {formatAmount(sliceTotal, digits)} {currencySymbol(currency)}
+                  </span>
+                </div>
+              </div>
+              <div className="flex min-w-[160px] flex-1 flex-col gap-2.5">
+                {slices.map((s) => {
+                  const [from, to] = SLICE_COLORS[s.key] ?? SLICE_COLORS["Total Fee"];
+                  return (
+                    <div key={s.key} className="flex min-w-0 items-center gap-2">
+                      <span className="flex min-w-0 flex-1 items-center gap-1">
+                        <span
+                          className="size-3 shrink-0 rounded"
+                          style={{ backgroundImage: `linear-gradient(135deg, ${from} 0%, ${to} 100%)` }}
+                        />
+                        <span className="truncate text-[10px] leading-[14px] text-[#9db2ce]">{s.key}</span>
+                      </span>
+                      <span className="flex shrink-0 items-center gap-1">
+                        <span className="text-xs leading-[18px] font-semibold text-white">
+                          {formatAmount(s.value, digits)}
+                        </span>
+                        <span className="text-[10px] leading-[14px] text-[#9db2ce]">
+                          ({formatAmount(s.share * 100, 0)}%)
+                        </span>
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <ChartState
+              status="empty"
+              detail={
+                runId
+                  ? "No fee has been recorded for this run yet."
+                  : "MFT reports one combined fee for the run, so commission, tax and slippage cannot be split apart."
+              }
+            />
+          )}
         </ChartCard>
 
         <ChartCard title="Cumulative cost & Gross PnL">
-          <ChartState
-            status="empty"
-            detail="Charting cost against gross PnL needs a per-period cost series; only a run-level fee total is returned."
-          />
+          {runId ? (
+            <ChartState status={costGrossStatus} detail={costGrossDetail}>
+              <BaseChart option={costGrossOpt} />
+            </ChartState>
+          ) : (
+            <ChartState
+              status="empty"
+              detail="Charting cost against gross PnL needs a per-period cost series; only a run-level fee total is returned."
+            />
+          )}
         </ChartCard>
       </div>
+
+      {runId && (
+        <ChartCard title="Turnover">
+          <ChartState status={turnoverStatus} detail={turnoverDetail}>
+            <BaseChart option={turnoverOpt} />
+          </ChartState>
+        </ChartCard>
+      )}
 
       <ChartCard title="Gross to Net">
         <div className="flex min-w-0 flex-col gap-4">
@@ -171,14 +443,20 @@ export function CostEdgeMft({
             <span className="rounded-[40px] border border-[#1d2939] bg-[#0a0e14] px-3 py-1 text-[11px] leading-[16px] text-[#9db2ce]">
               Σ Net = Gross − Commission − Tax − Slippage
             </span>
-            <NoSourceNote>
-              {cost == null
-                ? "No fee total for this stage yet."
-                : `MFT reports a single combined cost of ${pctFromRatio(Math.abs(cost))} for this stage, not the per-component split the middle three rows show.`}
-            </NoSourceNote>
+            {cost == null ? (
+              <NoSourceNote>No fee total for this stage yet.</NoSourceNote>
+            ) : !hasSplit ? (
+              <NoSourceNote>
+                {`MFT reports a single combined cost of ${pctFromRatio(Math.abs(cost))} for this stage, not the per-component split the middle three rows show.`}
+              </NoSourceNote>
+            ) : null}
           </div>
         </div>
       </ChartCard>
+
+      {runId && (
+        <PnlAttributionTable rows={symbolPnl} currency={currency} status={symbolPnlStatus} detail={symbolPnlDetail} />
+      )}
     </div>
   );
 }

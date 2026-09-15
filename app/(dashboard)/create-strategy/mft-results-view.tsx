@@ -16,6 +16,7 @@ import {
 } from "@/lib/transform/mft-results";
 import { useMftResultsSource } from "@/hooks/api/use-mft-results-source";
 import { useStrategyById } from "@/hooks/api/use-strategy-run";
+import type { SampleScope } from "@/types/domain";
 import { RunningSimulateScreen } from "./running-simulate-screen";
 import { DropdownPill, PillTabs, SegmentedTabs } from "./mft/results-chrome";
 import { OverviewMft } from "./mft/overview-mft";
@@ -162,10 +163,13 @@ function PeriodRow({
 export function MftResultsView({
   strategyId,
   runId,
+  sample,
 }: {
   strategyId?: string;
   /** When set, results come from the HFT run artifacts instead of XALPHA strategy/stage. */
   runId?: string;
+  /** The "Period: All | IS | OS" row's selection — ignored on the XALPHA strategy/stage feed. */
+  sample?: SampleScope;
 }) {
   const [stage, setStage] = useState<string>("train");
   const [view, setView] = useState<View>("Overview");
@@ -173,11 +177,22 @@ export function MftResultsView({
   const [granularity, setGranularity] = useState<Granularity>("Year");
   const runScoped = !!runId;
 
+  // A sample change can drop the year the Period row (below) has selected — e.g. a year with no
+  // in-sample trades disappears entirely under OS. Reset to "All" rather than leave the pills
+  // pointed at a year no longer in `years`. Compared during render, same pattern as the other
+  // "reset on prop change" syncs in results-tab.tsx.
+  const [prevSample, setPrevSample] = useState(sample);
+  if (prevSample !== sample) {
+    setPrevSample(sample);
+    setPeriod({});
+  }
+
   const { data: strategy, isLoading: strategyLoading } = useStrategyById(runScoped ? undefined : strategyId);
   const src = useMftResultsSource({
     strategyId: runScoped ? undefined : strategyId,
     stage,
     runId,
+    sample,
   });
 
   // The Period pills are built from whatever the series actually covers for this stage, so a
@@ -269,27 +284,28 @@ export function MftResultsView({
         )}
       </div>
 
-      {/* Remount on stage/run change: ECharts merges options by default, so a series that exists
-          for one stage and not the next survives into the following chart and draws data that
-          isn't its own. Keying here also resets each view's local range/window toggles. */}
-      <div key={runId ?? stage} className="min-w-0">
+      {/* Remount on stage/run/sample change: ECharts merges options by default, so a series that
+          exists under one selection and not the next (a year with no in-sample trades vanishing
+          under OS, same idea as a stage change) survives into the following chart and draws data
+          that isn't its own. Keying here also resets each view's local range/window toggles. */}
+      <div key={`${runId ?? stage}:${sample ?? "default"}`} className="min-w-0">
         {view === "Overview" && (
-          <OverviewMft strategyId={strategyId} stage={stage} period={effectivePeriod} runId={runId} />
+          <OverviewMft strategyId={strategyId} stage={stage} period={effectivePeriod} runId={runId} sample={sample} />
         )}
         {view === "Performance" && (
-          <PerformanceMft strategyId={strategyId} stage={stage} period={effectivePeriod} runId={runId} />
+          <PerformanceMft strategyId={strategyId} stage={stage} period={effectivePeriod} runId={runId} sample={sample} />
         )}
         {view === "Risk" && (
-          <RiskMft strategyId={strategyId} stage={stage} period={effectivePeriod} runId={runId} />
+          <RiskMft strategyId={strategyId} stage={stage} period={effectivePeriod} runId={runId} sample={sample} />
         )}
         {view === "Execution" && (
-          <ExecutionMft strategyId={strategyId} stage={stage} period={effectivePeriod} runId={runId} />
+          <ExecutionMft strategyId={strategyId} stage={stage} period={effectivePeriod} runId={runId} sample={sample} />
         )}
         {view === "Cost & Edge" && (
-          <CostEdgeMft strategyId={strategyId} stage={stage} period={effectivePeriod} runId={runId} />
+          <CostEdgeMft strategyId={strategyId} stage={stage} period={effectivePeriod} runId={runId} sample={sample} />
         )}
         {view === "Regime" && (
-          <RegimeMft strategyId={strategyId} stage={stage} period={effectivePeriod} runId={runId} />
+          <RegimeMft strategyId={strategyId} stage={stage} period={effectivePeriod} runId={runId} sample={sample} />
         )}
       </div>
     </div>

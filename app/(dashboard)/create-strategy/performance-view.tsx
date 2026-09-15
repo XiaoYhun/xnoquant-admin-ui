@@ -15,7 +15,7 @@ import type { EChartsOption } from "echarts";
 
 import { BaseChart } from "@/components/charts/base-chart";
 import { chartStatus, type ChartStateProps } from "@/components/charts/chart-state";
-import { useRunCurrency, useRunEquity, useRunSummary } from "@/hooks/api/use-runs";
+import { useRunCurrency, useRunEquity, useRunRiskDetail, useRunSummary } from "@/hooks/api/use-runs";
 import type { SampleScope } from "@/types/domain";
 import { mergeLiveSummary, preferLiveEquity, useLiveSnapshot } from "@/hooks/api/use-run-live-snapshot";
 import {
@@ -33,6 +33,7 @@ import {
   type DayPoint,
   type MonthPnl,
 } from "@/lib/transform/results";
+import { buildHourlyPnlOption, toHourlyPnlBars } from "@/lib/transform/run-detail";
 import { cn, currencyDigits, formatAmount, formatCompact, formatSignedAmount } from "@/lib/utils";
 import { ChartCard, MockNote } from "./results-chart-card";
 
@@ -512,6 +513,34 @@ function DistributionPanel({
 }
 
 // ---------------------------------------------------------------------------
+// PnL by session hour — `/risk-detail`'s `hourly_pnl`. HFT has no Regime tab (unlike MFT), so this
+// is its home for the same chart.
+// ---------------------------------------------------------------------------
+
+function HourlyPnlPanel({
+  bars,
+  currency,
+  digits,
+  state,
+}: {
+  bars: ReturnType<typeof toHourlyPnlBars>;
+  currency: string;
+  digits: number;
+  state: ChartStateProps;
+}) {
+  const moneyFmt = useMemo(
+    () => (n: number) => `${fmtSigned(n, digits)} ${currency}`,
+    [currency, digits],
+  );
+  const option = useMemo(() => buildHourlyPnlOption(bars, moneyFmt), [bars, moneyFmt]);
+  return (
+    <ChartCard title="PnL by session hour (UTC)" {...state}>
+      <BaseChart option={option} />
+    </ChartCard>
+  );
+}
+
+// ---------------------------------------------------------------------------
 
 export function PerformanceView({
   runId,
@@ -581,6 +610,24 @@ export function PerformanceView({
     () => toReturnHistogram(toDailyPnlPoints(equity).map((d) => d.value * scale)),
     [equity, scale],
   );
+
+  const {
+    data: riskDetail,
+    isLoading: riskLoading,
+    isError: riskError,
+  } = useRunRiskDetail(artifactId, sample);
+  const hourlyBars = useMemo(() => toHourlyPnlBars(riskDetail?.hourly_pnl ?? []), [riskDetail]);
+  const hourlyState: ChartStateProps = {
+    status: chartStatus({
+      idle: !runId,
+      loading: riskLoading,
+      error: riskError,
+      empty: !riskDetail?.hourly_pnl?.length,
+    }),
+    detail: riskError
+      ? "Risk detail for this run could not be loaded."
+      : "This run has no hour-of-day PnL yet.",
+  };
 
   const summaryRows = useMemo<[SummaryMetric[], SummaryMetric[]]>(() => {
     if (!summary) return [EMPTY_ROW_1, EMPTY_ROW_2];
@@ -667,6 +714,7 @@ export function PerformanceView({
         <WeeklyPerformancePanel points={weekly} currency={currency} note={note} state={state} />
       </div>
       <DistributionPanel bins={histogram} isPct={isPct} note={note} state={state} />
+      <HourlyPnlPanel bars={hourlyBars} currency={currency} digits={digits} state={hourlyState} />
     </div>
   );
 }

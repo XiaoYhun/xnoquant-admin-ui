@@ -20,8 +20,8 @@ import { RunHistoryPicker } from "./run-history-picker";
 import { RunMetaStrip } from "./run-meta-strip";
 import { LiveSnapshotProvider } from "@/hooks/api/use-run-live-snapshot";
 import { isPendingBacktest, symbolNamesOf, useRun } from "@/hooks/api/use-runs";
-import { useAuth } from "@/hooks/use-auth";
-import type { Run, SampleScope } from "@/types/domain";
+import { useSamplePeriodRow } from "./sample-period-row";
+import type { Run } from "@/types/domain";
 
 // The Figma tab bar (14876:146506) shows five; Latency is kept on the end as a sixth — its
 // per-stage AVG/LAST/MAX cards have no home in the Execution design, which covers latency only as
@@ -32,26 +32,6 @@ const VIEWS = ["Overview", "Performance", "Risk", "Execution", "Cost & Capacity"
 const TAB_LIST = "gap-2 rounded-none bg-transparent p-0";
 const TAB_TRIGGER =
   "rounded-[40px] px-3 py-2 text-sm text-[#9db2ce] data-[state=active]:bg-[#1d2939] data-[state=active]:text-white data-[state=active]:shadow-none";
-
-// Figma 15235:33194 — the "Period:" row, HFT only. Same pill as the view tabs one size down:
-// 12px text, 12px gaps, active = Neutral/Black 800.
-//
-// Wired to `?sample=` on the eight run-result endpoints (SampleScope in types/domain.ts).
-// Backtest runs only — see the gate below.
-const PERIODS = ["All", "IS", "OS"] as const;
-type Period = (typeof PERIODS)[number];
-
-// "All" has to send `all` explicitly — the API's own default is `in_sample`, so omitting the
-// param would quietly narrow the one selection that asks for the whole range.
-const SAMPLE_OF: Record<Period, SampleScope> = {
-  All: "all",
-  IS: "in_sample",
-  OS: "out_of_sample",
-};
-
-const PERIOD_TAB_LIST = "gap-3 rounded-none bg-transparent p-0";
-const PERIOD_TAB_TRIGGER =
-  "rounded-[40px] px-3 py-1 text-xs font-normal leading-[18px] text-[#9db2ce] data-[state=active]:bg-[#1d2939] data-[state=active]:text-white data-[state=active]:shadow-none";
 
 // A failed run wrote no artifacts worth charting — the engine died before or during it — so the
 // six views below would render an all-"—" shell that never says why. Replace them with the reason
@@ -110,7 +90,6 @@ function HftResultsTab({
   focusRun?: Run;
 }) {
   const [view, setView] = useState<string>("Overview");
-  const [period, setPeriod] = useState<Period>("All");
   // Which run the views describe. Undefined = the picker's default (the newest run).
   const [selectedRun, setSelectedRun] = useState<Run | undefined>(undefined);
   // Drop the selection when the strategy tab changes: the picker re-defaults to the new strategy's
@@ -161,22 +140,9 @@ function HftResultsTab({
     );
   }, [selectedRun, qc]);
 
-  // In-sample / out-of-sample is a backtest-only idea — the engine computes `oos_start_date` at
-  // launch and leaves it null for paper/live — so the row belongs to backtest runs and is not
-  // rendered at all for the others. Within a backtest, IS/OS still only describe different data
-  // when the split is actually readable: a run launched before the field existed carries no split,
-  // and a non-admin caller is forced to `in_sample` server-side whatever the client sends. Those
-  // two keep the row but disable IS/OS and pin the selection to All, so it never promises a split
-  // the response won't carry.
-  const { isAdmin } = useAuth();
-  const splitAvailable = isBacktest && isAdmin && selectedRun?.manifest?.oos_start_date != null;
-  const effectivePeriod: Period = splitAvailable ? period : "All";
-  const sample = splitAvailable ? SAMPLE_OF[effectivePeriod] : undefined;
-  const periodHint = splitAvailable
-    ? undefined
-    : isAdmin
-      ? "This run has no in-sample / out-of-sample split."
-      : "Out-of-sample results are admin-only.";
+  // The "Period: All | IS | OS" row — shared by the HFT and MFT branches below (see
+  // sample-period-row.tsx for the backtest/admin/split rules).
+  const { row: periodRow, sample } = useSamplePeriodRow(selectedRun);
 
   const mftRun = isMftTypeRun(selectedRun) && !isLive;
 
@@ -187,11 +153,12 @@ function HftResultsTab({
           <div className="flex flex-wrap items-center justify-end gap-2">
             <RunHistoryPicker strategyId={strategyId} selectedRunId={selectedRun?.id} onSelect={setSelectedRun} />
           </div>
+          {periodRow}
           {failed ? (
             <RunFailedScreen reason={selectedRun?.error} />
           ) : (
             <LiveSnapshotProvider runId={selectedRun?.id} isLive={isLive} symbolNames={symbolNames}>
-              <MftResultsView runId={selectedRun?.id} />
+              <MftResultsView runId={selectedRun?.id} sample={sample} />
             </LiveSnapshotProvider>
           )}
         </>
@@ -210,25 +177,7 @@ function HftResultsTab({
         <RunHistoryPicker strategyId={strategyId} selectedRunId={selectedRun?.id} onSelect={setSelectedRun} />
       </div>
 
-      {isBacktest && (
-        <div className="flex items-center gap-3" title={periodHint}>
-          <span className="text-xs leading-[18px] font-medium text-white">Period:</span>
-          <Tabs value={effectivePeriod} onValueChange={(v) => v && setPeriod(v as Period)}>
-            <TabsList className={PERIOD_TAB_LIST}>
-              {PERIODS.map((p) => (
-                <TabsTrigger
-                  key={p}
-                  value={p}
-                  disabled={!splitAvailable && p !== "All"}
-                  className={PERIOD_TAB_TRIGGER}
-                >
-                  {p}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
-        </div>
-      )}
+      {periodRow}
 
       {/* What the views below are describing: symbols, engine, account, period. Reads the
           selected run's manifest, so it costs nothing beyond what the picker already fetched. */}

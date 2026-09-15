@@ -19,7 +19,13 @@ import type { EChartsOption } from "echarts";
 
 import { BaseChart } from "@/components/charts/base-chart";
 import { chartStatus } from "@/components/charts/chart-state";
-import { useRunCostCurve, useRunCurrency, useRunSummary, useRunTurnover } from "@/hooks/api/use-runs";
+import {
+  useRunCostCurve,
+  useRunCurrency,
+  useRunSummary,
+  useRunSymbolPnl,
+  useRunTurnover,
+} from "@/hooks/api/use-runs";
 import type { SampleScope } from "@/types/domain";
 import { mergeLiveSummary, useLiveSnapshot } from "@/hooks/api/use-run-live-snapshot";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -28,6 +34,7 @@ import { aggregateTurnover, type TurnoverPeriod } from "@/lib/turnover-curve";
 import { costDragPct } from "@/lib/transform/results";
 import { cn, currencyDigits, formatAmount, formatCompact } from "@/lib/utils";
 import { currencySymbol } from "@/lib/transform/runs";
+import { PnlAttributionTable } from "@/components/pnl-attribution-table";
 import { ChartCard } from "./results-chart-card";
 
 // Figma 14180:39849 "Total Fee" swatch — the only component the cost-curve can populate.
@@ -134,6 +141,11 @@ export function CostCapacityView({
     isLoading: turnoverLoading,
     isError: turnoverError,
   } = useRunTurnover(artifactId, sample);
+  const {
+    data: symbolPnl = [],
+    isLoading: symbolPnlLoading,
+    isError: symbolPnlError,
+  } = useRunSymbolPnl(artifactId, sample);
   const [period, setPeriod] = useState<string>("Daily");
 
   const curveTotal = lastCumulative(costCurve);
@@ -254,6 +266,16 @@ export function CostCapacityView({
     ? "Turnover for this run could not be loaded."
     : "No turnover has been recorded for this run yet.";
 
+  const symbolPnlStatus = chartStatus({
+    idle: !runId,
+    loading: symbolPnlLoading,
+    error: symbolPnlError,
+    empty: symbolPnl.length === 0,
+  });
+  const symbolPnlDetail = symbolPnlError
+    ? "PnL attribution for this run could not be loaded."
+    : "No per-symbol PnL has been recorded for this run yet.";
+
   return (
     <div className="flex min-w-0 flex-col gap-4">
       <div className="grid min-w-0 grid-cols-2 gap-4 rounded-xl border border-border bg-[rgba(29,33,38,0.2)] px-3 py-3 sm:grid-cols-4">
@@ -345,6 +367,13 @@ export function CostCapacityView({
           bodyHeight={244}
         />
       </div>
+
+      <PnlAttributionTable
+        rows={symbolPnl}
+        currency={currency}
+        status={symbolPnlStatus}
+        detail={symbolPnlDetail}
+      />
     </div>
   );
 }

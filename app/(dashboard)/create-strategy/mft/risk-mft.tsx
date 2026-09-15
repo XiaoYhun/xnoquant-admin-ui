@@ -26,6 +26,7 @@ import {
   type Point,
 } from "@/lib/transform/mft-results";
 import { useMftResultsSource } from "@/hooks/api/use-mft-results-source";
+import type { SampleScope } from "@/types/domain";
 import {
   ChartCard,
   DropdownPill,
@@ -168,18 +169,20 @@ export function RiskMft({
   stage,
   period,
   runId,
+  sample,
 }: {
   strategyId?: string;
   stage: string;
   period: PeriodSelection;
   runId?: string;
+  sample?: SampleScope;
 }) {
   const [sharpeWindow, setSharpeWindow] = useState<number>(30);
 
   // `period` scopes `perf`/`summary` to the selected year — the top risk panel is a headline
   // figure like Overview's KPI cards, not the Top-5-drawdown table (built from the already
   // period-filtered `drawdownPts` below either way).
-  const src = useMftResultsSource({ strategyId, stage, runId, period });
+  const src = useMftResultsSource({ strategyId, stage, runId, period, sample });
   const perf = src.perf;
   const summary = src.summary;
   const dd = src.drawdown;

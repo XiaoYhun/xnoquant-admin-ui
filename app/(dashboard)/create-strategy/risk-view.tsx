@@ -25,9 +25,10 @@ import {
   useLiveSnapshot,
   type LiveSharpeSample,
 } from "@/hooks/api/use-run-live-snapshot";
-import { realSummary, useRunCurrency, useRunEquity, useRunSummary } from "@/hooks/api/use-runs";
+import { realSummary, useRunCurrency, useRunEquity, useRunRiskDetail, useRunSummary } from "@/hooks/api/use-runs";
 import type { RunSummary, SampleScope } from "@/types/domain";
 import { equityDayLabel, toDrawdown, toRollingSharpe, type DrawdownPoint } from "@/lib/transform/results";
+import { toDrawdownRows } from "@/lib/transform/run-detail";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
@@ -36,9 +37,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { cn, currencyDigits, formatAmount, formatCompact, formatDurationDays } from "@/lib/utils";
 import { currencySymbol } from "@/lib/transform/runs";
 import { MockNote } from "./results-chart-card";
+
+const YELLOW = "#f1c617";
 
 const GRAD_GREEN =
   "bg-[linear-gradient(152deg,#cff8ea_0%,#67e1c1_100%)] bg-clip-text text-transparent";
@@ -400,6 +411,43 @@ function WindowSelect({ value, onChange }: { value: string; onChange: (value: st
   );
 }
 
+// ---------------------------------------------------------------------------
+// Consecutive loss streaks + Top drawdowns — `/risk-detail`. Styled after MFT risk-mft.tsx's
+// "Consecutive loss streaks" chart and "Top 5 drawdown" table so the two engines read as one
+// family; not shared code since that file derives its bars/episodes locally off a different
+// (percent-return) series and this pass leaves it untouched.
+// ---------------------------------------------------------------------------
+
+function lossStreakOption(bars: { streak_len: number; count: number }[]): EChartsOption {
+  return {
+    tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
+    grid: { left: 8, right: 8, top: 28, bottom: 8, containLabel: true },
+    xAxis: {
+      type: "category",
+      data: bars.map((b) => String(b.streak_len)),
+      axisTick: { show: false },
+      axisLabel: { fontSize: 10, color: "#9db2ce" },
+    },
+    yAxis: { type: "value", minInterval: 1, axisLabel: { fontSize: 10 } },
+    series: [
+      {
+        type: "bar",
+        name: "Streaks",
+        data: bars.map((b) => b.count),
+        barMaxWidth: 40,
+        itemStyle: { color: YELLOW, borderRadius: [2, 2, 0, 0] },
+        label: { show: true, position: "top", color: "#9db2ce", fontSize: 10 },
+      },
+    ],
+  };
+}
+
+/** Epoch ms → the equity chart's own `DD/MM/YY` label plus a `HH:MM` time-of-day. */
+function tsLabel(ms: number): string {
+  const d = new Date(ms);
+  return `${equityDayLabel(ms)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export function RiskView({
   runId,
   isLive,
@@ -493,6 +541,28 @@ export function RiskView({
   // Only meaningful once the chart is actually drawing.
   const rollingNote = hasRolling && isLive && liveState === "open" ? "Live" : undefined;
 
+  // Loss streaks + drawdown episodes — `/risk-detail` 409s for the whole life of a running run,
+  // same as every other persisted artifact here.
+  const { data: riskDetail, isLoading: riskLoading, isError: riskError } = useRunRiskDetail(
+    isLive ? undefined : runId,
+    sample,
+  );
+  const streakBars = useMemo(() => riskDetail?.loss_streak_histogram ?? [], [riskDetail]);
+  const streakOption = useMemo(() => lossStreakOption(streakBars), [streakBars]);
+  const streakStatus = chartStatus({
+    idle: !runId,
+    loading: riskLoading,
+    error: riskError,
+    empty: streakBars.length === 0,
+  });
+  const drawdownRows = useMemo(() => toDrawdownRows(riskDetail?.drawdown_episodes ?? []), [riskDetail]);
+  const streakDetail = riskError
+    ? "Risk detail for this run could not be loaded."
+    : "This run never had a losing streak.";
+  const drawdownRowsDetail = riskError
+    ? "Risk detail for this run could not be loaded."
+    : "This run never went underwater.";
+
   return (
     <div className="flex min-w-0 flex-col gap-4">
       <RatioCard summary={summary} currency={currency} />
@@ -534,6 +604,59 @@ export function RiskView({
       >
         <BaseChart option={rollingOption} style={{ height: 260 }} />
       </ChartCard>
+
+      <ChartCard
+        title="Consecutive loss streaks"
+        controls={undefined}
+        status={streakStatus}
+        detail={streakDetail}
+        bodyHeight={240}
+      >
+        <BaseChart option={streakOption} style={{ height: 240 }} />
+      </ChartCard>
+
+      <div className="min-w-0 overflow-hidden rounded-xl border border-border bg-background">
+        <div className="border-b border-border bg-surface px-4 py-3">
+          <span className="text-sm font-medium text-white">Top drawdowns</span>
+        </div>
+        {drawdownRows.length ? (
+          <Table className="table-fixed">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Peak</TableHead>
+                <TableHead>Trough</TableHead>
+                <TableHead className="text-right">Depth</TableHead>
+                <TableHead className="text-right">Length</TableHead>
+                <TableHead className="text-right">Recovery</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {drawdownRows.map((row) => (
+                <TableRow key={`${row.peakTs}-${row.troughTs}`}>
+                  <TableCell className="text-xs text-white">{tsLabel(row.peakTs)}</TableCell>
+                  <TableCell className="text-xs text-white">{tsLabel(row.troughTs)}</TableCell>
+                  <TableCell className={cn("text-right text-xs", GRAD_RED)}>
+                    {money(row.depth, currency)}
+                    {row.depthPct != null && (
+                      <span className="ml-1 text-[10px] text-muted-foreground">
+                        ({formatAmount(row.depthPct * 100, 2)}%)
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right text-xs text-white">
+                    {formatDurationDays(row.lengthDays) ?? DASH}
+                  </TableCell>
+                  <TableCell className="text-right text-xs text-white">
+                    {row.recoveryDays == null ? DASH : formatDurationDays(row.recoveryDays)}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        ) : (
+          <div className="px-4 py-8 text-center text-xs text-muted-foreground">{drawdownRowsDetail}</div>
+        )}
+      </div>
     </div>
   );
 }

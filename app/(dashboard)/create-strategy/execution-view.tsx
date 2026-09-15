@@ -5,10 +5,12 @@
 //
 // Fill Rate / Order-to-trade / Cancel Rate and the "Fill Rate over time" series are derived from
 // the run's trade-cycle console log: `GET /api/runs/{id}/trace/history` (terminal) plus
-// `/trace/stream` (SSE while the run is live). Backtests never journal a trace — those stay empty.
-// Slippage (Avg) comes off `GET /api/runs/{id}/summary` (`slippage_bps`). Avg Latency, Slippage
-// (Std) and Market Impact have no field on either the trace events or the summary, and neither
-// distribution chart has a per-fill source, so all four state that rather than showing a number.
+// `/trace/stream` (SSE while the run is live). Backtests never journal a trace, so Order-to-trade
+// and Cancel Rate fall back to `GET /api/runs/{id}/execution-detail`'s run-level figures there;
+// "Fill Rate over time" itself stays empty (no day-bucketed source on the trace path).
+// Slippage (Avg) stays on `GET /api/runs/{id}/summary` (`slippage_bps`, an unsigned round-trip
+// figure); Avg Latency, Slippage (Std), Market Impact and both distributions come off
+// `/execution-detail`, which carries the per-fill figures the trace/summary never did.
 //
 // Two axes deliberately depart from the Figma frame, where these charts were duplicated from other
 // panels and kept their source data: "Fill Rate over time" is plotted as a percentage (the frame
@@ -21,7 +23,7 @@ import type { EChartsOption } from "echarts";
 import { BaseChart } from "@/components/charts/base-chart";
 import { chartStatus } from "@/components/charts/chart-state";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { realSummary, useRunSummary } from "@/hooks/api/use-runs";
+import { realSummary, useRunExecutionDetail, useRunSummary } from "@/hooks/api/use-runs";
 import { useRunTraceHistory, useRunTraceStream } from "@/hooks/api/use-run-trace";
 import type { SampleScope } from "@/types/domain";
 import {
@@ -29,6 +31,7 @@ import {
   deriveTraceExecutionMetrics,
   type TracePeriod,
 } from "@/lib/trace-execution-metrics";
+import { buildHistogramBarOption, toHistogramBars } from "@/lib/transform/run-detail";
 import { cn, formatAmount } from "@/lib/utils";
 import { ChartCard, MockNote } from "./results-chart-card";
 
@@ -179,10 +182,15 @@ export function ExecutionView({
   sample?: SampleScope;
 }) {
   const [period, setPeriod] = useState<string>("Daily");
-  // `/summary` 409s for the whole life of a running run (its parquet sidecars are mid-write),
-  // and the live frame carries no slippage, so the metric simply stays unavailable there.
-  const { data: rawSummary } = useRunSummary(isLive ? undefined : runId, sample);
+  // Every persisted artifact 409s for the whole life of a running run — the parquet sidecars are
+  // mid-write — so the metrics/charts below it simply stay unavailable there.
+  const artifactId = isLive ? undefined : runId;
+  const { data: rawSummary } = useRunSummary(artifactId, sample);
   const summary = realSummary(rawSummary);
+  const { data: execDetail, isLoading: execLoading, isError: execError } = useRunExecutionDetail(
+    artifactId,
+    sample,
+  );
 
   const { data, isLoading, isError, error } = useRunTraceHistory(runId);
   const { events: streamed, state: streamState } = useRunTraceStream(runId, !!isLive);
@@ -214,20 +222,18 @@ export function ExecutionView({
       value: pct(metrics.fillRatePct ?? summaryFillRatePct),
       tone: "green",
     },
-    { label: "Order to trade Ratio", value: ratio(metrics.orderToTrade) },
-    { label: "Cancel Rate", value: pct(metrics.cancelRatePct) },
-  ];
-  // Only the average has a source. The other three used to carry invented constants that sat
-  // beside the real fill-rate figures and read exactly like them.
-  const bottomRow: Metric[] = [
+    // Backtests never journal a trace, so both fall back to execution-detail's run-level figures.
+    { label: "Order to trade Ratio", value: ratio(metrics.orderToTrade ?? execDetail?.order_to_trade_ratio ?? null) },
     {
-      label: "Avg Latency",
-      value: DASH,
-      unavailable: "Per-order latency is not journaled. The Latency tab shows engine timings while a run is live.",
+      label: "Cancel Rate",
+      value: pct(metrics.cancelRatePct ?? (execDetail ? execDetail.cancel_rate * 100 : null)),
     },
+  ];
+  const bottomRow: Metric[] = [
+    { label: "Avg Latency", value: execDetail ? `${formatAmount(execDetail.avg_latency_ms, 2)} ms` : DASH },
     { label: "Slippage (Avg)", value: bp(summary?.slippage_bps) },
-    { label: "Slippage (Std)", value: DASH, unavailable: "The summary reports mean slippage only, with no dispersion." },
-    { label: "Market Impact", value: DASH, unavailable: "Market impact is not computed by the results API." },
+    { label: "Slippage (Std)", value: bp(execDetail?.slippage_std_bps) },
+    { label: "Market Impact", value: bp(execDetail?.market_impact_bps) },
   ];
 
   const fillStatus = chartStatus({
@@ -255,6 +261,16 @@ export function ExecutionView({
           ? "Live"
           : undefined;
 
+  const slippageBars = useMemo(() => toHistogramBars(execDetail?.slippage_histogram ?? []), [execDetail]);
+  const latencyBars = useMemo(() => toHistogramBars(execDetail?.latency_histogram ?? []), [execDetail]);
+  const slippageOption = useMemo(() => buildHistogramBarOption(slippageBars, "bp"), [slippageBars]);
+  const latencyOption = useMemo(() => buildHistogramBarOption(latencyBars, "ms"), [latencyBars]);
+  const slippageStatus = chartStatus({ idle: !runId, loading: execLoading, error: execError, empty: !slippageBars.length });
+  const latencyStatus = chartStatus({ idle: !runId, loading: execLoading, error: execError, empty: !latencyBars.length });
+  const distributionDetail = execError
+    ? "Execution detail for this run could not be loaded."
+    : "No fills have been recorded for this run yet.";
+
   return (
     <div className="flex min-w-0 flex-col gap-4">
       <MetricCard top={topRow} bottom={bottomRow} />
@@ -275,18 +291,12 @@ export function ExecutionView({
       </ChartCard>
 
       <div className="grid min-w-0 gap-4 lg:grid-cols-2">
-        <ChartCard
-          title="Slippage Distribution"
-          status="empty"
-          detail="Per-fill slippage is not on the trades or trace endpoints, so there is nothing to bucket."
-          bodyHeight={260}
-        />
-        <ChartCard
-          title="Latency Distribution"
-          status="empty"
-          detail="Per-order latency is not journaled. Engine-stage timings are on the Latency tab, live only."
-          bodyHeight={260}
-        />
+        <ChartCard title="Slippage Distribution" status={slippageStatus} detail={distributionDetail} bodyHeight={260}>
+          <BaseChart option={slippageOption} style={{ height: 260 }} />
+        </ChartCard>
+        <ChartCard title="Latency Distribution" status={latencyStatus} detail={distributionDetail} bodyHeight={260}>
+          <BaseChart option={latencyOption} style={{ height: 260 }} />
+        </ChartCard>
       </div>
     </div>
   );

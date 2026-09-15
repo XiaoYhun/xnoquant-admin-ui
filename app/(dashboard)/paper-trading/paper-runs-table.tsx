@@ -149,6 +149,9 @@ export function PaperRunsTable({
           const strategy = r.strategyId ? strategyOf.get(r.strategyId) : undefined;
           const canStop = canMutate(r, { userId, isAdmin }) && r.status === "running";
           const canDemote = isAdmin && r.status === "stopped" && strategy?.paper_approved_version != null;
+          // F-072: Promote-to-live only makes sense once the run has stopped, not while it's
+          // still running.
+          const canPromote = isAdmin && r.status === "stopped";
           return (
           <TableRow
             opaque
@@ -277,8 +280,9 @@ export function PaperRunsTable({
                     <TooltipContent>Demote to {DEMOTE_TARGET.paper}</TooltipContent>
                   </Tooltip>
                 )}
-                {/* Promotion is admin-only (POST /api/promotions/live/{strategy_id}). */}
-                {isAdmin && (
+                {/* Promotion is admin-only (POST /api/promotions/live/{strategy_id}), and only
+                    offered once the run has stopped. */}
+                {canPromote && (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <button

@@ -28,6 +28,7 @@ import {
   toneBySign,
   type Metric,
 } from "./results-chrome";
+import { monthlyReturnPct } from "@/lib/transform/pnl-buckets";
 import { YearlyStatistics, statisticsYears, type Scope } from "./yearly-statistics";
 import type { RunSummary, SampleScope } from "@/types/domain";
 
@@ -243,15 +244,15 @@ export function PerformanceMft({
     () => sliceStage(toPoints(dd.data), dd.data, stage),
     [dd.data, stage],
   );
-  // F-057: the source Best/Worst month and Positive Months read (see Scope.equity in
-  // yearly-statistics.tsx) — same stage-wide, not-period-filtered pattern as returns/drawdown above.
-  const stagePnls = useMemo(
-    () => sliceStage(toPoints(pnls.data), pnls.data, stage),
-    [pnls.data, stage],
-  );
-  // The whole run's implied capital base, constant across every column — `undefined` on the
-  // XALPHA (non-run) path, which has no RunSummary to derive one from.
-  const capitalBase = useMemo(() => startingCapital(src.summary) ?? undefined, [src.summary]);
+  // F-057: the source Best/Worst month and Positive Months read (see Scope.monthlyRows in
+  // yearly-statistics.tsx). Bucketed once over the stage-wide equity curve — each year column then
+  // takes its own rows — because a curve sliced to one year before diffing credits that year's
+  // first month with everything earned before it. `undefined` on the XALPHA (non-run) path, which
+  // has no RunSummary to derive a capital base from.
+  const monthlyRows = useMemo(() => {
+    const capitalBase = startingCapital(src.summary);
+    return capitalBase ? monthlyReturnPct(sliceStage(toPoints(pnls.data), pnls.data, stage), capitalBase) : undefined;
+  }, [pnls.data, stage, src.summary]);
 
   // The year columns come from whichever source has them. `/periodic-summary` is the richer one
   // and covers years the equity curve alone never reaches (2016-17 here, before the first fill).
@@ -273,8 +274,7 @@ export function PerformanceMft({
             runSummary: src.summary,
             returns: stageReturns,
             drawdown: stageDrawdown,
-            equity: stagePnls,
-            capitalBase,
+            monthlyRows,
           }
         : {
             isAll: false,
@@ -282,10 +282,9 @@ export function PerformanceMft({
             runSummary: periodByYear.get(year),
             returns: stageReturns.filter((p) => yearOf(p.t) === year),
             drawdown: stageDrawdown.filter((p) => yearOf(p.t) === year),
-            equity: stagePnls.filter((p) => yearOf(p.t) === year),
-            capitalBase,
+            monthlyRows: monthlyRows?.filter((r) => r.year === year),
           },
-    [perf, src.summary, summaryRows, periodByYear, stageReturns, stageDrawdown, stagePnls, capitalBase],
+    [perf, src.summary, summaryRows, periodByYear, stageReturns, stageDrawdown, monthlyRows],
   );
 
   const p = perf?.performance;

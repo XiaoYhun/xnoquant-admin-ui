@@ -34,7 +34,7 @@ import {
   worstLossStreak,
   type Point,
 } from "@/lib/transform/mft-results";
-import { monthlyReturnPct, monthlyReturnStats, type MonthlyReturnStats } from "@/lib/transform/pnl-buckets";
+import { monthlyReturnStats, type MonthlyReturnRow, type MonthlyReturnStats } from "@/lib/transform/pnl-buckets";
 import { startingCapital } from "@/lib/transform/results";
 import type { SummaryTableItem } from "@/hooks/api/use-strategy-results";
 import type { RunSummary } from "@/types/domain";
@@ -58,17 +58,13 @@ export interface Scope {
   /** `drawdown` series, already narrowed to this column's year. */
   drawdown: Point[];
   /**
-   * Cumulative equity/PnL curve, already narrowed to this column's year — F-057's source for
-   * Best/Worst month and Positive Months (see `monthlyStats` below), which need raw equity deltas
-   * rather than the capital-scaled `returns` percent series.
+   * Calendar-month returns (% of the run's implied capital base) for this column's window — F-057's
+   * source for Best/Worst month and Positive Months (see `monthlyStats` below). Bucketed over the
+   * WHOLE equity curve and only then narrowed to the column's year: diffing a curve already sliced
+   * to one year turned that year's first delta into all the PnL made before it. `undefined` on the
+   * XALPHA (non-run) path, which has no RunSummary to derive a capital base from.
    */
-  equity: Point[];
-  /**
-   * The whole run's implied starting capital (`net_pnl / return_pct`), constant across every
-   * column — see lib/transform/pnl-buckets.ts. `undefined` on the XALPHA (non-run) path, which has
-   * no RunSummary to derive one from.
-   */
-  capitalBase?: number;
+  monthlyRows?: MonthlyReturnRow[];
 }
 
 type Format = "ratioPct" | "rate" | "percent" | "number" | "count" | "periods" | "amount" | "hours" | "bps";
@@ -109,7 +105,7 @@ const unavailable = (label: string): StatMetric => ({ label, get: () => undefine
  * capital base to divide equity deltas by but whose `returns` series is already a genuine percent.
  */
 function monthlyStats(s: Scope): MonthlyReturnStats {
-  if (s.capitalBase) return monthlyReturnStats(monthlyReturnPct(s.equity, s.capitalBase));
+  if (s.monthlyRows) return monthlyReturnStats(s.monthlyRows);
   return monthlyReturnStats(monthlyReturns(s.returns));
 }
 

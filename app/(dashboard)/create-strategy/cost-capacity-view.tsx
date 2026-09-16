@@ -165,7 +165,9 @@ export function CostCapacityView({
 
   const donutOption = useMemo<EChartsOption>(
     () => ({
-      tooltip: { trigger: "item", valueFormatter: (v: unknown) => money(Number(v)) },
+      // Same as the MFT donut: confine the tooltip so an edge slice does not spill out of the
+      // half-width card.
+      tooltip: { trigger: "item", confine: true, valueFormatter: (v: unknown) => money(Number(v)) },
       series: [
         {
           type: "pie",

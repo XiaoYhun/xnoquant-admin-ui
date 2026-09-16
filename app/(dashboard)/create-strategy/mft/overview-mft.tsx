@@ -388,8 +388,13 @@ export function OverviewMft({
       tone: RED_TEXT,
       spark: drawdown.map((x) => x.v),
     },
-    // Turnover is not reported by the MFT engine, so return-per-unit-of-turnover has no source.
-    { label: "Return / Turnover", value: EMPTY },
+    {
+      // Net PnL per unit of traded notional, in bps - the engine reports it on the summary
+      // (edge_gross_bps - cost_bps == edge_net_bps), which is what the control plane shows here.
+      label: "Return / Turnover",
+      value: summary?.edge_net_bps == null ? EMPTY : `${formatAmount(summary.edge_net_bps, 2)} bp`,
+      tone: toneBySign(summary?.edge_net_bps),
+    },
     {
       // Cost ÷ gross, the same drag Cost & Edge shows: `total_fee` is a fraction of capital, and
       // gross = net + fee on that same basis. Shown negative, as the drag it is.

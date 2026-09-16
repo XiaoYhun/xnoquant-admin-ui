@@ -128,7 +128,10 @@ const grad = (from: string, to: string) => ({
  * because the point shapes differ (`Point.t` unix seconds off the MFT series vs `EquityPoint.ts`
  * epoch ms). `[]` when either side has nothing to join.
  */
-function joinCostToEquity(equity: Point[], cost: CostPoint[]): { t: number; cost: number; gross: number }[] {
+function joinCostToEquity(
+  equity: Point[],
+  cost: CostPoint[],
+): { t: number; cost: number; net: number; gross: number }[] {
   if (equity.length === 0 || cost.length === 0) return [];
   const sorted = [...cost].sort((a, b) => a.ts - b.ts);
   let i = 0;
@@ -139,11 +142,15 @@ function joinCostToEquity(equity: Point[], cost: CostPoint[]): { t: number; cost
       cumulative = sorted[i].cumulative;
       i += 1;
     }
-    return { t: p.t, cost: cumulative, gross: p.v + cumulative };
+    // `p.v` is the run's net PnL at this point; gross adds back the cost taken out of it.
+    return { t: p.t, cost: cumulative, net: p.v, gross: p.v + cumulative };
   });
 }
 
-function costGrossOption(points: { t: number; cost: number; gross: number }[], digits: number): EChartsOption {
+function costGrossOption(
+  points: { t: number; cost: number; net: number; gross: number }[],
+  digits: number,
+): EChartsOption {
   return {
     tooltip: { trigger: "axis", valueFormatter: (v: unknown) => formatAmount(Number(v), digits) },
     legend: { bottom: 0, textStyle: { color: "#9db2ce", fontSize: 10 } },
@@ -159,13 +166,27 @@ function costGrossOption(points: { t: number; cost: number; gross: number }[], d
       {
         name: "Gross PnL",
         type: "line",
+        // The legend swatch takes the series color, not lineStyle, so both are set or the
+        // swatches disagree with the lines they stand for.
+        color: "#67e1c1",
         data: points.map((p) => p.gross),
         showSymbol: false,
         lineStyle: { width: 1.5, color: "#67e1c1" },
       },
       {
+        // Yellow: three lines share this box, so net needs its own hue rather than a second shade
+        // of the gross green above it.
+        name: "Net PnL",
+        type: "line",
+        color: "#f1c617",
+        data: points.map((p) => p.net),
+        showSymbol: false,
+        lineStyle: { width: 1.5, color: "#f1c617" },
+      },
+      {
         name: "Cumulative Cost",
         type: "line",
+        color: "#ff9783",
         data: points.map((p) => p.cost),
         showSymbol: false,
         lineStyle: { width: 1.5, color: "#ff9783", type: "dashed" },
@@ -297,6 +318,9 @@ export function CostEdgeMft({
     () => ({
       tooltip: {
         trigger: "item",
+        // The donut sits in a half-width card, so an edge slice's tooltip spilled outside it —
+        // `confine` keeps it inside the chart box.
+        confine: true,
         valueFormatter: (v: unknown) => `${formatAmount(Number(v), digits)} ${currencySymbol(currency)}`,
       },
       series: [

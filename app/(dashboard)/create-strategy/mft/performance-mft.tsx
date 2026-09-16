@@ -18,7 +18,7 @@ import {
   type PeriodSelection,
 } from "@/lib/transform/mft-results";
 import { useMftResultsSource } from "@/hooks/api/use-mft-results-source";
-import { useRunVolatilityRegime } from "@/hooks/api/use-runs";
+import { useRunCurrency, useRunVolatilityRegime } from "@/hooks/api/use-runs";
 import {
   ChartCard,
   MetricPanel,
@@ -210,6 +210,8 @@ export function PerformanceMft({
   // Whole-run only (see Scope.volRegime in yearly-statistics.tsx) — the All column's two regime
   // Sharpes. Rides the same query the Regime tab uses, so opening both costs one request.
   const volRegime = useRunVolatilityRegime(runId, sample).data ?? undefined;
+  // Settlement currency for the money labels below (and the Yearly Statistics ones).
+  const currency = useRunCurrency(runId);
   const perf = src.perf;
   const summaryRows = src.summaryRows;
   // `/periodic-summary` buckets by label ("2018", or "2018 Q3" on a sub-year backtest); the year
@@ -309,12 +311,13 @@ export function PerformanceMft({
     ],
     [
       {
-        label: "Avg Win",
+        // Money on the run path, a ratio on the XALPHA one — the unit is only true for the former.
+        label: runSummary ? `Avg Win (${currency})` : "Avg Win",
         value: runSummary ? money(runSummary.avg_win) : pctFromRatio(a?.avg_win_trade),
         tone: toneBySign(runSummary ? runSummary.avg_win : a?.avg_win_trade),
       },
       {
-        label: "Avg Loss",
+        label: runSummary ? `Avg Loss (${currency})` : "Avg Loss",
         value: runSummary ? money(runSummary.avg_loss) : pctFromRatio(a?.avg_loss_trade),
         tone: toneBySign(runSummary ? runSummary.avg_loss : a?.avg_loss_trade),
       },
@@ -339,7 +342,7 @@ export function PerformanceMft({
       <MetricPanel rows={rows} />
 
       {years.length > 0 ? (
-        <YearlyStatistics years={years} scopeFor={scopeFor} />
+        <YearlyStatistics years={years} scopeFor={scopeFor} currency={currency} />
       ) : (
         <div className="rounded-xl border border-[#1d2939] bg-background px-4 py-8 text-center text-xs text-[#9db2ce]">
           No yearly breakdown for this stage.

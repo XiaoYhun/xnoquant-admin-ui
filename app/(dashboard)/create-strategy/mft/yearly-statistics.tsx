@@ -452,11 +452,14 @@ const LABEL_COL = "sticky left-0 z-10 w-[172px] shrink-0 px-3";
 export function YearlyStatistics({
   years,
   scopeFor,
+  currency,
 }: {
   /** Year columns, ascending. */
   years: number[];
   /** Builds the scope for one column; `undefined` year means the All column. */
   scopeFor: (year?: number) => Scope;
+  /** The run's settlement currency, appended to the money rows' labels. */
+  currency?: string;
 }) {
   const [filter, setFilter] = useState("");
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -504,6 +507,11 @@ export function YearlyStatistics({
     ...g,
     metrics: needle ? g.metrics.filter((m) => m.label.toLowerCase().includes(needle)) : g.metrics,
   })).filter((g) => g.metrics.length > 0);
+
+  // The money rows print bare numbers, so the unit rides in the label — "Avg Win (VND)". Applied
+  // at render only: `values` and `texts` are keyed by the metric's own label.
+  const labelOf = (m: StatMetric) =>
+    m.format === "amount" && currency ? `${m.label} (${currency})` : m.label;
 
   const setAllCollapsed = (value: boolean) =>
     setCollapsed(Object.fromEntries(GROUPS.map((g) => [g.name, value])));
@@ -601,7 +609,7 @@ export function YearlyStatistics({
                   g.metrics.map((m) => (
                     <div key={m.label} className="flex h-9 items-center border-b border-[#1d2939]">
                       <div className={cn(LABEL_COL, "bg-background")}>
-                        <span className="text-xs leading-[18px] text-[#9db2ce]">{m.label}</span>
+                        <span className="text-xs leading-[18px] text-[#9db2ce]">{labelOf(m)}</span>
                       </div>
                       {columns.map((col, i) => {
                         const v = values.get(m.label)?.[i];

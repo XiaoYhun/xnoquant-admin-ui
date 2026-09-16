@@ -17,7 +17,6 @@ import {
 import { cn, formatAmount } from "@/lib/utils";
 import {
   filterByPeriod,
-  lossStreaks,
   sliceStage,
   toPoints,
   topDrawdowns,
@@ -26,7 +25,8 @@ import {
   type Point,
 } from "@/lib/transform/mft-results";
 import { useMftResultsSource } from "@/hooks/api/use-mft-results-source";
-import type { SampleScope } from "@/types/domain";
+import { useRunRiskDetail } from "@/hooks/api/use-runs";
+import type { LossStreakBucket, SampleScope } from "@/types/domain";
 import {
   ChartCard,
   DropdownPill,
@@ -41,7 +41,8 @@ import {
 } from "./results-chrome";
 
 const RED = "#ff135b";
-const YELLOW = "#f1c617";
+// The control plane's bar green, so the two apps' streak charts read as the same chart.
+const GREEN = "#10b981";
 
 // Rolling window for the Sharpe chart (Figma 15227:70313). The MFT `sharpe` series is already a
 // running figure from the engine, so the window smooths what it returns rather than recomputing
@@ -140,25 +141,39 @@ function areaOption(points: Point[], color: string, opts?: { max?: number }): EC
   };
 }
 
-function streakOption(bars: ReturnType<typeof lossStreaks>): EChartsOption {
+// Consecutive Loss Streaks — `/risk-detail`'s own histogram (streak length → how many times it
+// happened), drawn like the control plane's: green bars rounded at the top, no label over each
+// bar, and only every few lengths labelled so a 24-bucket run stays readable.
+function streakOption(bars: LossStreakBucket[]): EChartsOption {
   return {
     tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
     grid: { left: 8, right: 8, top: 28, bottom: 8, containLabel: true },
     xAxis: {
       type: "category",
-      data: bars.map((b) => String(b.length)),
+      data: bars.map((b) => String(b.streak_len)),
       axisTick: { show: false },
-      axisLabel: { fontSize: 10, color: "#9db2ce" },
+      axisLabel: {
+        fontSize: 10,
+        color: "#9db2ce",
+        interval: Math.max(0, Math.ceil(bars.length / 10) - 1),
+      },
     },
-    yAxis: { type: "value", axisLabel: { fontSize: 10 } },
+    yAxis: {
+      type: "value",
+      minInterval: 1,
+      // Two gridlines only, the peak and zero, as the control plane chart draws them: a full
+      // ladder of ticks competes with the bars for attention.
+      splitNumber: 1,
+      axisLabel: { fontSize: 10, color: "#9db2ce" },
+      splitLine: { lineStyle: { color: "#1d2939" } },
+    },
     series: [
       {
         type: "bar",
         name: "Streaks",
         data: bars.map((b) => b.count),
         barMaxWidth: 40,
-        itemStyle: { color: YELLOW, borderRadius: [2, 2, 0, 0] },
-        label: { show: true, position: "top", color: "#9db2ce", fontSize: 10 },
+        itemStyle: { color: GREEN, borderRadius: [4, 4, 0, 0] },
       },
     ],
   };
@@ -203,7 +218,9 @@ export function RiskMft({
   );
 
   const smoothed = useMemo(() => rollingMean(sharpePts, sharpeWindow), [sharpePts, sharpeWindow]);
-  const streaks = useMemo(() => lossStreaks(returnPts), [returnPts]);
+  // The engine's own histogram, the same source the control plane's chart draws.
+  const riskQ = useRunRiskDetail(runId, sample);
+  const streaks = useMemo(() => riskQ.data?.loss_streak_histogram ?? [], [riskQ.data]);
   const worst = useMemo(() => worstLossStreak(returnPts), [returnPts]);
   const episodes = useMemo(() => topDrawdowns(drawdownPts), [drawdownPts]);
 
@@ -277,8 +294,9 @@ export function RiskMft({
     empty: !smoothed.length,
   });
   const streakStatus = chartStatus({
-    loading: returns.isLoading,
-    error: returns.isError,
+    idle: !runId,
+    loading: riskQ.isLoading,
+    error: riskQ.isError,
     empty: !streaks.length,
   });
 
@@ -311,8 +329,8 @@ export function RiskMft({
         </ChartState>
       </ChartCard>
 
-      <ChartCard title="Consecutive loss streaks">
-        <ChartState status={streakStatus} detail="No losing periods in this stage and period.">
+      <ChartCard title="Consecutive Loss Streaks">
+        <ChartState status={streakStatus} detail="This run never had a losing streak.">
           <BaseChart option={streakOption(streaks)} style={{ height: 240 }} />
         </ChartState>
       </ChartCard>

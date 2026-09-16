@@ -64,7 +64,7 @@ interface KpiCard {
 
 function KpiCards({ cards }: { cards: KpiCard[] }) {
   return (
-    <div className="grid min-w-0 grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
+    <div className="grid min-w-0 grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-5">
       {cards.map((c) => (
         <div
           key={c.label}
@@ -402,8 +402,6 @@ export function OverviewMft({
       value: costDrag == null ? EMPTY : pctFromRatio(-Math.abs(costDrag)),
       tone: costDrag == null ? undefined : RED_TEXT,
     },
-    // Capacity analysis is an HFT-only artifact; nothing in /performance approximates it.
-    { label: "Max Capacity", value: EMPTY },
   ];
 
   const equityStatus = chartStatus({

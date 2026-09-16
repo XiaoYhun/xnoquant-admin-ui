@@ -73,6 +73,12 @@ type Format = "ratioPct" | "rate" | "percent" | "number" | "count" | "periods" |
 interface StatMetric {
   label: string;
   get: (s: Scope) => number | null | undefined;
+  /**
+   * Renders the cell where a bare number would lose half the story — Positive Months reads "4/6".
+   * `get` still supplies the value the cell is coloured by, and a `undefined` here falls back to
+   * the `format` below.
+   */
+  getText?: (s: Scope) => string | undefined;
   format?: Format;
   /** How to colour the value. Defaults to neutral white. */
   tone?: "sign" | "good" | "bad" | "graded";
@@ -180,6 +186,13 @@ const GROUPS: StatGroup[] = [
         get: (s) => {
           const m = monthlyStats(s);
           return m.total ? m.positive : undefined;
+        },
+        // "4/6" — up months out of the months this window actually traded. The count alone read as
+        // a rank, and its denominator differs per column: a partial year, or a run that started
+        // mid-year, never has twelve.
+        getText: (s) => {
+          const m = monthlyStats(s);
+          return m.total ? `${m.positive}/${m.total}` : undefined;
         },
         format: "count",
         tone: "graded",
@@ -470,6 +483,19 @@ export function YearlyStatistics({
     return out;
   }, [scopes]);
 
+  // Text overrides (StatMetric.getText), same shape as `values` and memoised for the same reason:
+  // the filter box re-renders this table on every keystroke.
+  const texts = useMemo(() => {
+    const out = new Map<string, (string | undefined)[]>();
+    for (const g of GROUPS) {
+      for (const m of g.metrics) {
+        const getText = m.getText;
+        if (getText) out.set(m.label, scopes.map((s) => getText(s)));
+      }
+    }
+    return out;
+  }, [scopes]);
+
   const needle = filter.trim().toLowerCase();
   const groups = GROUPS.map((g) => ({
     ...g,
@@ -576,7 +602,7 @@ export function YearlyStatistics({
                       </div>
                       {columns.map((col, i) => {
                         const v = values.get(m.label)?.[i];
-                        const text = formatValue(v, m.format);
+                        const text = texts.get(m.label)?.[i] ?? formatValue(v, m.format);
                         return (
                           <div key={col.key} className="flex w-24 shrink-0 justify-end overflow-hidden px-3">
                             <span

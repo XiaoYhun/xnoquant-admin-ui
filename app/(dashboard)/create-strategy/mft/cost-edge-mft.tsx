@@ -22,6 +22,7 @@ import {
   type TurnoverPoint,
 } from "@/hooks/api/use-runs";
 import { PnlAttributionTable } from "@/components/pnl-attribution-table";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn, currencyDigits, formatAmount, formatCompact } from "@/lib/utils";
 import { currencySymbol } from "@/lib/transform/runs";
 import { equityDayLabel, startingCapital } from "@/lib/transform/results";
@@ -397,14 +398,18 @@ export function CostEdgeMft({
                 <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1">
                   <span className="text-[10px] leading-4 text-[#9db2ce]">Total Cost</span>
                   {/* The donut's hole is 62% of 148px (~92px), so a long total (millions of VND)
-                      would otherwise run out over the ring. Ellipsis it and keep the full figure on
-                      hover — which needs pointer events back, since the overlay above disables them. */}
-                  <span
-                    title={`${formatAmount(sliceTotal, digits)} ${currencySymbol(currency)}`}
-                    className="pointer-events-auto max-w-[84px] truncate text-sm leading-[18px] font-semibold text-white"
-                  >
-                    {formatAmount(sliceTotal, digits)} {currencySymbol(currency)}
-                  </span>
+                      would otherwise run out over the ring. Ellipsis it and show the full figure in
+                      a tooltip — which needs pointer events back, since the overlay disables them. */}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="pointer-events-auto max-w-[84px] truncate text-sm leading-[18px] font-semibold text-white">
+                        {formatAmount(sliceTotal, digits)} {currencySymbol(currency)}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {formatAmount(sliceTotal, digits)} {currencySymbol(currency)}
+                    </TooltipContent>
+                  </Tooltip>
                 </div>
               </div>
               <div className="flex min-w-[160px] flex-1 flex-col gap-2.5">

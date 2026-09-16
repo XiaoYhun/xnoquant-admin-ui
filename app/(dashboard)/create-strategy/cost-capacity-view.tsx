@@ -297,7 +297,15 @@ export function CostCapacityView({
               <BaseChart option={donutOption} style={{ height: 148 }} />
               <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1">
                 <span className="text-[10px] leading-4 text-muted-foreground">Total Cost</span>
-                <span className="text-sm leading-[18px] font-semibold text-white">{money(totalCost)}</span>
+                {/* The donut's hole is 62% of 148px (~92px), so a long total (millions of VND)
+                    would otherwise run out over the ring. Ellipsis it and keep the full figure on
+                    hover — which needs pointer events back, since the overlay above disables them. */}
+                <span
+                  title={money(totalCost)}
+                  className="pointer-events-auto max-w-[84px] truncate text-sm leading-[18px] font-semibold text-white"
+                >
+                  {money(totalCost)}
+                </span>
               </div>
             </div>
             <div className="flex min-w-[192px] flex-1 flex-col gap-2.5">

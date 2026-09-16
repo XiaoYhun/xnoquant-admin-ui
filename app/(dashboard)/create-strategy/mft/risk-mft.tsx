@@ -236,8 +236,17 @@ export function RiskMft({
     [
       {
         label: "Max Consecutive Losses",
-        value: count(worst?.length),
-        sub: worst ? `${pctFromPercent(worst.total)} total` : undefined,
+        // The engine's own count for the run; the streak derived from the returns series is the
+        // fallback, and it is empty whenever that series is (a run with no `return_pct` to scale
+        // by — see runToMftCharts), which is why this read "—" against a populated summary.
+        value: count(summary?.max_consecutive_losses ?? worst?.length),
+        // The summary has no percentage to pair with its own count (only the losing/winning DAY
+        // streaks carry one), and the local streak's total describes a different, shorter run of
+        // trades — so the sub-line belongs to the derived value only.
+        sub:
+          summary?.max_consecutive_losses == null && worst
+            ? `${pctFromPercent(worst.total)} total`
+            : undefined,
       },
       // Calendar trading days, straight off the summary. The XALPHA feed only counts PERIODS,
       // which coincide with days only for a daily series — left unfilled there rather than guessed.

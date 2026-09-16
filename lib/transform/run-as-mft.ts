@@ -2,7 +2,7 @@ import type { EquityPoint, PeriodSummary, RunSummary } from "@/types/domain";
 import type { StrategyChartData, SummaryTableItem } from "@/hooks/api/use-strategy-results";
 import type { StrategyPerformanceDetail } from "@/hooks/api/use-strategy-performance";
 import { startingCapital, toDrawdown, toRollingSharpe } from "./results";
-import { payoffRatio, recoveryFactor } from "./derived-metrics";
+import { kellyCriterion, payoffRatio, recoveryFactor } from "./derived-metrics";
 import {
   annualizedSharpe,
   calmarRatio,
@@ -105,6 +105,12 @@ export function runToMftPerf(summary: RunSummary | undefined): StrategyPerforman
       volatility: summary.volatility_annualized ?? undefined,
       win_loss_ratio: payoffRatio(summary) ?? undefined,
       recovery_factor: recoveryFactor(summary) ?? undefined,
+      // The summary reports both tail figures; without them the Risk panel printed "—" for VaR and
+      // CVaR on every run, while Yearly Statistics read the very same fields. Kelly has no server
+      // field at all — same ported formula the control plane uses (./derived-metrics).
+      var: summary.var_95_pct ?? undefined,
+      cvar: summary.cvar_95_pct ?? undefined,
+      kelly_criterion: kellyCriterion(summary) ?? undefined,
     },
   };
 }

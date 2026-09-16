@@ -11,6 +11,16 @@ export function payoffRatio(s: RunSummary): number | null {
 }
 
 /**
+ * Kelly fraction — `win_rate - (1 - win_rate) / payoff_ratio`. `null` when the payoff ratio is
+ * undefined (no losing trades) or zero, where the division says nothing.
+ */
+export function kellyCriterion(s: RunSummary): number | null {
+  const payoff = payoffRatio(s);
+  if (payoff === null || payoff === 0) return null;
+  return s.win_rate - (1 - s.win_rate) / payoff;
+}
+
+/**
  * Net PnL ÷ max drawdown, both in raw PnL units (unannualized). Distinct from the server's
  * `calmar`, which annualizes net PnL first — "recovery factor" is conventionally this
  * unannualized ratio, so it's computed directly here rather than re-exporting `calmar` under

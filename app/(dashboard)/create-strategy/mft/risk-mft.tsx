@@ -1,7 +1,7 @@
 "use client";
 // MFT Results → "Risk" (Figma 15212:59857). Risk panel, the underwater curve, rolling Sharpe,
 // the consecutive-loss-streak histogram and the top-5 drawdown table.
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { EChartsOption } from "echarts";
 
 import { BaseChart } from "@/components/charts/base-chart";
@@ -29,7 +29,6 @@ import { useRunRiskDetail } from "@/hooks/api/use-runs";
 import type { LossStreakBucket, SampleScope } from "@/types/domain";
 import {
   ChartCard,
-  DropdownPill,
   EMPTY,
   MetricPanel,
   RED_TEXT,
@@ -43,25 +42,6 @@ import {
 const RED = "#ff135b";
 // The control plane's bar green, so the two apps' streak charts read as the same chart.
 const GREEN = "#10b981";
-
-// Rolling window for the Sharpe chart (Figma 15227:70313). The MFT `sharpe` series is already a
-// running figure from the engine, so the window smooths what it returns rather than recomputing
-// Sharpe from returns — which is why "Raw" is offered as the unsmoothed truth.
-const WINDOWS = [
-  { value: 0, label: "Raw" },
-  { value: 7, label: "7D" },
-  { value: 30, label: "30D" },
-  { value: 90, label: "90D" },
-] as const;
-
-function rollingMean(points: Point[], size: number): Point[] {
-  if (size < 2) return points;
-  return points.map((p, i) => {
-    const from = Math.max(0, i - size + 1);
-    const slice = points.slice(from, i + 1);
-    return { t: p.t, v: slice.reduce((sum, q) => sum + q.v, 0) / slice.length };
-  });
-}
 
 const DAY = 86_400;
 
@@ -192,7 +172,6 @@ export function RiskMft({
   runId?: string;
   sample?: SampleScope;
 }) {
-  const [sharpeWindow, setSharpeWindow] = useState<number>(30);
 
   // `period` scopes `perf`/`summary` to the selected year — the top risk panel is a headline
   // figure like Overview's KPI cards, not the Top-5-drawdown table (built from the already
@@ -217,7 +196,6 @@ export function RiskMft({
     [returns.data, stage, period],
   );
 
-  const smoothed = useMemo(() => rollingMean(sharpePts, sharpeWindow), [sharpePts, sharpeWindow]);
   // The engine's own histogram, the same source the control plane's chart draws.
   const riskQ = useRunRiskDetail(runId, sample);
   const streaks = useMemo(() => riskQ.data?.loss_streak_histogram ?? [], [riskQ.data]);
@@ -291,7 +269,7 @@ export function RiskMft({
   const sharpeStatus = chartStatus({
     loading: sharpe.isLoading,
     error: sharpe.isError,
-    empty: !smoothed.length,
+    empty: !sharpePts.length,
   });
   const streakStatus = chartStatus({
     idle: !runId,
@@ -310,22 +288,12 @@ export function RiskMft({
         </ChartState>
       </ChartCard>
 
-      <ChartCard
-        title="Rolling Sharpe"
-        right={
-          <DropdownPill
-            label={WINDOWS.find((w) => w.value === sharpeWindow)?.label ?? "Raw"}
-            onClick={() =>
-              setSharpeWindow((prev) => {
-                const i = WINDOWS.findIndex((w) => w.value === prev);
-                return WINDOWS[(i + 1) % WINDOWS.length].value;
-              })
-            }
-          />
-        }
-      >
+      {/* No window of its own: the series is already narrowed by the Period row above the
+          tabs, so the chart follows that global range and draws the engine's rolling Sharpe as
+          it comes. */}
+      <ChartCard title="Rolling Sharpe">
         <ChartState status={sharpeStatus} detail="No Sharpe series for this stage and period.">
-          <BaseChart option={areaOption(smoothed, "#c98b7a")} style={{ height: 240 }} />
+          <BaseChart option={areaOption(sharpePts, "#c98b7a")} style={{ height: 240 }} />
         </ChartState>
       </ChartCard>
 

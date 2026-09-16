@@ -38,7 +38,7 @@ import {
 import { monthlyReturnStats, type MonthlyReturnRow, type MonthlyReturnStats } from "@/lib/transform/pnl-buckets";
 import { startingCapital } from "@/lib/transform/results";
 import type { SummaryTableItem } from "@/hooks/api/use-strategy-results";
-import type { RunSummary } from "@/types/domain";
+import type { RunSummary, VolRegimeSummary } from "@/types/domain";
 import type { StrategyPerformanceDetail } from "@/hooks/api/use-strategy-performance";
 import { EMPTY, GREEN_TEXT, NEUTRAL_TEXT, RED_TEXT, YELLOW_TEXT } from "./results-chrome";
 
@@ -66,6 +66,12 @@ export interface Scope {
    * XALPHA (non-run) path, which has no RunSummary to derive a capital base from.
    */
   monthlyRows?: MonthlyReturnRow[];
+  /**
+   * `GET /api/runs/:id/volatility-regime` — the ATR-regime split, computed over the WHOLE run, so
+   * only the All column carries it; the year columns leave the two regime Sharpes empty rather
+   * than repeating a whole-run figure under each year.
+   */
+  volRegime?: VolRegimeSummary;
 }
 
 type Format = "ratioPct" | "rate" | "percent" | "number" | "count" | "periods" | "amount" | "hours" | "bps";
@@ -99,9 +105,6 @@ const rs = (s: Scope) => s.runSummary;
 function drawdownOf(s: Scope): number | undefined {
   return (s.isAll ? perf(s)?.max_drawdown : s.row?.max_drawdown) ?? maxDrawdown(s.drawdown);
 }
-
-/** Metrics the MFT engine has no source for, in any column. */
-const unavailable = (label: string): StatMetric => ({ label, get: () => undefined });
 
 /**
  * Best/worst/positive-month stats for this column's window (F-057). Equity-delta buckets (see
@@ -373,10 +376,10 @@ const GROUPS: StatGroup[] = [
     name: "Regime",
     metrics: [
       { label: "Peak Hour Concentration", get: (s) => rs(s)?.peak_hour_concentration_pct, format: "rate" },
-      // An ATR-regime split of the same run; `/volatility-regime` reports it for the whole run
-      // only, never bucketed by year.
-      unavailable("Low Vol Sharpe"),
-      unavailable("High Vol Sharpe"),
+      // An ATR-regime split of the same run. `/volatility-regime` computes it for the whole run
+      // only, so these answer in the All column and stay "—" under each year.
+      { label: "Low Vol Sharpe", get: (s) => s.volRegime?.low_vol.sharpe, tone: "graded" },
+      { label: "High Vol Sharpe", get: (s) => s.volRegime?.high_vol.sharpe, tone: "graded" },
     ],
   },
 ];

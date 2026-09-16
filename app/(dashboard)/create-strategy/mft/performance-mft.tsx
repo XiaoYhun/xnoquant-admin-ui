@@ -18,6 +18,7 @@ import {
   type PeriodSelection,
 } from "@/lib/transform/mft-results";
 import { useMftResultsSource } from "@/hooks/api/use-mft-results-source";
+import { useRunVolatilityRegime } from "@/hooks/api/use-runs";
 import {
   ChartCard,
   MetricPanel,
@@ -206,6 +207,9 @@ export function PerformanceMft({
   // screen's fix (the reported bug was Overview's KPI cards and metric strip; see overview-mft.tsx,
   // risk-mft.tsx, execution-mft.tsx and cost-edge-mft.tsx, none of which have this conflict).
   const src = useMftResultsSource({ strategyId, stage, runId, sample });
+  // Whole-run only (see Scope.volRegime in yearly-statistics.tsx) — the All column's two regime
+  // Sharpes. Rides the same query the Regime tab uses, so opening both costs one request.
+  const volRegime = useRunVolatilityRegime(runId, sample).data ?? undefined;
   const perf = src.perf;
   const summaryRows = src.summaryRows;
   // `/periodic-summary` buckets by label ("2018", or "2018 Q3" on a sub-year backtest); the year
@@ -276,6 +280,7 @@ export function PerformanceMft({
             returns: stageReturns,
             drawdown: stageDrawdown,
             monthlyRows,
+            volRegime,
           }
         : {
             isAll: false,
@@ -285,7 +290,7 @@ export function PerformanceMft({
             drawdown: stageDrawdown.filter((p) => yearOf(p.t) === year),
             monthlyRows: monthlyRows?.filter((r) => r.year === year),
           },
-    [perf, src.summary, summaryRows, periodByYear, stageReturns, stageDrawdown, monthlyRows],
+    [perf, src.summary, summaryRows, periodByYear, stageReturns, stageDrawdown, monthlyRows, volRegime],
   );
 
   const p = perf?.performance;

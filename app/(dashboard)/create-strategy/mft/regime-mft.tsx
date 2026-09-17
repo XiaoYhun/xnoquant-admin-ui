@@ -134,11 +134,21 @@ export function RegimeMft({
         : peakHour;
 
   const top3 = useMemo(() => topHoursByShare(riskQ.data?.hourly_pnl ?? [], 3), [riskQ.data]);
+  // The hour the concentration figure is ABOUT. `/summary` reports the share and not the hour, so
+  // it comes from the same `/risk-detail` buckets Top-3 ranks below: the largest `pnl_share_pct`
+  // bucket is by definition the one `peak_hour_concentration_pct` is computed over. No extra
+  // request — that query is already on this screen.
+  const peakHourLabel = useMemo(() => {
+    const top = topHoursByShare(riskQ.data?.hourly_pnl ?? [], 1);
+    return top.hours.length ? `${String(top.hours[0]).padStart(2, "0")}:00 UTC` : undefined;
+  }, [riskQ.data]);
 
   const metrics: Metric[] = [
     {
       label: "Peak Hour Concentration",
       value: peakHourPct == null ? EMPTY : `${formatAmount(peakHourPct, 1)}%`,
+      // Names the hour, so "45.2%" reads as a fact about a session rather than a bare share.
+      sub: peakHourPct == null ? undefined : peakHourLabel,
       tone: peakHourPct == null ? undefined : GREEN_TEXT,
     },
     {

@@ -247,8 +247,9 @@ function buildDrawdownOption(points: DrawdownPoint[], unit: DrawdownUnit): EChar
   const data = points.map((p) => (isPercent ? p.pct : p.abs));
   const labels = points.map((p) => equityDayLabel(p.ts));
   const floor = data.length ? Math.min(0, ...data) : -1;
-  // Pad ~15% so a flat 0 line isn't glued to the bottom.
-  const min = Math.min(floor * 1.15, floor - (isPercent ? 1 : 1));
+  // Pad ~15% so a flat 0 line isn't glued to the bottom, then take the whole unit below that: the
+  // padded value is what ECharts labels the axis end with, and -136.1716022970557% is not a tick.
+  const min = Math.floor(Math.min(floor * 1.15, floor - 1));
 
   return {
     tooltip: {
@@ -264,8 +265,10 @@ function buildDrawdownOption(points: DrawdownPoint[], unit: DrawdownUnit): EChar
       max: 0,
       axisLabel: {
         // Compact on the axis, exact in the tooltip — a drawdown in the millions needs the room.
+        // Percentages are rounded here too: the axis end carries the padding above, which is not
+        // a round number on its own.
         formatter: (value: string | number) =>
-          isPercent ? `${value}%` : formatCompact(Number(value)),
+          isPercent ? `${formatAmount(Number(value), 2)}%` : formatCompact(Number(value)),
       },
     },
     series: [

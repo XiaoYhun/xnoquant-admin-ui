@@ -460,7 +460,13 @@ export function RiskView({
   isLive?: boolean;
   sample?: SampleScope;
 }) {
-  const [drawdownUnit, setDrawdownUnit] = useState<DrawdownUnit>("%");
+  // Money, not percent — the control plane's Risk tab plots "equity - running peak" in PnL units
+  // (`drawdownSeries` in web/src/features/runs/metric-series.ts, drawn with LineChart's compact
+  // formatter); its percentage form lives only on the Equity Curve overlay. The "$" unit here is
+  // that same series (`DrawdownPoint.abs`). The "%" unit divides by the running peak of cumulative
+  // PnL, which on a curve seeded at 0 compresses a real drawdown toward zero — why this chart read
+  // about -1% against a -4.80% `max_drawdown_pct` headline.
+  const [drawdownUnit, setDrawdownUnit] = useState<DrawdownUnit>("$");
   const [rollingWindow, setRollingWindow] = useState<string>("30D");
   const [timeWindow, setTimeWindow] = useState<TimeWindow>("All");
 

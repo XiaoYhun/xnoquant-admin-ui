@@ -270,8 +270,13 @@ export function MftResultsView({
     setPeriod({ ...period, year: activeYear, quarter: snappedQuarter });
   }
 
-  // Only Overview draws the Year/Month toggle; the other five frames show the year pills alone.
+  // Only Overview draws the Mo/Qtr/Ytd toggle; the other five frames show the year pills alone.
   const isOverview = view === "Overview";
+  // F-083: a run with no series at all (no trades) has no years to break down, and Mo/Qtr would
+  // resolve to an undefined year — the Period row printed "—" and the summary table emptied. Offer
+  // the toggle only once there is a year, and render as Ytd meanwhile.
+  const canBreakDown = years.length > 0;
+  const effectiveGranularity: Granularity = canBreakDown ? granularity : "Ytd";
   // Memoised — every view keys its derivations on this object, so rebuilding it each render would
   // invalidate the monthly/drawdown/streak memos on every keystroke and hover. Declared above the
   // status early-returns below, since hooks cannot sit after a conditional return.
@@ -313,8 +318,8 @@ export function MftResultsView({
         availableQuarters={availableQuarters}
         period={period}
         onChange={setPeriod}
-        granularity={isOverview ? granularity : undefined}
-        onGranularityChange={isOverview ? setGranularity : undefined}
+        granularity={isOverview && canBreakDown ? effectiveGranularity : undefined}
+        onGranularityChange={isOverview && canBreakDown ? setGranularity : undefined}
       />
 
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
@@ -366,7 +371,7 @@ export function MftResultsView({
             period={effectivePeriod}
             runId={runId}
             sample={sample}
-            granularity={granularity}
+            granularity={effectiveGranularity}
             availableMonths={availableMonths}
             availableQuarters={availableQuarters}
           />

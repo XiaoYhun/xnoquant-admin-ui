@@ -105,9 +105,10 @@ function PeriodRow({
   granularity?: Granularity;
   onGranularityChange?: (g: Granularity) => void;
 }) {
-  // F-046: "show max 5 years" — applies to the year pills AND the year dropdown, on every view,
-  // not just Ytd. `years` stays ascending, so the tail is the most recent 5.
-  const recentYears = useMemo(() => years.slice(-5), [years]);
+  // F-090: every year the run covers, oldest first. This used to keep only the most recent five
+  // (F-046's "show max 5 years"), which silently hid the early years of a long backtest from both
+  // the pills and the dropdown — the whole history is the point of running one.
+  const recentYears = years;
   const fallbackYear = recentYears[recentYears.length - 1];
   const yearOptions = useMemo(
     () => [{ value: -1, label: "All" }, ...recentYears.map((y) => ({ value: y, label: String(y) }))],

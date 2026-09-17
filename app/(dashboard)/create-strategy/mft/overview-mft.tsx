@@ -349,8 +349,9 @@ export function OverviewMft({
     availableMonths,
     availableQuarters,
   ]);
-  // F-046: at most the 5 most recent years, same cap as the Period row's own year pills.
-  const yearlyRows = summaryRows?.slice(-5);
+  // F-090: every year, same as the Period row's year pills — the five-year cap (F-046) hid the
+  // early years of a long backtest from the Yearly Summary too.
+  const yearlyRows = summaryRows;
   const tableRows = granularity === "Ytd" ? yearlyRows : bucketRows;
   const tableTitle =
     granularity === "Mo" ? "Monthly Summary" : granularity === "Qtr" ? "Quarterly Summary" : "Yearly Summary";

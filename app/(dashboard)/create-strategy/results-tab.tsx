@@ -38,16 +38,16 @@ const TAB_TRIGGER =
 // the API recorded (`Run.error`), the same failure the run-history picker badges "Failed".
 function RunFailedScreen({ reason }: { reason?: string | null }) {
   return (
-    <div className="flex flex-col items-center gap-6 px-4 py-20 text-center">
+    <div className="flex flex-col items-center gap-3 px-4 py-10 text-center">
       <div
-        className="flex size-[104px] items-center justify-center rounded-[28px] bg-[#0a0d12]"
-        style={{ boxShadow: "0 0 60px 8px rgba(255,19,91,0.45)" }}
+        className="flex size-14 items-center justify-center rounded-2xl bg-[#0a0d12]"
+        style={{ boxShadow: "0 0 28px 4px rgba(255,19,91,0.35)" }}
       >
-        <Danger weight="Outline" className="size-12 text-[#ff135b]" />
+        <Danger weight="Outline" className="size-7 text-[#ff135b]" />
       </div>
-      <h3 className="text-3xl font-bold text-white">Simulation Failed</h3>
+      <h3 className="text-lg font-semibold text-white">Simulation Failed</h3>
       {/* The gradient is clipped to the glyphs, so it can't share an element with the tint. */}
-      <p className="max-w-2xl rounded-xl bg-[rgba(255,19,91,0.08)] px-6 py-4 text-base font-medium break-words whitespace-pre-wrap">
+      <p className="max-w-xl rounded-lg bg-[rgba(255,19,91,0.08)] px-4 py-2.5 text-xs font-medium break-words whitespace-pre-wrap">
         <span className="bg-[linear-gradient(160deg,#ffcce2_0%,#ff135b_100%)] bg-clip-text text-transparent">
           {reason?.trim() || "The API recorded no reason."}
         </span>

@@ -18,7 +18,7 @@ import type { Account } from "@/types/domain";
 
 // Only trader/pm can hold an account assignment (`POST /assignments` — "grant a trader/pm
 // access"), and each role caps how many accounts one user may hold — surfaced per row as the
-// "Current Account" count and the At limit / Available status.
+// At limit / Available status next to the "Current Account" count.
 const ROLE_LIMITS = [
   { role: "pm", label: "PM", limit: 10 },
   { role: "trader", label: "Trader", limit: 1 },
@@ -186,9 +186,7 @@ export function AssignUsersModal({ account, onClose }: { account: Account; onClo
                           )}
                         </TableCell>
                         <TableCell className={CELL}>{role!.label}</TableCell>
-                        <TableCell className={CELL}>
-                          {shown}/{role!.limit}
-                        </TableCell>
+                        <TableCell className={CELL}>{shown}</TableCell>
                         <TableCell className="px-4 py-2.5">
                           <span className="flex items-center gap-2">
                             <span
@@ -208,6 +206,13 @@ export function AssignUsersModal({ account, onClose }: { account: Account; onClo
               </Table>
             )}
           </div>
+
+          <p className="text-xs text-muted-foreground">
+            Rules: {[...ROLE_LIMITS]
+              .reverse()
+              .map((r) => `${r.label} max ${r.limit} account${r.limit === 1 ? "" : "s"}.`)
+              .join(" ")}
+          </p>
 
           {error && <p className="text-xs text-destructive">{error}</p>}
         </div>

@@ -199,20 +199,23 @@ export function PerformanceMft({
   runId?: string;
   sample?: SampleScope;
 }) {
-  // `period` is deliberately NOT passed here. `src.perf`/`src.summary` feed both the ratio panel
-  // above and, via `scopeFor(undefined)` below, the Yearly Statistics grid's "All" column — which
-  // has to stay the true whole-run rollup no matter what the Period row has selected, the same way
-  // its year columns don't filter to one year either. Scoping this call would scope the All column
-  // too. The top ratio panel therefore keeps showing whole-run figures — a known gap, not this
-  // screen's fix (the reported bug was Overview's KPI cards and metric strip; see overview-mft.tsx,
-  // risk-mft.tsx, execution-mft.tsx and cost-edge-mft.tsx, none of which have this conflict).
+  // `period` is deliberately NOT passed here: via `scopeFor(undefined)` below this feeds the
+  // Yearly Statistics grid's "All" column, which has to stay the true whole-run rollup no matter
+  // what the Period row has selected, the same way its year columns don't filter to one year either.
   const src = useMftResultsSource({ strategyId, stage, runId, sample });
+  // F-078: the ratio panel IS a headline figure like Overview's KPI cards, so it follows the Period
+  // row — which is why it reads this scoped call rather than `src`. `period` is not a query key
+  // (see use-mft-results-source.ts): both calls share the same three queries, and this one only
+  // re-selects the matching `/periodic-summary` bucket. A month has no bucket, so a month-scoped
+  // selection falls back to the whole run (summaryForPeriod) rather than inventing a figure.
+  const scopedSrc = useMftResultsSource({ strategyId, stage, runId, period, sample });
   // Whole-run only (see Scope.volRegime in yearly-statistics.tsx) — the All column's two regime
   // Sharpes. Rides the same query the Regime tab uses, so opening both costs one request.
   const volRegime = useRunVolatilityRegime(runId, sample).data ?? undefined;
   // Settlement currency for the money labels below (and the Yearly Statistics ones).
   const currency = useRunCurrency(runId);
-  const perf = src.perf;
+  // The ratio panel's own figures (period-scoped); the All column reads `src.perf` via scopeFor.
+  const perf = scopedSrc.perf;
   const summaryRows = src.summaryRows;
   // `/periodic-summary` buckets by label ("2018", or "2018 Q3" on a sub-year backtest); the year
   // is what the grid's columns are keyed on, so index by the label's leading year.
@@ -275,7 +278,8 @@ export function PerformanceMft({
       year == null
         ? {
             isAll: true,
-            perf,
+            // Whole-run, unlike the ratio panel above — the All column never narrows to the period.
+            perf: src.perf,
             // The whole-run summary answers the All column with the same fields the year columns
             // read, so the summary line isn't a different calculation from the ones above it.
             runSummary: src.summary,
@@ -292,15 +296,16 @@ export function PerformanceMft({
             drawdown: stageDrawdown.filter((p) => yearOf(p.t) === year),
             monthlyRows: monthlyRows?.filter((r) => r.year === year),
           },
-    [perf, src.summary, summaryRows, periodByYear, stageReturns, stageDrawdown, monthlyRows, volRegime],
+    [src.perf, src.summary, summaryRows, periodByYear, stageReturns, stageDrawdown, monthlyRows, volRegime],
   );
 
   const p = perf?.performance;
   const a = perf?.analysis;
-  // F-074: on the run path (an HFT/MFT run) `src.summary` is set and Avg Win/Avg Loss are
+  // F-074: on the run path (an HFT/MFT run) the summary is set and Avg Win/Avg Loss are
   // settlement-currency amounts (`RunSummary.avg_win`/`avg_loss`); the XALPHA strategy/stage path
   // has no RunSummary but already reports these as ratios on `analysis` — kept as-is there.
-  const runSummary = src.summary;
+  // Period-scoped, like the rest of the panel these two rows belong to.
+  const runSummary = scopedSrc.summary;
 
   const rows: Metric[][] = [
     [

@@ -47,8 +47,8 @@ const STAGES = [
 ] as const;
 
 // F-046: Mo (month pills) / Qtr (quarter pills) / Ytd (today's year pills), right-aligned next to
-// the year pills — exported so OverviewMft (the only view that draws the toggle) can key its
-// summary table variant off the same value.
+// the year pills — exported so OverviewMft can key its summary table variant off the same value.
+// F-078: every view draws the toggle now, not just Overview.
 const GRANULARITIES = [
   { value: "Mo", label: "Mo" },
   { value: "Qtr", label: "Qtr" },
@@ -101,7 +101,7 @@ function PeriodRow({
   availableQuarters: number[];
   period: PeriodSelection;
   onChange: (p: PeriodSelection) => void;
-  /** Omitted on every view but Overview, which is the only frame that draws the toggle. */
+  /** Omitted only while there is no year to break down (F-083). */
   granularity?: Granularity;
   onGranularityChange?: (g: Granularity) => void;
 }) {
@@ -270,20 +270,11 @@ export function MftResultsView({
     setPeriod({ ...period, year: activeYear, quarter: snappedQuarter });
   }
 
-  // Only Overview draws the Mo/Qtr/Ytd toggle; the other five frames show the year pills alone.
-  const isOverview = view === "Overview";
   // F-083: a run with no series at all (no trades) has no years to break down, and Mo/Qtr would
   // resolve to an undefined year — the Period row printed "—" and the summary table emptied. Offer
   // the toggle only once there is a year, and render as Ytd meanwhile.
   const canBreakDown = years.length > 0;
   const effectiveGranularity: Granularity = canBreakDown ? granularity : "Ytd";
-  // Memoised — every view keys its derivations on this object, so rebuilding it each render would
-  // invalidate the monthly/drawdown/streak memos on every keystroke and hover. Declared above the
-  // status early-returns below, since hooks cannot sit after a conditional return.
-  const effectivePeriod = useMemo(
-    () => (isOverview ? period : { year: period.year }),
-    [isOverview, period],
-  );
 
   const liveReady = Boolean(strategy?.valid_to_show_live && (strategy?.live_remaining_days ?? 0) <= 0);
 
@@ -318,8 +309,8 @@ export function MftResultsView({
         availableQuarters={availableQuarters}
         period={period}
         onChange={setPeriod}
-        granularity={isOverview && canBreakDown ? effectiveGranularity : undefined}
-        onGranularityChange={isOverview && canBreakDown ? setGranularity : undefined}
+        granularity={canBreakDown ? effectiveGranularity : undefined}
+        onGranularityChange={canBreakDown ? setGranularity : undefined}
       />
 
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
@@ -368,7 +359,7 @@ export function MftResultsView({
           <OverviewMft
             strategyId={strategyId}
             stage={stage}
-            period={effectivePeriod}
+            period={period}
             runId={runId}
             sample={sample}
             granularity={effectiveGranularity}
@@ -377,19 +368,19 @@ export function MftResultsView({
           />
         )}
         {view === "Performance" && (
-          <PerformanceMft strategyId={strategyId} stage={stage} period={effectivePeriod} runId={runId} sample={sample} />
+          <PerformanceMft strategyId={strategyId} stage={stage} period={period} runId={runId} sample={sample} />
         )}
         {view === "Risk" && (
-          <RiskMft strategyId={strategyId} stage={stage} period={effectivePeriod} runId={runId} sample={sample} />
+          <RiskMft strategyId={strategyId} stage={stage} period={period} runId={runId} sample={sample} />
         )}
         {view === "Execution" && (
-          <ExecutionMft strategyId={strategyId} stage={stage} period={effectivePeriod} runId={runId} sample={sample} />
+          <ExecutionMft strategyId={strategyId} stage={stage} period={period} runId={runId} sample={sample} />
         )}
         {view === "Cost & Edge" && (
-          <CostEdgeMft strategyId={strategyId} stage={stage} period={effectivePeriod} runId={runId} sample={sample} />
+          <CostEdgeMft strategyId={strategyId} stage={stage} period={period} runId={runId} sample={sample} />
         )}
         {view === "Regime" && (
-          <RegimeMft strategyId={strategyId} stage={stage} period={effectivePeriod} runId={runId} sample={sample} />
+          <RegimeMft strategyId={strategyId} stage={stage} period={period} runId={runId} sample={sample} />
         )}
       </div>
     </div>

@@ -134,6 +134,9 @@ export type ExecutionDetail = {
   slippage_histogram: HistogramBucket[];
   /** Per-fill latency (`fill_ts - submitted_ts`), in ms. */
   latency_histogram: HistogramBucket[];
+  /** Closed round-trips by holding time (`close_ts - open_ts`), in seconds. Not in the published
+   *  OpenAPI spec yet — the control plane reads it off this payload, so treat it as optional. */
+  holding_time_histogram?: HistogramBucket[];
   /** Fraction of submitted orders ever canceled, in `[0, 1]`. */
   cancel_rate: number;
   /** Orders submitted per fill executed. */

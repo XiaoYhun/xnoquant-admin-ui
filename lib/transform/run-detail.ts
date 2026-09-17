@@ -57,6 +57,113 @@ export function buildHistogramBarOption(bars: HistogramBar[], unit: string, colo
 }
 
 // ---------------------------------------------------------------------------
+// Holding time histogram (`ExecutionDetail.holding_time_histogram`) — Figma 15212:64496. Buckets
+// are in seconds; labels are built from their bounds ("<5m", "5-15m", "30m-1h", ">1d") and the
+// bar colour marks the band: under 1h gray, 1h–6h green, 6h and longer yellow.
+// ---------------------------------------------------------------------------
+
+export type HoldingTimeBar = { label: string; count: number; startSecs: number };
+
+const HOUR = 3600;
+const DAY = 86400;
+
+function durationParts(secs: number): [number, string] {
+  if (secs >= DAY) return [+(secs / DAY).toFixed(1), "d"];
+  if (secs >= HOUR) return [+(secs / HOUR).toFixed(1), "h"];
+  if (secs >= 60) return [+(secs / 60).toFixed(1), "m"];
+  return [+secs.toFixed(0), "s"];
+}
+
+const durationLabel = (secs: number) => durationParts(secs).join("");
+
+/** As Figma writes them: minute ranges share one unit ("5-15m"), others keep both ("1h-2h"). */
+function rangeLabel(start: number, end: number) {
+  const [a, au] = durationParts(start);
+  const [b, bu] = durationParts(end);
+  return au === "m" && bu === "m" ? `${a}-${b}m` : `${a}${au}-${b}${bu}`;
+}
+
+export function toHoldingTimeBars(buckets: HistogramBucket[]): HoldingTimeBar[] {
+  // Only `bucket_start` is relied on (the control plane reads nothing else); a range's end is the
+  // next bucket's start.
+  const sorted = buckets
+    .filter((b) => Number.isFinite(b.bucket_start))
+    .sort((a, b) => a.bucket_start - b.bucket_start);
+  return sorted.map((b, i) => {
+    const next = sorted[i + 1];
+    const end = next ? next.bucket_start : b.bucket_end;
+    return {
+      // The first bucket opens at 0 and the last one also catches the series max, so their honest
+      // labels are one-sided.
+      label:
+        i === 0 && b.bucket_start <= 0 && Number.isFinite(end)
+          ? `<${durationLabel(end)}`
+          : !next
+            ? `>${durationLabel(b.bucket_start)}`
+            : rangeLabel(b.bucket_start, end),
+      count: b.count,
+      startSecs: b.bucket_start,
+    };
+  });
+}
+
+const barGradient = (from: string, to: string) => ({
+  type: "linear" as const,
+  x: 0,
+  y: 0,
+  x2: 1,
+  y2: 1,
+  colorStops: [
+    { offset: 0, color: from },
+    { offset: 1, color: to },
+  ],
+});
+
+function holdingBandColor(startSecs: number) {
+  if (startSecs < HOUR) return barGradient("#f2f7fc", "#ccdff1");
+  if (startSecs < 6 * HOUR) return barGradient("#cff8ea", "#67e1c0");
+  return barGradient("#fffbd6", "#f1c617");
+}
+
+export function buildHoldingTimeOption(bars: HoldingTimeBar[]): EChartsOption {
+  return {
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "shadow" },
+      formatter: (params: unknown) => {
+        const p = (params as { dataIndex: number; value: number }[])[0];
+        if (!p) return "";
+        return `${bars[p.dataIndex].label}<br/>${p.value} trade${p.value === 1 ? "" : "s"}`;
+      },
+    },
+    grid: { left: 0, right: 0, top: 28, bottom: 0, containLabel: true },
+    xAxis: {
+      type: "category",
+      data: bars.map((b) => b.label),
+      axisTick: { show: false },
+      axisLine: { show: false },
+      axisLabel: { fontSize: 12, color: "#9db2ce", margin: 8 },
+    },
+    yAxis: {
+      type: "value",
+      minInterval: 1,
+      axisLabel: { show: false },
+      splitLine: { lineStyle: { color: "#1d2939" } },
+    },
+    series: [
+      {
+        type: "bar",
+        name: "Trades",
+        barMaxWidth: 32,
+        data: bars.map((b) => ({ value: b.count, itemStyle: { color: holdingBandColor(b.startSecs) } })),
+        itemStyle: { borderRadius: [4, 4, 0, 0] },
+        label: { show: true, position: "top", fontSize: 12, color: "#9db2ce", distance: 8 },
+      },
+    ],
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Hourly PnL → 24 labelled bars (risk-detail's `hourly_pnl`) — HFT performance-view.tsx (no Regime
 // tab) and MFT regime-mft.tsx both draw this "PnL by session hour" chart.
 // ---------------------------------------------------------------------------

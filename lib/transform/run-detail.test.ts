@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   buildHistogramBarOption,
+  buildHoldingTimeOption,
   buildHourlyPnlOption,
   costBreakdownSlices,
   toDrawdownRows,
   toHistogramBars,
+  toHoldingTimeBars,
   toHourlyPnlBars,
   topHoursByShare,
 } from "./run-detail";
@@ -143,5 +145,52 @@ describe("costBreakdownSlices", () => {
     expect(costBreakdownSlices(undefined)).toEqual([]);
     const zero = { commission_total: 0, tax_total: 0, slippage_total: 0, total_fee: 0 } as RunSummary;
     expect(costBreakdownSlices(zero)).toEqual([]);
+  });
+});
+
+describe("toHoldingTimeBars", () => {
+  const m = 60;
+  const h = 3600;
+  const buckets: HistogramBucket[] = [
+    { bucket_start: 5 * m, bucket_end: 15 * m, count: 118 },
+    { bucket_start: 0, bucket_end: 5 * m, count: 42 },
+    { bucket_start: 15 * m, bucket_end: 30 * m, count: 214 },
+    { bucket_start: 30 * m, bucket_end: h, count: 412 },
+    { bucket_start: h, bucket_end: 6 * h, count: 512 },
+    { bucket_start: 6 * h, bucket_end: 24 * h, count: 86 },
+    { bucket_start: 24 * h, bucket_end: 72 * h, count: 34 },
+  ];
+
+  it("does not need bucket_end except to close the first bucket", () => {
+    const bars = toHoldingTimeBars([
+      { bucket_start: 5 * m, count: 2 } as HistogramBucket,
+      { bucket_start: 15 * m, count: 1 } as HistogramBucket,
+    ]);
+    expect(bars.map((b) => b.label)).toEqual(["5-15m", ">15m"]);
+  });
+
+  it("labels buckets from their second bounds, one-sided at both ends", () => {
+    expect(toHoldingTimeBars(buckets).map((b) => [b.label, b.count])).toEqual([
+      ["<5m", 42],
+      ["5-15m", 118],
+      ["15-30m", 214],
+      ["30m-1h", 412],
+      ["1h-6h", 512],
+      ["6h-1d", 86],
+      [">1d", 34],
+    ]);
+  });
+
+  it("colours bars by band: gray under 1h, green to 6h, yellow beyond", () => {
+    const option = buildHoldingTimeOption(
+      toHoldingTimeBars([
+        { bucket_start: 0, bucket_end: h, count: 1 },
+        { bucket_start: h, bucket_end: 2 * h, count: 1 },
+        { bucket_start: 6 * h, bucket_end: 24 * h, count: 1 },
+      ]),
+    );
+    const data = (option.series as { data: { itemStyle: { color: { colorStops: { color: string }[] } } }[] }[])[0]
+      .data;
+    expect(data.map((d) => d.itemStyle.color.colorStops[1].color)).toEqual(["#ccdff1", "#67e1c0", "#f1c617"]);
   });
 });

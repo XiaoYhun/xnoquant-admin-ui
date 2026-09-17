@@ -9,14 +9,20 @@
 // `avg_holding_time_secs`, `trades_under_6h_pct`, `overnight_trades_pct`, `fill_rate` and
 // `slippage_bps`, plus per-fill slippage/latency dispersion and distributions off
 // `/execution-detail` (undefined on the XALPHA strategy/stage feed, which keeps its empty states).
-// Holding time and exit reason still need per-trade records neither feed returns.
+// `/execution-detail` also buckets closed round-trips by holding time. Exit reason still needs
+// per-trade records neither feed returns.
 import { useMemo } from "react";
 import { BaseChart } from "@/components/charts/base-chart";
 import { ChartState, chartStatus } from "@/components/charts/chart-state";
 import { useRunExecutionDetail } from "@/hooks/api/use-runs";
 import { formatAmount } from "@/lib/utils";
 import type { PeriodSelection } from "@/lib/transform/mft-results";
-import { buildHistogramBarOption, toHistogramBars } from "@/lib/transform/run-detail";
+import {
+  buildHistogramBarOption,
+  buildHoldingTimeOption,
+  toHistogramBars,
+  toHoldingTimeBars,
+} from "@/lib/transform/run-detail";
 import { useMftResultsSource } from "@/hooks/api/use-mft-results-source";
 import type { SampleScope } from "@/types/domain";
 import {
@@ -80,6 +86,9 @@ export function ExecutionMft({
   const latencyOption = useMemo(() => buildHistogramBarOption(latencyBars, "ms"), [latencyBars]);
   const slippageStatus = chartStatus({ loading: execQ.isLoading, error: execQ.isError, empty: !slippageBars.length });
   const latencyStatus = chartStatus({ loading: execQ.isLoading, error: execQ.isError, empty: !latencyBars.length });
+  const holdingBars = useMemo(() => toHoldingTimeBars(exec?.holding_time_histogram ?? []), [exec]);
+  const holdingOption = useMemo(() => buildHoldingTimeOption(holdingBars), [holdingBars]);
+  const holdingStatus = chartStatus({ loading: execQ.isLoading, error: execQ.isError, empty: !holdingBars.length });
   const distributionDetail = execQ.isError
     ? "Execution detail for this run could not be loaded."
     : "No fills have been recorded for this run yet.";
@@ -89,7 +98,7 @@ export function ExecutionMft({
       <MetricPanel rows={rows} />
       <NoSourceNote>
         {summary
-          ? "Holding time, fill rate, mean/dispersion slippage and the per-fill distributions below are run-level figures from the results API. Holding time and exit reason still need per-trade entry/exit records the engine does not return, so those stay blank."
+          ? "Holding time, fill rate, mean/dispersion slippage and the per-fill distributions below are run-level figures from the results API. Exit reason still needs per-trade records the engine does not return, so it stays blank."
           : "Execution quality is measured per fill. The MFT results API returns aggregates over closed trades only — no fill timestamps, holding times, slippage or fill ratios — so these figures stay blank until the engine reports trade-level records."}
       </NoSourceNote>
 
@@ -109,10 +118,19 @@ export function ExecutionMft({
       )}
 
       <ChartCard title="Holding time distribution">
-        <ChartState
-          status="empty"
-          detail="Bucketing trades by holding time needs each trade's entry and exit time, which the MFT engine does not return."
-        />
+        {runId ? (
+          <ChartState
+            status={holdingStatus}
+            detail={execQ.isError ? "Execution detail for this run could not be loaded." : "No closed trades for this run yet."}
+          >
+            <BaseChart option={holdingOption} style={{ height: 262 }} />
+          </ChartState>
+        ) : (
+          <ChartState
+            status="empty"
+            detail="Bucketing trades by holding time needs each trade's entry and exit time, which the MFT engine does not return."
+          />
+        )}
       </ChartCard>
 
       <ChartCard title="Exit reason">

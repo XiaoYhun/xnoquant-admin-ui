@@ -25,7 +25,7 @@ import { PnlAttributionTable } from "@/components/pnl-attribution-table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn, currencyDigits, formatAmount, formatCompact } from "@/lib/utils";
 import { currencySymbol } from "@/lib/transform/runs";
-import { equityDayLabel, startingCapital } from "@/lib/transform/results";
+import { equityDayLabel } from "@/lib/transform/results";
 import { costBreakdownSlices } from "@/lib/transform/run-detail";
 import { toPoints, type PeriodSelection, type Point } from "@/lib/transform/mft-results";
 import { useMftResultsSource } from "@/hooks/api/use-mft-results-source";
@@ -256,8 +256,6 @@ export function CostEdgeMft({
 
   const currency = useRunCurrency(runId);
   const digits = currencyDigits(currency);
-  // Same basis the waterfall's Gross/Net rows already read (ratio of starting capital).
-  const capital = useMemo(() => startingCapital(summary), [summary]);
 
   const rows: Metric[][] = [
     [
@@ -293,22 +291,32 @@ export function CostEdgeMft({
     ],
   ];
 
-  // Commission/Tax/Slippage as a fraction of capital — same denominator `gross`/`net` above use,
-  // so all five waterfall rows compare on one basis. `null` capital or a missing summary field
-  // (older pre-split runs, or the XALPHA path which has no `summary` at all) leaves a row unfilled.
+  // Every waterfall row is a share of GROSS, which is what a gross-to-net breakdown means: the
+  // bar starts at 100% and each cost is the slice it takes out of it. The API reports commission,
+  // tax, slippage and net as MONEY, so they divide by gross money (net + fee) rather than by
+  // starting capital — dividing by capital left the steps unable to add up to the bar above them.
+  // `undefined` without a summary (the XALPHA path) or without gross to divide by.
   const hasSplit = summary?.commission_total != null && summary?.tax_total != null;
-  const commissionRatio =
-    capital && summary?.commission_total != null ? -(Math.abs(summary.commission_total) / capital) : undefined;
-  const taxRatio = capital && summary?.tax_total != null ? -(Math.abs(summary.tax_total) / capital) : undefined;
-  const slippageRatio =
-    capital && summary?.slippage_total != null ? -(Math.abs(summary.slippage_total) / capital) : undefined;
+  const grossMoney =
+    summary != null && Number.isFinite(summary.net_pnl + summary.total_fee)
+      ? summary.net_pnl + summary.total_fee
+      : undefined;
+  const shareOfGross = (amount: number | null | undefined) =>
+    grossMoney && amount != null ? -(Math.abs(amount) / grossMoney) : undefined;
+  const commissionRatio = shareOfGross(summary?.commission_total);
+  const taxRatio = shareOfGross(summary?.tax_total);
+  const slippageRatio = shareOfGross(summary?.slippage_total);
 
   const waterfall: WaterfallRow[] = [
-    { label: "Gross PnL", value: gross, kind: "total" },
+    { label: "Gross PnL", value: grossMoney ? 1 : undefined, kind: "total" },
     { label: "− Commission", value: commissionRatio, kind: "step" },
     { label: "− Tax", value: taxRatio, kind: "step" },
     { label: "− Slippage", value: slippageRatio, kind: "step" },
-    { label: "Net PnL", value: net, kind: "total" },
+    {
+      label: "Net PnL",
+      value: grossMoney && summary != null ? summary.net_pnl / grossMoney : undefined,
+      kind: "total",
+    },
   ];
 
   // Cost Breakdown — commission/tax/slippage when the run recorded the split, else one Total Fee

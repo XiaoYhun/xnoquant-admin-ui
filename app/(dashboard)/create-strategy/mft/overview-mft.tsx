@@ -25,6 +25,7 @@ import {
 } from "@/lib/transform/mft-results";
 import { bucketedSummaryRows } from "@/lib/transform/run-as-mft";
 import { useMftResultsSource } from "@/hooks/api/use-mft-results-source";
+import { useRunCurrency } from "@/hooks/api/use-runs";
 import type { SampleScope } from "@/types/domain";
 import type { Granularity } from "../mft-results-view";
 import {
@@ -285,6 +286,7 @@ export function OverviewMft({
   // Run-only figures, with no counterpart on the XALPHA strategy/stage payload the same strip
   // renders for a stage-scoped view.
   const summary = src.summary;
+  const currency = useRunCurrency(runId);
 
   // Stage slice first (the charts endpoint returns every stage at once), then the Period row.
   // A run-scoped view has no stages, so sliceStage is a no-op.
@@ -371,7 +373,8 @@ export function OverviewMft({
 
   const cards: KpiCard[] = [
     {
-      label: "Net PnL",
+      // The settlement currency is only known on the run path — same gating as Avg Win/Avg Loss.
+      label: summary ? `Net PnL (${currency})` : "Net PnL",
       value: netPnl == null ? EMPTY : `${netPnl > 0 ? "+" : ""}${formatAmount(netPnl, 0)}`,
       note: pctFromRatio(p?.cumulative_return),
       tone: toneBySign(netPnl),

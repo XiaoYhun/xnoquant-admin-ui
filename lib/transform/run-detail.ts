@@ -168,24 +168,55 @@ export function buildHoldingTimeOption(bars: HoldingTimeBar[]): EChartsOption {
 // tab) and MFT regime-mft.tsx both draw this "PnL by session hour" chart.
 // ---------------------------------------------------------------------------
 
-export type HourlyPnlBar = { hour: number; label: string; pnl: number; pnlSharePct: number | null };
+export type HourlyPnlBar = {
+  /** The bucket's own UTC hour, as the API reports it. */
+  hour: number;
+  /** Minutes past local midnight the band starts at — what the bars are sorted and labelled by. */
+  start: number;
+  label: string;
+  pnl: number;
+  pnlSharePct: number | null;
+};
 
-/** Always 24 entries, hour-ascending — missing hours (a run with fewer buckets) read as `0`. */
-export function toHourlyPnlBars(buckets: HourlyPnlBucket[]): HourlyPnlBar[] {
+const hhmm = (minutes: number) => {
+  const m = ((minutes % 1440) + 1440) % 1440;
+  return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+};
+
+/** `420` → "GMT+7", `330` → "GMT+5:30", `0` → "UTC". */
+export function gmtLabel(offsetMinutes: number): string {
+  if (offsetMinutes === 0) return "UTC";
+  const abs = Math.abs(offsetMinutes);
+  const mins = abs % 60;
+  return `GMT${offsetMinutes < 0 ? "-" : "+"}${Math.floor(abs / 60)}${mins ? `:${String(mins).padStart(2, "0")}` : ""}`;
+}
+
+/**
+ * Always 24 entries — missing hours (a run with fewer buckets) read as `0`. `offsetMinutes` is the
+ * viewer's offset east of UTC (GMT+7 → 420), so the bands read on the local clock; a zone that is
+ * not a whole hour off lands them mid-hour (`07:30`) rather than distorting the buckets.
+ */
+export function toHourlyPnlBars(buckets: HourlyPnlBucket[], offsetMinutes = 0): HourlyPnlBar[] {
   const byHour = new Map(buckets.map((b) => [b.hour, b]));
   return Array.from({ length: 24 }, (_, hour) => {
     const b = byHour.get(hour);
+    const start = ((((hour * 60 + offsetMinutes) % 1440) + 1440) % 1440);
     return {
       hour,
-      label: `${String(hour).padStart(2, "0")}:00`,
+      start,
+      label: hhmm(start),
       pnl: b?.pnl ?? 0,
       pnlSharePct: b?.pnl_share_pct ?? null,
     };
-  });
+  }).sort((a, b) => a.start - b.start);
 }
 
-/** Green ≥0 / red <0 bars; the tooltip states the hour band in UTC. */
-export function buildHourlyPnlOption(bars: HourlyPnlBar[], moneyFmt: (n: number) => string): EChartsOption {
+/** Green ≥0 / red <0 bars; the tooltip states the hour band in the zone the bars are drawn in. */
+export function buildHourlyPnlOption(
+  bars: HourlyPnlBar[],
+  moneyFmt: (n: number) => string,
+  tz = "UTC",
+): EChartsOption {
   return {
     tooltip: {
       trigger: "axis",
@@ -195,9 +226,8 @@ export function buildHourlyPnlOption(bars: HourlyPnlBar[], moneyFmt: (n: number)
         const p = arr[0];
         if (!p) return "";
         const b = bars[p.dataIndex];
-        const next = String((b.hour + 1) % 24).padStart(2, "0");
         const share = b.pnlSharePct == null ? "" : ` (${formatAmount(b.pnlSharePct * 100, 1)}%)`;
-        return `${b.label}–${next}:00 UTC<br/>${moneyFmt(b.pnl)}${share}`;
+        return `${b.label}–${hhmm(b.start + 60)} ${tz}<br/>${moneyFmt(b.pnl)}${share}`;
       },
     },
     grid: { left: 8, right: 8, top: 16, bottom: 8, containLabel: true },

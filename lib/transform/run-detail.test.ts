@@ -4,6 +4,7 @@ import {
   buildHoldingTimeOption,
   buildHourlyPnlOption,
   costBreakdownSlices,
+  gmtLabel,
   toDrawdownRows,
   toHistogramBars,
   toHoldingTimeBars,
@@ -54,9 +55,32 @@ describe("toHourlyPnlBars", () => {
     const bars = toHourlyPnlBars(buckets);
     expect(bars).toHaveLength(24);
     expect(bars.map((b) => b.hour)).toEqual(Array.from({ length: 24 }, (_, i) => i));
-    expect(bars[0]).toEqual({ hour: 0, label: "00:00", pnl: -20, pnlSharePct: -0.1 });
-    expect(bars[2]).toEqual({ hour: 2, label: "02:00", pnl: 100, pnlSharePct: 0.5 });
-    expect(bars[1]).toEqual({ hour: 1, label: "01:00", pnl: 0, pnlSharePct: null });
+    expect(bars[0]).toEqual({ hour: 0, start: 0, label: "00:00", pnl: -20, pnlSharePct: -0.1 });
+    expect(bars[2]).toEqual({ hour: 2, start: 120, label: "02:00", pnl: 100, pnlSharePct: 0.5 });
+    expect(bars[1]).toEqual({ hour: 1, start: 60, label: "01:00", pnl: 0, pnlSharePct: null });
+  });
+
+  it("shifts the bands onto the viewer's clock and re-sorts by local start", () => {
+    // GMT+7: the 20:00 UTC bucket opens the local day at 03:00.
+    const bars = toHourlyPnlBars([{ hour: 20, pnl: 100, pnl_share_pct: 0.5 }], 420);
+    expect(bars[0]).toEqual({ hour: 17, start: 0, label: "00:00", pnl: 0, pnlSharePct: null });
+    expect(bars[3]).toEqual({ hour: 20, start: 180, label: "03:00", pnl: 100, pnlSharePct: 0.5 });
+    expect(bars.map((b) => b.start)).toEqual(Array.from({ length: 24 }, (_, i) => i * 60));
+  });
+
+  it("lands a half-hour zone mid-hour rather than distorting the buckets", () => {
+    const bars = toHourlyPnlBars([{ hour: 0, pnl: 1, pnl_share_pct: null }], 330);
+    expect(bars.find((b) => b.hour === 0)).toMatchObject({ start: 330, label: "05:30" });
+    expect(bars[0].label).toBe("00:30");
+  });
+});
+
+describe("gmtLabel", () => {
+  it("names the offset the way a clock reads it", () => {
+    expect(gmtLabel(0)).toBe("UTC");
+    expect(gmtLabel(420)).toBe("GMT+7");
+    expect(gmtLabel(330)).toBe("GMT+5:30");
+    expect(gmtLabel(-300)).toBe("GMT-5");
   });
 });
 

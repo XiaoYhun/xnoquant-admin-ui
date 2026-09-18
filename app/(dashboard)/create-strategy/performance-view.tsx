@@ -33,7 +33,8 @@ import {
   type DayPoint,
   type MonthPnl,
 } from "@/lib/transform/results";
-import { buildHourlyPnlOption, toHourlyPnlBars } from "@/lib/transform/run-detail";
+import { buildHourlyPnlOption, gmtLabel, toHourlyPnlBars } from "@/lib/transform/run-detail";
+import { useUtcOffsetMinutes } from "@/hooks/use-utc-offset";
 import { cn, currencyDigits, formatAmount, formatCompact, formatSignedAmount } from "@/lib/utils";
 import { ChartCard, MockNote } from "./results-chart-card";
 
@@ -521,20 +522,22 @@ function HourlyPnlPanel({
   bars,
   currency,
   digits,
+  tz,
   state,
 }: {
   bars: ReturnType<typeof toHourlyPnlBars>;
   currency: string;
   digits: number;
+  tz: string;
   state: ChartStateProps;
 }) {
   const moneyFmt = useMemo(
     () => (n: number) => `${fmtSigned(n, digits)} ${currency}`,
     [currency, digits],
   );
-  const option = useMemo(() => buildHourlyPnlOption(bars, moneyFmt), [bars, moneyFmt]);
+  const option = useMemo(() => buildHourlyPnlOption(bars, moneyFmt, tz), [bars, moneyFmt, tz]);
   return (
-    <ChartCard title="PnL by session hour (UTC)" {...state}>
+    <ChartCard title={`PnL by session hour (${tz})`} {...state}>
       <BaseChart option={option} />
     </ChartCard>
   );
@@ -616,7 +619,11 @@ export function PerformanceView({
     isLoading: riskLoading,
     isError: riskError,
   } = useRunRiskDetail(artifactId, sample);
-  const hourlyBars = useMemo(() => toHourlyPnlBars(riskDetail?.hourly_pnl ?? []), [riskDetail]);
+  const utcOffset = useUtcOffsetMinutes();
+  const hourlyBars = useMemo(
+    () => toHourlyPnlBars(riskDetail?.hourly_pnl ?? [], utcOffset),
+    [riskDetail, utcOffset],
+  );
   const hourlyState: ChartStateProps = {
     status: chartStatus({
       idle: !runId,
@@ -714,7 +721,13 @@ export function PerformanceView({
         <WeeklyPerformancePanel points={weekly} currency={currency} note={note} state={state} />
       </div>
       <DistributionPanel bins={histogram} isPct={isPct} note={note} state={state} />
-      <HourlyPnlPanel bars={hourlyBars} currency={currency} digits={digits} state={hourlyState} />
+      <HourlyPnlPanel
+        bars={hourlyBars}
+        currency={currency}
+        digits={digits}
+        tz={gmtLabel(utcOffset)}
+        state={hourlyState}
+      />
     </div>
   );
 }

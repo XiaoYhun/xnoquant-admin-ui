@@ -23,7 +23,8 @@ import { useRunCurrency, useRunRiskDetail, useRunSummary, useRunVolatilityRegime
 import { formatAmount, formatSignedAmount } from "@/lib/utils";
 import { currencySymbol } from "@/lib/transform/runs";
 import type { PeriodSelection } from "@/lib/transform/mft-results";
-import { buildHourlyPnlOption, toHourlyPnlBars, topHoursByShare } from "@/lib/transform/run-detail";
+import { buildHourlyPnlOption, gmtLabel, toHourlyPnlBars, topHoursByShare } from "@/lib/transform/run-detail";
+import { useUtcOffsetMinutes } from "@/hooks/use-utc-offset";
 import type { SampleScope, VolRegimeBucket, VolRegimeSummary } from "@/types/domain";
 import {
   ChartCard,
@@ -168,10 +169,15 @@ export function RegimeMft({
     },
   ];
 
-  const hourlyBars = useMemo(() => toHourlyPnlBars(riskQ.data?.hourly_pnl ?? []), [riskQ.data]);
+  const utcOffset = useUtcOffsetMinutes();
+  const tz = gmtLabel(utcOffset);
+  const hourlyBars = useMemo(
+    () => toHourlyPnlBars(riskQ.data?.hourly_pnl ?? [], utcOffset),
+    [riskQ.data, utcOffset],
+  );
   const hourlyOption = useMemo(
-    () => buildHourlyPnlOption(hourlyBars, (n) => `${formatSignedAmount(n, 0)} ${currencySymbol(currency)}`),
-    [hourlyBars, currency],
+    () => buildHourlyPnlOption(hourlyBars, (n) => `${formatSignedAmount(n, 0)} ${currencySymbol(currency)}`, tz),
+    [hourlyBars, currency, tz],
   );
   const hourlyStatus = chartStatus({
     idle: !runId,
@@ -212,7 +218,7 @@ export function RegimeMft({
     <div className="flex min-w-0 flex-col gap-4">
       <MetricPanel rows={[metrics]} />
 
-      <ChartCard title="PnL by session hour (UTC)">
+      <ChartCard title={`PnL by session hour (${tz})`}>
         <ChartState status={hourlyStatus} height={196} detail={hourlyDetail}>
           <BaseChart option={hourlyOption} style={{ height: 196 }} />
         </ChartState>

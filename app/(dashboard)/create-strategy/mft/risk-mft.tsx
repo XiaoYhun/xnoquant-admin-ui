@@ -14,9 +14,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { cn, formatAmount } from "@/lib/utils";
+import { cn, currencyDigits, formatAmount } from "@/lib/utils";
 import {
   filterByPeriod,
+  inPeriod,
   sliceStage,
   toPoints,
   topDrawdowns,
@@ -24,8 +25,9 @@ import {
   type PeriodSelection,
   type Point,
 } from "@/lib/transform/mft-results";
+import { toDrawdownRows } from "@/lib/transform/run-detail";
 import { useMftResultsSource } from "@/hooks/api/use-mft-results-source";
-import { useRunRiskDetail } from "@/hooks/api/use-runs";
+import { useRunCurrency, useRunRiskDetail } from "@/hooks/api/use-runs";
 import type { LossStreakBucket, SampleScope } from "@/types/domain";
 import {
   ChartCard,
@@ -174,8 +176,8 @@ export function RiskMft({
 }) {
 
   // `period` scopes `perf`/`summary` to the selected year — the top risk panel is a headline
-  // figure like Overview's KPI cards, not the Top-5-drawdown table (built from the already
-  // period-filtered `drawdownPts` below either way).
+  // figure like Overview's KPI cards. The Top-5-drawdown table applies the same window itself,
+  // against the `/risk-detail` episodes (see below).
   const src = useMftResultsSource({ strategyId, stage, runId, period, sample });
   const perf = src.perf;
   const summary = src.summary;
@@ -198,9 +200,22 @@ export function RiskMft({
 
   // The engine's own histogram, the same source the control plane's chart draws.
   const riskQ = useRunRiskDetail(runId, sample);
+  const currency = useRunCurrency(runId);
   const streaks = useMemo(() => riskQ.data?.loss_streak_histogram ?? [], [riskQ.data]);
   const worst = useMemo(() => worstLossStreak(returnPts), [returnPts]);
-  const episodes = useMemo(() => topDrawdowns(drawdownPts), [drawdownPts]);
+  // Top-5 drawdown reads the engine's own episodes off `/risk-detail` (peak→trough→recovery of the
+  // cumulative realized-PnL curve) so the table agrees with the control plane's, rather than the
+  // percent series' own local derivation. `sample` scopes IS/OS upstream; the endpoint has no year
+  // parameter, so the Period row is applied here — an episode belongs to the window its peak
+  // falls in. Episodes arrive worst-first, so the top 5 is a slice. Timestamps are epoch MS here,
+  // seconds in the XALPHA series `dayLabel` was written for.
+  const episodes = useMemo(
+    () =>
+      toDrawdownRows(riskQ.data?.drawdown_episodes ?? [])
+        .filter((e) => inPeriod(e.peakTs / 1000, period))
+        .slice(0, 5),
+    [riskQ.data, period],
+  );
 
   // F-073: `RunSummary.longest_recovery_days` used to report an absolute epoch-day instead of a
   // span whenever the series opened already in a drawdown (its implicit starting peak's
@@ -320,15 +335,22 @@ export function RiskMft({
             </TableHeader>
             <TableBody>
               {episodes.map((e) => (
-                <TableRow key={`${e.start}-${e.trough}`}>
-                  <TableCell className="py-2 text-xs text-white">{dayLabel(e.start)}</TableCell>
-                  <TableCell className="py-2 text-xs text-white">{dayLabel(e.trough)}</TableCell>
+                <TableRow key={`${e.peakTs}-${e.troughTs}`}>
+                  <TableCell className="py-2 text-xs text-white">{dayLabel(e.peakTs / 1000)}</TableCell>
+                  <TableCell className="py-2 text-xs text-white">{dayLabel(e.troughTs / 1000)}</TableCell>
                   <TableCell className={cn("py-2 text-right text-xs", RED_TEXT)}>
-                    {`${formatAmount(e.depth, 2)}%`}
+                    {formatAmount(e.depth, currencyDigits(currency))}
+                    {e.depthPct != null && (
+                      <span className="ml-1 text-[10px] text-[#9db2ce]">
+                        {`(${formatAmount(e.depthPct * 100, 2)}%)`}
+                      </span>
+                    )}
                   </TableCell>
-                  <TableCell className="py-2 text-right text-xs text-white">{`${e.length}d`}</TableCell>
                   <TableCell className="py-2 text-right text-xs text-white">
-                    {e.recovery == null ? EMPTY : `${e.recovery}d`}
+                    {durationDays(e.lengthDays)}
+                  </TableCell>
+                  <TableCell className="py-2 text-right text-xs text-white">
+                    {e.recoveryDays == null ? EMPTY : durationDays(e.recoveryDays)}
                   </TableCell>
                 </TableRow>
               ))}

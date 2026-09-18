@@ -114,14 +114,18 @@ export function nearestOption(options: number[], target: number): number | undef
   );
 }
 
+/** Whether a unix-SECONDS timestamp falls in the Period row's window. `year: undefined` ⇒ always. */
+export function inPeriod(t: number, period: PeriodSelection): boolean {
+  if (period.year == null) return true;
+  if (yearOf(t) !== period.year) return false;
+  if (period.month != null) return monthOf(t) === period.month;
+  if (period.quarter != null) return quarterOf(t) === period.quarter;
+  return true;
+}
+
 export function filterByPeriod(points: Point[], period: PeriodSelection): Point[] {
   if (period.year == null) return points;
-  return points.filter((p) => {
-    if (yearOf(p.t) !== period.year) return false;
-    if (period.month != null) return monthOf(p.t) === period.month;
-    if (period.quarter != null) return quarterOf(p.t) === period.quarter;
-    return true;
-  });
+  return points.filter((p) => inPeriod(p.t, period));
 }
 
 /**

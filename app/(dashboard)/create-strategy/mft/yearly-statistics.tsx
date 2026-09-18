@@ -1,10 +1,13 @@
 "use client";
 // MFT Results → Performance → "Yearly Statistics" (Figma 15205:58375). Metrics down the side,
-// years across the top, grouped into collapsible sections with a metric filter and year toggles.
+// periods across the top, grouped into collapsible sections with a metric filter and column
+// toggles. The Period row's Mo/Qtr/Ytd switch decides what a column IS — a month, a quarter or a
+// year — and the caller supplies both the columns and the title that names them.
 //
 // Three sources feed the grid, which is why a metric declares one `get` taking a scope rather
 // than separate lookups. A YEAR column has that year's `/summary-table` row (five metrics) and
-// the per-period series narrowed to the year; the ALL column additionally has the whole of
+// the per-period series narrowed to the year; a month/quarter column carries its own
+// `/periodic-summary` bucket instead; the ALL column additionally has the whole of
 // `/performance`.
 //
 // Every risk figure prefers the endpoint that reports it and falls back to re-deriving it from
@@ -20,6 +23,7 @@
 import { useMemo, useState } from "react";
 import { DoubleAltArrowDown, DoubleAltArrowUp, Magnifer, AltArrowDown } from "@solar-icons/react";
 
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn, formatAmount, formatCompact } from "@/lib/utils";
 import { expectancy } from "@/lib/transform/derived-metrics";
 import {
@@ -103,7 +107,11 @@ const rs = (s: Scope) => s.runSummary;
 
 /** The window's worst drawdown, as a negative ratio — also Calmar's denominator. */
 function drawdownOf(s: Scope): number | undefined {
-  return (s.isAll ? perf(s)?.max_drawdown : s.row?.max_drawdown) ?? maxDrawdown(s.drawdown);
+  return (
+    rs(s)?.max_drawdown_pct ??
+    (s.isAll ? perf(s)?.max_drawdown : s.row?.max_drawdown) ??
+    maxDrawdown(s.drawdown)
+  );
 }
 
 /**
@@ -449,34 +457,55 @@ function toneClass(v: number | null | undefined, tone: StatMetric["tone"]): stri
 // because the cells slide underneath it, and `shrink-0` keeps every row's labels on one grid.
 const LABEL_COL = "sticky left-0 z-10 w-[172px] shrink-0 px-3";
 
+/** One column of the grid — a year, a quarter or a month, depending on the Period row's toggle. */
+export interface StatColumn {
+  /** Identifies the window to `scopeFor`, and keys the pill — "2024", "2024 Q3", "2024-01". */
+  key: string;
+  /** What the header and the pill read — "2024", "Q3", "Mar". */
+  label: string;
+}
+
 export function YearlyStatistics({
-  years,
+  title,
+  columns: windows,
   scopeFor,
   currency,
+  loading = false,
 }: {
-  /** Year columns, ascending. */
-  years: number[];
-  /** Builds the scope for one column; `undefined` year means the All column. */
-  scopeFor: (year?: number) => Scope;
+  /** "Yearly Statistics", or Monthly/Quarterly when the Period row breaks the year down. */
+  title: string;
+  /** The period columns, in calendar order. The All column is appended here, not by the caller. */
+  columns: StatColumn[];
+  /** Builds the scope for one column by its key; `undefined` means the All column. */
+  scopeFor: (key?: string) => Scope;
   /** The run's settlement currency, appended to the money rows' labels. */
   currency?: string;
+  /**
+   * The period columns' own data is still arriving (a Mo/Qtr switch fetching its buckets). The
+   * grid keeps its shape — same rows, the columns the year is about to break into — and shimmers
+   * the cells, rather than flashing the previous breakdown's numbers under the new title.
+   */
+  loading?: boolean;
 }) {
   const [filter, setFilter] = useState("");
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
-  const [hiddenYears, setHiddenYears] = useState<number[]>([]);
+  const [hiddenKeys, setHiddenKeys] = useState<string[]>([]);
 
-  const shownYears = useMemo(
-    () => years.filter((y) => !hiddenYears.includes(y)),
-    [years, hiddenYears],
+  const shown = useMemo(
+    () => windows.filter((w) => !hiddenKeys.includes(w.key)),
+    [windows, hiddenKeys],
   );
   const columns = useMemo(
     () => [
-      ...shownYears.map((y) => ({ key: String(y), year: y as number | undefined })),
-      { key: "All", year: undefined },
+      ...shown.map((w) => ({ ...w, isAll: false })),
+      { key: "All", label: "All", isAll: true },
     ],
-    [shownYears],
+    [shown],
   );
-  const scopes = useMemo(() => columns.map((c) => scopeFor(c.year)), [columns, scopeFor]);
+  const scopes = useMemo(
+    () => columns.map((c) => scopeFor(c.isAll ? undefined : c.key)),
+    [columns, scopeFor],
+  );
 
   // Every cell up front, keyed by metric label. The `get` functions re-derive monthly returns and
   // drawdown episodes from the raw series, so leaving them in render would redo that work on each
@@ -520,7 +549,7 @@ export function YearlyStatistics({
     <div className="min-w-0 overflow-hidden rounded-xl border border-[#1d2939] bg-background">
       <div className="flex flex-col gap-1 border-b border-[#1d2939] bg-[#151a24] px-3 py-2">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-sm leading-5 font-medium text-white">Yearly Statistics</span>
+          <span className="text-sm leading-5 font-medium text-white">{title}</span>
           <div className="flex shrink-0 items-center gap-1">
             <HeaderButton label="Expand All" onClick={() => setAllCollapsed(false)}>
               <DoubleAltArrowDown weight="Outline" className="size-5" />
@@ -542,15 +571,15 @@ export function YearlyStatistics({
             <Magnifer weight="Outline" className="size-4 shrink-0 text-[#9db2ce]" />
           </div>
           <div className="flex flex-wrap items-center gap-1">
-            {years.map((y) => {
-              const on = !hiddenYears.includes(y);
+            {windows.map((w) => {
+              const on = !hiddenKeys.includes(w.key);
               return (
                 <button
-                  key={y}
+                  key={w.key}
                   type="button"
                   aria-pressed={on}
                   onClick={() =>
-                    setHiddenYears((prev) => (on ? [...prev, y] : prev.filter((v) => v !== y)))
+                    setHiddenKeys((prev) => (on ? [...prev, w.key] : prev.filter((v) => v !== w.key)))
                   }
                   className={cn(
                     "cursor-pointer rounded-[40px] border px-3 py-1 text-xs leading-[18px] transition-colors",
@@ -559,7 +588,7 @@ export function YearlyStatistics({
                       : "border-[#1d2939] text-[#9db2ce]",
                   )}
                 >
-                  {y}
+                  {w.label}
                 </button>
               );
             })}
@@ -578,7 +607,7 @@ export function YearlyStatistics({
             </div>
             {columns.map((c) => (
               <div key={c.key} className="flex w-24 shrink-0 justify-end overflow-hidden px-3">
-                <span className="truncate text-xs leading-[18px] text-white">{c.key}</span>
+                <span className="truncate text-xs leading-[18px] text-white">{c.label}</span>
               </div>
             ))}
           </div>
@@ -614,6 +643,15 @@ export function YearlyStatistics({
                       {columns.map((col, i) => {
                         const v = values.get(m.label)?.[i];
                         const text = texts.get(m.label)?.[i] ?? formatValue(v, m.format);
+                        // The All column is already right during a granularity switch — only the
+                        // period columns are waiting on their own buckets.
+                        if (loading && !col.isAll) {
+                          return (
+                            <div key={col.key} className="flex w-24 shrink-0 justify-end px-3">
+                              <Skeleton className="h-3 w-12 rounded-sm" />
+                            </div>
+                          );
+                        }
                         return (
                           <div key={col.key} className="flex w-24 shrink-0 justify-end overflow-hidden px-3">
                             <span

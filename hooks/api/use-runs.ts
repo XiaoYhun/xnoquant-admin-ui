@@ -6,6 +6,7 @@ import { normalizeTurnover, type TurnoverPoint } from "@/lib/turnover-curve";
 import type {
   EquityPoint,
   ExecutionDetail,
+  PeriodGranularity,
   PeriodSummary,
   RiskDetail,
   Run,
@@ -410,14 +411,25 @@ export function useRunCostCurve(id: string | undefined, sample?: SampleScope) {
  * Per-year (or per-quarter) breakdown of a finished backtest — the source for every year column
  * of the MFT Results grid. Empty for paper/live runs, which have no backtest range to bucket.
  */
-export function fetchRunPeriodicSummary(id: string, sample?: SampleScope): Promise<PeriodSummary[]> {
-  return apiGet<PeriodSummary[]>(`${HFT_API_URL}/api/runs/${id}/periodic-summary${sampleQs(sample)}`);
+export function fetchRunPeriodicSummary(
+  id: string,
+  sample?: SampleScope,
+  granularity?: PeriodGranularity,
+): Promise<PeriodSummary[]> {
+  const qs = sampleQs(sample);
+  const gran = granularity ? `${qs ? "&" : "?"}granularity=${granularity}` : "";
+  return apiGet<PeriodSummary[]>(`${HFT_API_URL}/api/runs/${id}/periodic-summary${qs}${gran}`);
 }
 
-export function useRunPeriodicSummary(id: string | undefined, sample?: SampleScope) {
+/** `granularity` omitted keeps the API's own auto-select (yearly, or quarterly under a year). */
+export function useRunPeriodicSummary(
+  id: string | undefined,
+  sample?: SampleScope,
+  granularity?: PeriodGranularity,
+) {
   return useQuery({
-    queryKey: ["run-periodic-summary", id, sample],
-    queryFn: () => fetchRunPeriodicSummary(id as string, sample),
+    queryKey: ["run-periodic-summary", id, sample, granularity],
+    queryFn: () => fetchRunPeriodicSummary(id as string, sample, granularity),
     enabled: !!id,
     retry: retryUnlessForbidden,
     retryDelay: 400,

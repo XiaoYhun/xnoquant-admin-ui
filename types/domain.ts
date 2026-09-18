@@ -45,8 +45,17 @@ export type VolRegimeSummary = HftComponents["schemas"]["VolRegimeSummary"];
  * Shape confirmed against the dev endpoint for run 01a08f45 (labels "2016".."2025", each carrying
  * a full 44-field summary).
  */
+/**
+ * `?granularity=` on `/periodic-summary` — how big a calendar bucket each `PeriodSummary` covers.
+ * Omitted, the API auto-selects: yearly for a range of a year or more, else quarterly.
+ *
+ * Hand-written for the same reason as `PeriodSummary` below: the checked-in OpenAPI copy predates
+ * the parameter, though the deployed API documents and accepts it (`PeriodGranularity` upstream).
+ */
+export type PeriodGranularity = "yearly" | "quarterly" | "monthly";
+
 export type PeriodSummary = {
-  /** The bucket's name, as the API formats it for display — "2018", or "2018 Q3". */
+  /** The bucket's name, as the API formats it for display — "2018", "2018 Q3", or "2018-03". */
   label: string;
   /** Inclusive ISO dates (`YYYY-MM-DD`) bounding the bucket. */
   start_date: string;

@@ -11,6 +11,8 @@ import { startingCapital, toReturnHistogram } from "@/lib/transform/results";
 import {
   filterByPeriod,
   monthlyReturns,
+  monthsOf,
+  quartersOf,
   sliceStage,
   toPeriodChanges,
   toPoints,
@@ -18,7 +20,7 @@ import {
   type PeriodSelection,
 } from "@/lib/transform/mft-results";
 import { useMftResultsSource } from "@/hooks/api/use-mft-results-source";
-import { useRunCurrency, useRunVolatilityRegime } from "@/hooks/api/use-runs";
+import { useRunCurrency, useRunPeriodicSummary, useRunVolatilityRegime } from "@/hooks/api/use-runs";
 import {
   ChartCard,
   MetricPanel,
@@ -31,10 +33,29 @@ import {
   type Metric,
 } from "./results-chrome";
 import { monthlyReturnPct } from "@/lib/transform/pnl-buckets";
-import { YearlyStatistics, statisticsYears, type Scope } from "./yearly-statistics";
-import type { RunSummary, SampleScope } from "@/types/domain";
+import { YearlyStatistics, statisticsYears, type Scope, type StatColumn } from "./yearly-statistics";
+import type { Granularity } from "../mft-results-view";
+import type { PeriodGranularity, PeriodSummary, RunSummary, SampleScope } from "@/types/domain";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+const DAY_SECONDS = 86_400;
+
+/** A `/periodic-summary` label, shortened for a 96px column — "2024-03" → "Mar", "2024 Q3" → "Q3". */
+function bucketLabel(label: string): string {
+  const month = /^\d{4}-(\d{2})$/.exec(label);
+  if (month) return MONTHS[Number(month[1]) - 1] ?? label;
+  return label.replace(/^\d{4}\s+/, "");
+}
+
+/** The calendar months (1-12) an inclusive `YYYY-MM-DD` range touches. */
+function monthsBetween(start: string, end: string): number[] {
+  const first = Number(start.slice(5, 7));
+  const last = Number(end.slice(5, 7));
+  const out: number[] = [];
+  for (let m = first; m <= last; m++) out.push(m);
+  return out;
+}
 
 const GREEN = "#67e1c1";
 const RED = "#ff135b";
@@ -192,12 +213,15 @@ export function PerformanceMft({
   period,
   runId,
   sample,
+  granularity,
 }: {
   strategyId?: string;
   stage: string;
   period: PeriodSelection;
   runId?: string;
   sample?: SampleScope;
+  /** The Period row's Mo/Qtr/Ytd toggle — what one statistics column covers. */
+  granularity: Granularity;
 }) {
   // `period` is deliberately NOT passed here: via `scopeFor(undefined)` below this feeds the
   // Yearly Statistics grid's "All" column, which has to stay the true whole-run rollup no matter
@@ -273,7 +297,83 @@ export function PerformanceMft({
         : statisticsYears(summaryRows),
     [periodByYear, summaryRows],
   );
-  const scopeFor = useCallback(
+
+  // Mo/Qtr break the SELECTED year down. `/periodic-summary` computes a full RunSummary per
+  // bucket — the same endpoint the year columns already read, asked for a smaller bucket — so a
+  // month column is the engine's own figure for that month, not a re-derivation. Omitting
+  // `granularity` (Ytd) leaves the shared query and its auto-selected buckets exactly as they were.
+  const apiGranularity: PeriodGranularity | undefined =
+    granularity === "Mo" ? "monthly" : granularity === "Qtr" ? "quarterly" : undefined;
+  // Both breakdowns are fetched as soon as the tab opens, so flipping Mo/Qtr swaps the columns
+  // without waiting on a round trip. They are the same endpoint the year columns already read and
+  // the engine caches them, so the cost is two requests the tab was going to make on the first
+  // switch anyway.
+  const monthlyQ = useRunPeriodicSummary(runId, sample, "monthly");
+  const quarterlyQ = useRunPeriodicSummary(runId, sample, "quarterly");
+  const bucketQ = apiGranularity === "monthly" ? monthlyQ : quarterlyQ;
+  const subYearBuckets = useMemo(() => {
+    if (!apiGranularity || period.year == null) return undefined;
+    const prefix = String(period.year);
+    const found = (bucketQ.data ?? []).filter((b) => b.label.startsWith(prefix));
+    return found.length ? found : undefined;
+  }, [apiGranularity, period.year, bucketQ.data]);
+
+  // A switch that beat its prefetch. The columns the year is ABOUT to break into are already known
+  // from the series (the same months/quarters the Period row's own pills offer), so the grid can
+  // hold its final shape while the buckets land instead of flashing the year columns. Only ever
+  // while a year IS selected — Mo/Qtr with the Period row on "All" has no year to break down, and
+  // the grid stays the yearly one it already was.
+  const breakingDown = !!apiGranularity && period.year != null && !subYearBuckets;
+  const loading = breakingDown && bucketQ.isLoading;
+  const pendingColumns: StatColumn[] | undefined = useMemo(() => {
+    if (!loading || period.year == null) return undefined;
+    const year = period.year;
+    const found =
+      apiGranularity === "monthly"
+        ? monthsOf(stageReturns, year).map((m) => ({ key: `pending-${m}`, label: MONTHS[m - 1] }))
+        : quartersOf(stageReturns, year).map((q) => ({ key: `pending-${q}`, label: `Q${q}` }));
+    return found.length ? found : undefined;
+  }, [loading, apiGranularity, period.year, stageReturns]);
+
+  const columns: StatColumn[] = useMemo(
+    () =>
+      subYearBuckets?.map((b) => ({ key: b.label, label: bucketLabel(b.label) })) ??
+      pendingColumns ??
+      years.map((y) => ({ key: String(y), label: String(y) })),
+    [subYearBuckets, pendingColumns, years],
+  );
+  const title =
+    subYearBuckets || pendingColumns
+      ? apiGranularity === "monthly"
+        ? "Monthly Statistics"
+        : "Quarterly Statistics"
+      : "Yearly Statistics";
+
+  const scopeForBucket = useCallback(
+    (bucket: PeriodSummary): Scope => {
+      // The bucket's own inclusive date range, which is what narrows the series — a label like
+      // "2024 Q3" would otherwise have to be parsed back into months.
+      const from = Date.parse(`${bucket.start_date}T00:00:00Z`) / 1000;
+      const to = Date.parse(`${bucket.end_date}T00:00:00Z`) / 1000 + DAY_SECONDS;
+      const inWindow = (t: number) => t >= from && t < to;
+      const months = monthsBetween(bucket.start_date, bucket.end_date);
+      return {
+        isAll: false,
+        // `oversized` marks a placeholder of zeroes, not a computed window (see run-as-mft).
+        runSummary: bucket.summary?.oversized ? undefined : bucket.summary,
+        returns: stageReturns.filter((p) => inWindow(p.t)),
+        drawdown: stageDrawdown.filter((p) => inWindow(p.t)),
+        // Best/Worst month over a single month is that month itself — the rows are kept whole and
+        // the months outside the bucket blanked, so the "x/y" denominator counts only its own.
+        monthlyRows: monthlyRows
+          ?.filter((r) => r.year === Number(bucket.label.slice(0, 4)))
+          .map((r) => ({ ...r, months: r.months.map((v, i) => (months.includes(i + 1) ? v : undefined)) })),
+      };
+    },
+    [stageReturns, stageDrawdown, monthlyRows],
+  );
+
+  const scopeForYear = useCallback(
     (year?: number): Scope =>
       year == null
         ? {
@@ -297,6 +397,17 @@ export function PerformanceMft({
             monthlyRows: monthlyRows?.filter((r) => r.year === year),
           },
     [src.perf, src.summary, summaryRows, periodByYear, stageReturns, stageDrawdown, monthlyRows, volRegime],
+  );
+
+  // One column key in, one scope out: a month/quarter column names its bucket, a year column its
+  // year, and `undefined` is the All column either way.
+  const scopeFor = useCallback(
+    (key?: string): Scope => {
+      const bucket = key == null ? undefined : subYearBuckets?.find((b) => b.label === key);
+      if (bucket) return scopeForBucket(bucket);
+      return scopeForYear(key == null ? undefined : Number(key));
+    },
+    [subYearBuckets, scopeForBucket, scopeForYear],
   );
 
   const p = perf?.performance;
@@ -347,7 +458,13 @@ export function PerformanceMft({
       <MetricPanel rows={rows} />
 
       {years.length > 0 ? (
-        <YearlyStatistics years={years} scopeFor={scopeFor} currency={currency} />
+        <YearlyStatistics
+          title={title}
+          columns={columns}
+          scopeFor={scopeFor}
+          currency={currency}
+          loading={loading && !!pendingColumns}
+        />
       ) : (
         <div className="rounded-xl border border-[#1d2939] bg-background px-4 py-8 text-center text-xs text-[#9db2ce]">
           No yearly breakdown for this stage.

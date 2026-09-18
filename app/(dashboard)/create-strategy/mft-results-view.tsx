@@ -369,7 +369,14 @@ export function MftResultsView({
           />
         )}
         {view === "Performance" && (
-          <PerformanceMft strategyId={strategyId} stage={stage} period={period} runId={runId} sample={sample} />
+          <PerformanceMft
+            strategyId={strategyId}
+            stage={stage}
+            period={period}
+            runId={runId}
+            sample={sample}
+            granularity={effectiveGranularity}
+          />
         )}
         {view === "Risk" && (
           <RiskMft strategyId={strategyId} stage={stage} period={period} runId={runId} sample={sample} />
